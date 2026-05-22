@@ -21,7 +21,7 @@ function CircleProgress({ value, goal, size = 100, strokeWidth = 8, color = '#5B
   );
 }
 
-function Dashboard({ date, profileName, calorieGoal, stepsGoal }) {
+function Dashboard({ date, profileName, calorieGoal, stepsGoal, onDateChange }) {
   const [calories, setCalories] = useState(0);
   const [weight, setWeight] = useState(null);
   const [bodyFat, setBodyFat] = useState(null);
@@ -81,12 +81,12 @@ function Dashboard({ date, profileName, calorieGoal, stepsGoal }) {
         padding: '10px 20px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <button className="date-nav-btn" onClick={() => {}}>‹</button>
-        <span className="date-text">{
-          date.toDateString() === new Date().toDateString() ? 'Today' :
-          date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-        }</span>
-        <button className="date-nav-btn" onClick={() => {}}>›</button>
+        <button className="date-nav-btn" onClick={() => onDateChange(-1)}>‹</button>
+<span className="date-text">{
+  date.toDateString() === new Date().toDateString() ? 'Today' :
+  date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+}</span>
+<button className="date-nav-btn" onClick={() => onDateChange(1)}>›</button>
       </div>
 
 

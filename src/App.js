@@ -146,11 +146,16 @@ function App() {
 const [activeTab, setActiveTab] = useState('dashboard');
 const [activeSection, setActiveSection] = useState('main');
 const [sidePanel, setSidePanel] = useState(false);
-const [date] = useState(new Date());
+const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState('light');
 const [profileName] = useState('Jose');
 const [calorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000);
+const changeDate = (dir) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + dir);
+  setDate(d);
+};
 
   useEffect(() => {
     const root = document.documentElement;
@@ -192,7 +197,7 @@ const [stepsGoal] = useState(10000);
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} />;
+      case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
       case 'food-dashboard': return <ComingSoon label="Food Dashboard" />;
       case 'food-log': return <div className="content"><FoodLog /></div>;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
@@ -206,7 +211,7 @@ const [stepsGoal] = useState(10000);
       case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
       case 'measurement-tbd2': return <ComingSoon label="Coming Soon" />;
       case 'profile': return <Profile theme={theme} setTheme={setTheme} />;
-      default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} />;
+      default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
     }
   };
 
