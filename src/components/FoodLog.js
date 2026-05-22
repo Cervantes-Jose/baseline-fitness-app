@@ -63,6 +63,12 @@ function FoodLog() {
     setForm({ name: '', calories: '', protein: '', carbs: '', fats: '' });
   };
 
+  const deleteFood = async (id, hour) => {
+    const { error } = await supabase.from('food_entries').delete().eq('id', id);
+    if (error) { console.error(error); return; }
+    setFoods(prev => ({ ...prev, [hour]: prev[hour].filter(f => f.id !== id) }));
+  };
+
   const allFoods = Object.values(foods).flat();
   const totals = allFoods.reduce((acc, f) => ({
     calories: acc.calories + Number(f.calories),
@@ -132,11 +138,17 @@ function FoodLog() {
                   ? <span style={{ fontSize: '12px', color: 'var(--border)' }}>—</span>
                   : <div style={{ flex: 1 }}>
                     {hourFoods.map((f, i) => (
-                      <div key={i} style={{ marginBottom: i < hourFoods.length - 1 ? '6px' : 0 }}>
-                        <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>{f.name}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                          {f.calories} cal · {f.protein}g P · {f.carbs}g C · {f.fats}g F
-                        </span>
+                      <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: i < hourFoods.length - 1 ? '6px' : 0 }}>
+                        <div>
+                          <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>{f.name}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                            {f.calories} cal · {f.protein}g P · {f.carbs}g C · {f.fats}g F
+                          </span>
+                        </div>
+                        <button onClick={() => deleteFood(f.id, h.value)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>

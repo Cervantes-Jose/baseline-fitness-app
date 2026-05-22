@@ -15,6 +15,12 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
@@ -51,11 +57,6 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
-          {!expanded && ex.lastSession && (
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Last: {ex.lastSession.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
-            </div>
-          )}
         </div>
         <button onClick={() => setExpanded(!expanded)}
           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', flexShrink: 0 }}>
@@ -103,8 +104,73 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
-  const [view, setView] = useState(activeWorkout ? 'logging' : 'routines');
+function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand }) {
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useEffect(() => {
+    if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
+  }, [isExpanded, sessionLog, checkedSets]);
+
+  const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
+  const doneCount = checkedSets.filter(Boolean).length;
+
+  return (
+    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+      <div onClick={onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: 'pointer' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{doneCount}/{sets.length} sets done</div>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease', color: 'var(--accent)', flexShrink: 0 }}>
+          <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+        <div ref={contentRef} style={{ padding: '0 16px 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
+            <div /><div />
+          </div>
+          {sets.map((set, idx) => (
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: checkedSets[idx] ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+              <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
+              <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
+                placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+              <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
+                placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+              <button onClick={() => deleteSet(ex.id, idx)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <button onClick={() => toggleCheck(idx)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {checkedSets[idx]
+                  ? <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  : <div style={{ width: '26px', height: '26px', borderRadius: '50%', border: '2px solid var(--border)' }} />
+                }
+              </button>
+            </div>
+          ))}
+          <button onClick={() => addSet(ex.id)}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            + Add Set
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {} }) {
+  const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
   const [activeRoutine, setActiveRoutine] = useState(activeWorkout?.routine || null);
@@ -118,6 +184,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
+  const [checkedSets, setCheckedSets] = useState({});
+  const [expandedExId, setExpandedExId] = useState(null);
+  const [dragY, setDragY] = useState(0);
+  const dragStartY = useRef(null);
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -138,9 +208,29 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
       .from('exercises').select('*').order('created_at', { ascending: true });
     if (exerciseError) { console.error(exerciseError); setLoading(false); return; }
 
+    const { data: sessionExData } = await supabase
+      .from('session_exercises')
+      .select('exercise_name, sets, workout_sessions(routine_id, created_at)');
+
+    const lastSessionMap = {};
+    if (sessionExData) {
+      const sorted = [...sessionExData].sort((a, b) =>
+        new Date(b.workout_sessions?.created_at) - new Date(a.workout_sessions?.created_at)
+      );
+      sorted.forEach(e => {
+        const routineId = e.workout_sessions?.routine_id;
+        const key = `${routineId}::${e.exercise_name}`;
+        if (!lastSessionMap[key]) {
+          const sets = Array.isArray(e.sets) ? e.sets : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []);
+          const filled = sets.filter(s => s.weight || s.reps);
+          if (filled.length > 0) lastSessionMap[key] = { sets: filled };
+        }
+      });
+    }
+
     const routinesWithExercises = routineData.map(r => ({
       ...r,
-      exercises: exerciseData.filter(e => e.routine_id === r.id).map(e => ({ ...e, lastSession: null }))
+      exercises: exerciseData.filter(e => e.routine_id === r.id).map(e => ({ ...e, lastSession: lastSessionMap[`${r.id}::${e.name}`] || null }))
     }));
     setRoutines(routinesWithExercises);
     setLoading(false);
@@ -152,7 +242,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     if (error) { console.error(error); return; }
     setHistory(sessions.map(s => ({
       id: s.id, date: s.date, routineName: s.routine_name,
-      exercises: s.session_exercises.map(e => ({ name: e.exercise_name, sets: e.sets }))
+      exercises: s.session_exercises.map(e => ({ name: e.exercise_name, sets: Array.isArray(e.sets) ? e.sets : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []) }))
     })));
   };
 
@@ -215,7 +305,17 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     setShowAddExerciseModal(false);
   };
 
-  const openRoutine = (routine) => { setActiveRoutine(routine); setSessionLog({}); setView('exercises'); };
+  const openRoutine = (routine) => {
+    const prefilled = {};
+    routine.exercises.forEach(ex => {
+      prefilled[ex.id] = ex.lastSession?.sets?.length > 0
+        ? ex.lastSession.sets
+        : [{ sets: '', reps: '', weight: '' }];
+    });
+    setActiveRoutine(routine);
+    setSessionLog(prefilled);
+    setView('exercises');
+  };
 
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -253,6 +353,14 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     });
   };
 
+  const toggleCheck = (exId, setIdx) => {
+    setCheckedSets(prev => {
+      const arr = [...(prev[exId] || [])];
+      arr[setIdx] = !arr[setIdx];
+      return { ...prev, [exId]: arr };
+    });
+  };
+
   const startLogging = () => {
     const initial = {};
     activeRoutine.exercises.forEach(ex => {
@@ -261,8 +369,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
         : [{ sets: '', reps: '', weight: '' }];
     });
     setSessionLog(initial);
+    setCheckedSets({});
+    setExpandedExId(activeRoutine.exercises[0]?.id || null);
     setView('logging');
     setActiveWorkout({ routineName: activeRoutine.name, startTime: Date.now(), routine: activeRoutine, sessionLog: initial });
+    onWorkoutStart();
   };
 
   const finishWorkout = async () => {
@@ -285,6 +396,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     if (exError) { console.error(exError); return; }
 
     await loadHistory();
+    await loadRoutines();
     setActiveWorkout(null);
     setView('routines');
     setActiveRoutine(null);
@@ -292,7 +404,98 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
-  if (view === 'routines') return (
+  let loggingModal = null;
+  if (view === 'logging') {
+    const totalSets = activeRoutine.exercises.reduce((sum, ex) => sum + (sessionLog[ex.id] || []).length, 0);
+    const totalChecked = Object.values(checkedSets).reduce((sum, arr) => sum + arr.filter(Boolean).length, 0);
+    const progress = totalSets > 0 ? (totalChecked / totalSets) * 100 : 0;
+    const completedExCount = activeRoutine.exercises.filter(ex => (checkedSets[ex.id] || []).some(Boolean)).length;
+    const totalVolume = activeRoutine.exercises.reduce((sum, ex) =>
+      sum + (sessionLog[ex.id] || []).reduce((s, set, idx) =>
+        s + (checkedSets[ex.id]?.[idx] ? (Number(set.weight) || 0) * (Number(set.reps) || 0) : 0), 0), 0);
+
+    const onHandlePointerDown = (e) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragStartY.current = e.clientY;
+    };
+    const onHandlePointerMove = (e) => {
+      if (dragStartY.current === null) return;
+      setDragY(Math.max(0, e.clientY - dragStartY.current));
+    };
+    const onHandlePointerUp = (e) => {
+      if (dragStartY.current === null) return;
+      const dy = Math.max(0, e.clientY - dragStartY.current);
+      dragStartY.current = null;
+      setDragY(0);
+      if (dy > 80) onCollapse();
+    };
+
+    loggingModal = (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 350,
+        background: 'var(--bg)',
+        transform: workoutExpanded ? `translateY(${dragY}px)` : 'translateY(100%)',
+        transition: dragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Drag handle */}
+        <div
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          style={{ paddingTop: '14px', paddingBottom: '6px', display: 'flex', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+          <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px 8px', flexShrink: 0 }}>
+          <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            {formatTime(workoutSeconds)}
+          </span>
+          <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>
+            {totalVolume.toLocaleString()} LB
+          </span>
+        </div>
+
+        {/* Progress row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 20px 16px', flexShrink: 0 }}>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {completedExCount}/{activeRoutine.exercises.length}
+          </span>
+          <div style={{ flex: 1, height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px', transition: 'width 0.3s ease' }} />
+          </div>
+        </div>
+
+        {/* Exercise cards */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {activeRoutine.exercises.map(ex => (
+            <LoggingExerciseCard
+              key={ex.id}
+              ex={ex}
+              sessionLog={sessionLog}
+              updateSet={updateSet}
+              addSet={addSet}
+              deleteSet={deleteSet}
+              checkedSets={checkedSets[ex.id] || []}
+              toggleCheck={(idx) => toggleCheck(ex.id, idx)}
+              isExpanded={expandedExId === ex.id}
+              onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
+            />
+          ))}
+        </div>
+
+        {/* Finish button */}
+        <div style={{ padding: '12px 16px 28px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+          <button onClick={finishWorkout} className="btn-primary" style={{ width: '100%', padding: '18px', fontSize: '17px', fontWeight: '700' }}>
+            Finish Workout
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'routines' || view === 'logging') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <button onClick={() => setShowCreateModal(true)} style={{
         display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
@@ -319,7 +522,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
           <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
-            onClick={() => renamingRoutine?.id !== r.id && openRoutine(r)}>
+            onClick={() => {
+              if (renamingRoutine?.id === r.id) return;
+              if (activeWorkout?.routine?.id === r.id) { onExpand(); return; }
+              openRoutine(r);
+            }}>
             {renamingRoutine?.id === r.id ? (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
@@ -330,7 +537,12 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
               </div>
             ) : (
               <>
-                <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)' }}>{r.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)' }}>{r.name}</div>
+                  {activeWorkout?.routine?.id === r.id && (
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>Active</span>
+                  )}
+                </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
                 </div>
@@ -386,6 +598,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
           </div>
         </div>
       )}
+      {loggingModal}
     </div>
   );
 
@@ -448,26 +661,14 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     </div>
   );
 
-  if (view === 'logging') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeRoutine.name}</h2>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-          {activeRoutine.exercises.map(ex => (
-            <SortableExercise key={ex.id} ex={ex} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} />
-          ))}
-        </SortableContext>
-      </DndContext>
-      <button onClick={finishWorkout} className="btn-primary">Finish Workout</button>
-    </div>
-  );
-
   if (view === 'history') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <button onClick={() => setView('routines')}
-        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
-        ← Back
-      </button>
+      {initialView !== 'history' && (
+        <button onClick={() => setView('routines')}
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
+          ← Back
+        </button>
+      )}
       <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Workout History</h2>
       {history.length === 0 && (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>
@@ -478,11 +679,15 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
             <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{session.routineName}</span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{session.date}</span>
           </div>
-          {session.exercises.map((ex, i) => (
-            <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-              {ex.name}: {ex.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
-            </div>
-          ))}
+          {session.exercises.map((ex, i) => {
+            const filledSets = ex.sets.filter(s => s.weight || s.reps);
+            if (filledSets.length === 0) return null;
+            return (
+              <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                {ex.name}: {filledSets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

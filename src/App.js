@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
@@ -160,6 +160,8 @@ const [calorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000);
 const [activeWorkout, setActiveWorkout] = useState(null); // { routineName, startTime }
 const [workoutSeconds, setWorkoutSeconds] = useState(0);
+const [workoutExpanded, setWorkoutExpanded] = useState(false);
+const greeting = useMemo(() => getGreeting(profileName), [profileName]);
 const changeDate = (dir) => {
   const d = new Date(date);
   d.setDate(d.getDate() + dir);
@@ -221,8 +223,8 @@ const changeDate = (dir) => {
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <ComingSoon label="Workout Dashboard" />;
       case 'workout-exercises': return <ComingSoon label="Exercises" />;
-      case 'workout-start': return <div className="content"><Workouts activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} /></div>;
-      case 'workout-history': return <ComingSoon label="Workout History" />;
+      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} /></div>;
+      case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" /></div>;
       case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
       case 'measurement-add': return <div className="content"><Measurements /></div>;
       case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
@@ -242,26 +244,30 @@ const changeDate = (dir) => {
           </svg>
         </button>
         <span className="header-title">
-  {activeTab === 'dashboard' ? getGreeting(profileName) : getHeaderTitle(activeTab)}
+  {activeTab === 'dashboard' ? greeting : getHeaderTitle(activeTab)}
 </span>
         <div style={{ width: 32 }} />
       </div>
 
-{/* Active Workout Bar */}
-      {activeWorkout && (
-        <div onClick={() => { setActiveSection('workouts'); setActiveTab('workout-start'); }}
-          style={{
-            background: '#EF4444', color: 'white', padding: '6px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            cursor: 'pointer', fontSize: '13px', fontWeight: '600'
-          }}>
-          <span>{activeWorkout.routineName}</span>
-          <span>{formatTime(workoutSeconds)}</span>
-        </div>
-      )}
 
       {/* Main content */}
       {renderContent()}
+
+      {/* Collapsed Workout Bar */}
+      {activeWorkout && !workoutExpanded && (
+        <div onClick={() => { setActiveSection('workouts'); setActiveTab('workout-start'); setWorkoutExpanded(true); }}
+          style={{
+            position: 'fixed', bottom: '60px', left: '50%', transform: 'translateX(-50%)',
+            width: '100%', maxWidth: '480px', zIndex: 150,
+            background: 'var(--card)', borderTop: '1px solid var(--border)',
+            padding: '12px 20px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            cursor: 'pointer', boxShadow: '0 -2px 12px rgba(0,0,0,0.1)',
+          }}>
+          <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>{activeWorkout.routineName}</span>
+          <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '15px', fontVariantNumeric: 'tabular-nums' }}>{formatTime(workoutSeconds)}</span>
+        </div>
+      )}
 
       {/* Bottom Tab Bar */}
       <div className="tab-bar">
