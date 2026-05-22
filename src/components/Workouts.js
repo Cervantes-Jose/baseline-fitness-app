@@ -1,5 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableExercise({ ex }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ex.name}</div>
+          {ex.lastSession && (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Last: {ex.lastSession.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
+            </div>
+          )}
+        </div>
+        <div {...attributes} {...listeners}
+          style={{ cursor: 'grab', color: 'var(--text-muted)', padding: '4px', touchAction: 'none' }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/>
+            <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
+            <circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Workouts() {
   const [view, setView] = useState('routines');
@@ -149,6 +196,19 @@ const duplicateRoutine = async (routine) => {
 
   const openRoutine = (routine) => { setActiveRoutine(routine); setSessionLog({}); setView('exercises'); };
 
+  const sensors = useSensors(useSensor(PointerSensor));
+
+const handleDragEnd = (event) => {
+  const { active, over } = event;
+  if (active.id !== over?.id) {
+    const oldIndex = activeRoutine.exercises.findIndex(e => e.id === active.id);
+    const newIndex = activeRoutine.exercises.findIndex(e => e.id === over.id);
+    const reordered = arrayMove(activeRoutine.exercises, oldIndex, newIndex);
+    setActiveRoutine(prev => ({ ...prev, exercises: reordered }));
+    setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: reordered } : r));
+  }
+};
+
   const startLogging = () => {
     const initial = {};
     activeRoutine.exercises.forEach(ex => { initial[ex.id] = [{ sets: '', reps: '', weight: '' }]; });
@@ -277,16 +337,13 @@ const duplicateRoutine = async (routine) => {
         <button onClick={addExercise}
           style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
       </div>
-      {activeRoutine.exercises.map(ex => (
-        <div key={ex.id} className="card">
-          <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ex.name}</div>
-          {ex.lastSession && (
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Last: {ex.lastSession.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
-            </div>
-          )}
-        </div>
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+  <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
+    {activeRoutine.exercises.map(ex => (
+      <SortableExercise key={ex.id} ex={ex} />
+    ))}
+  </SortableContext>
+</DndContext>
       {activeRoutine.exercises.length > 0 && (
         <button onClick={startLogging} className="btn-primary">Start Workout</button>
       )}
