@@ -40,7 +40,7 @@ const MEASUREMENT_TABS = [
 
 const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'food', label: 'Food Log', icon: '◑' },
+  { id: 'food', label: 'Calories', icon: '◑' },
   { id: 'workouts', label: 'Workouts', icon: '▸' },
   { id: 'measurements', label: 'Measurements', icon: '◎' },
 ];
@@ -65,10 +65,10 @@ function getTabsForSection(section) {
 function getHeaderTitle(activeTab) {
   const titles = {
     'dashboard': 'Fitness Tracker',
-    'food': 'Food',
-    'food-dashboard': 'Food',
+    'food': 'Calories',
+    'food-dashboard': 'Calories',
     'food-recipes': 'Recipes',
-    'food-log': 'Food Log',
+    'food-log': 'Calories',
     'food-nutrients': 'Nutrients',
     'workouts': 'Workouts',
     'workout-dashboard': 'Workouts',

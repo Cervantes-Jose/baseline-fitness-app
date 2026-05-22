@@ -11,7 +11,6 @@ function Workouts() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load routines from Supabase on mount
   useEffect(() => {
     loadRoutines();
     loadHistory();
@@ -79,6 +78,12 @@ function Workouts() {
     setNewRoutineName('');
   };
 
+  const deleteRoutine = async (id) => {
+    const { error } = await supabase.from('routines').delete().eq('id', id);
+    if (error) { console.error(error); return; }
+    setRoutines(routines.filter(r => r.id !== id));
+  };
+
   const addExercise = async () => {
     if (!newExerciseName.trim() || !activeRoutine) return;
     const { data, error } = await supabase
@@ -94,11 +99,6 @@ function Workouts() {
     setNewExerciseName('');
   };
 
-  const deleteRoutine = async (id) => {
-  const { error } = await supabase.from('routines').delete().eq('id', id);
-  if (error) { console.error(error); return; }
-  setRoutines(routines.filter(r => r.id !== id));
-};
   const openRoutine = (routine) => { setActiveRoutine(routine); setSessionLog({}); setView('exercises'); };
 
   const startLogging = () => {
@@ -143,126 +143,123 @@ function Workouts() {
     setActiveRoutine(null);
   };
 
-  if (loading) return <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'routines') return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h2 style={{ margin: 0 }}>Workouts</h2>
-        <button onClick={() => setView('history')}
-          style={{ background: 'transparent', border: '1px solid #333', color: '#888', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-          History
-        </button>
-      </div>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '10px' }}>
         <input value={newRoutineName} onChange={e => setNewRoutineName(e.target.value)}
-          placeholder="New routine name (e.g. Push)"
+          placeholder="New routine (e.g. Push)"
           onKeyDown={e => e.key === 'Enter' && addRoutine()}
-          style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px' }} />
+          className="input" style={{ flex: 1 }} />
         <button onClick={addRoutine}
-          style={{ padding: '10px 16px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '6px', fontSize: '20px', cursor: 'pointer' }}>+</button>
+          style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
       </div>
-      {routines.length === 0 && <p style={{ color: '#444', textAlign: 'center', marginTop: '40px' }}>No routines yet. Create one above.</p>}
+      {routines.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No routines yet. Create one above.</p>
+      )}
       {routines.map(r => (
-  <div key={r.id}
-    style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <div onClick={() => openRoutine(r)} style={{ flex: 1, cursor: 'pointer' }}>
-      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{r.name}</div>
-      <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>{r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}</div>
-    </div>
-    <button onClick={() => deleteRoutine(r.id)}
-      style={{ background: 'transparent', border: 'none', color: '#ff4444', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center' }}>
-      ✕
-    </button>
-  </div>
-))}
+        <div key={r.id} className="card"
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+          <div onClick={() => openRoutine(r)} style={{ flex: 1 }}>
+            <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>{r.name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+          <button onClick={() => deleteRoutine(r.id)}
+            style={{ background: 'transparent', border: 'none', color: '#ff4444', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center' }}>
+            ✕
+          </button>
+        </div>
+      ))}
     </div>
   );
 
   if (view === 'exercises') return (
-    <div>
-      <button onClick={() => setView('routines')} style={{ background: 'transparent', border: 'none', color: '#4CAF50', cursor: 'pointer', fontSize: '14px', padding: '0 0 16px 0' }}>← Back</button>
-      <h2 style={{ marginTop: 0 }}>{activeRoutine.name}</h2>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <button onClick={() => setView('routines')}
+        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
+        ← Back
+      </button>
+      <div style={{ display: 'flex', gap: '10px' }}>
         <input value={newExerciseName} onChange={e => setNewExerciseName(e.target.value)}
           placeholder="Add exercise (e.g. Bench Press)"
           onKeyDown={e => e.key === 'Enter' && addExercise()}
-          style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px' }} />
+          className="input" style={{ flex: 1 }} />
         <button onClick={addExercise}
-          style={{ padding: '10px 16px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '6px', fontSize: '20px', cursor: 'pointer' }}>+</button>
+          style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
       </div>
       {activeRoutine.exercises.map(ex => (
-        <div key={ex.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '8px' }}>
-          <div style={{ fontWeight: 'bold' }}>{ex.name}</div>
+        <div key={ex.id} className="card">
+          <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{ex.name}</div>
           {ex.lastSession && (
-            <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
               Last: {ex.lastSession.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
             </div>
           )}
         </div>
       ))}
       {activeRoutine.exercises.length > 0 && (
-        <button onClick={startLogging}
-          style={{ width: '100%', padding: '14px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>
-          Start Workout
-        </button>
+        <button onClick={startLogging} className="btn-primary">Start Workout</button>
       )}
     </div>
   );
 
   if (view === 'logging') return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>{activeRoutine.name}</h2>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeRoutine.name}</h2>
       {activeRoutine.exercises.map(ex => (
-        <div key={ex.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '12px' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{ex.name}</div>
+        <div key={ex.id} className="card">
+          <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>{ex.name}</div>
           {ex.lastSession && (
-            <div style={{ fontSize: '12px', color: '#555', marginBottom: '8px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
               Last: {ex.lastSession.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
             <div></div>
             {['Weight', 'Reps', 'Sets'].map(h => (
-              <div key={h} style={{ fontSize: '11px', color: '#555', textAlign: 'center' }}>{h}</div>
+              <div key={h} style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</div>
             ))}
           </div>
           {(sessionLog[ex.id] || []).map((set, idx) => (
             <div key={idx} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
-              <div style={{ fontSize: '13px', color: '#555', display: 'flex', alignItems: 'center' }}>{idx + 1}</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>{idx + 1}</div>
               {['weight', 'reps', 'sets'].map(field => (
                 <input key={field} value={set[field]} onChange={e => updateSet(ex.id, idx, field, e.target.value)}
-                  placeholder="0"
-                  style={{ padding: '8px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px', textAlign: 'center' }} />
+                  placeholder="0" className="input"
+                  style={{ padding: '8px', textAlign: 'center' }} />
               ))}
             </div>
           ))}
-          <button onClick={() => addSet(ex.id)}
-            style={{ background: 'transparent', border: '1px solid #333', color: '#888', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '4px' }}>
+          <button onClick={() => addSet(ex.id)} className="btn-secondary" style={{ marginTop: '6px' }}>
             + Add Set
           </button>
         </div>
       ))}
-      <button onClick={finishWorkout}
-        style={{ width: '100%', padding: '14px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>
-        Finish Workout
-      </button>
+      <button onClick={finishWorkout} className="btn-primary">Finish Workout</button>
     </div>
   );
 
   if (view === 'history') return (
-    <div>
-      <button onClick={() => setView('routines')} style={{ background: 'transparent', border: 'none', color: '#4CAF50', cursor: 'pointer', fontSize: '14px', padding: '0 0 16px 0' }}>← Back</button>
-      <h2 style={{ marginTop: 0 }}>Workout History</h2>
-      {history.length === 0 && <p style={{ color: '#444', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>}
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <button onClick={() => setView('routines')}
+        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
+        ← Back
+      </button>
+      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Workout History</h2>
+      {history.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>
+      )}
       {history.map(session => (
-        <div key={session.id} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '10px' }}>
+        <div key={session.id} className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontWeight: 'bold' }}>{session.routineName}</span>
-            <span style={{ fontSize: '12px', color: '#555' }}>{session.date}</span>
+            <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{session.routineName}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{session.date}</span>
           </div>
           {session.exercises.map((ex, i) => (
-            <div key={i} style={{ fontSize: '13px', color: '#888', marginBottom: '4px' }}>
+            <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
               {ex.name}: {ex.sets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
             </div>
           ))}

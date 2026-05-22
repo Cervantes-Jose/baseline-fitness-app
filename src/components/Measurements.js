@@ -17,11 +17,11 @@ function MiniChart({ entries }) {
 
   return (
     <svg width={w} height={h} style={{ display: 'block', marginTop: '8px' }}>
-      <polyline points={points} fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       {entries.map((e, i) => {
         const x = pad + (i / (entries.length - 1)) * (w - pad * 2);
         const y = h - pad - ((Number(e.value) - min) / range) * (h - pad * 2);
-        return <circle key={i} cx={x} cy={y} r="3" fill="#4CAF50" />;
+        return <circle key={i} cx={x} cy={y} r="3" fill="var(--accent)" />;
       })}
     </svg>
   );
@@ -103,30 +103,36 @@ function Measurements() {
     setNewValue('');
   };
 
-  if (loading) return <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'list') return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Measurements</h2>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '10px' }}>
         <input value={newName} onChange={e => setNewName(e.target.value)}
           placeholder="New measurement (e.g. Weight)"
           onKeyDown={e => e.key === 'Enter' && addMeasurement()}
-          style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px' }} />
+          className="input" style={{ flex: 1 }} />
         <button onClick={addMeasurement}
-          style={{ padding: '10px 16px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '6px', fontSize: '20px', cursor: 'pointer' }}>+</button>
+          style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
       </div>
-      {measurements.length === 0 && <p style={{ color: '#444', textAlign: 'center', marginTop: '40px' }}>No measurements yet. Create one above.</p>}
+      {measurements.length === 0 && (
+        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No measurements yet. Create one above.</p>
+      )}
       {measurements.map(m => {
         const last = m.entries[m.entries.length - 1];
         return (
-          <div key={m.id} onClick={() => openMeasurement(m)}
-            style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '16px', marginBottom: '10px', cursor: 'pointer' }}>
+          <div key={m.id} className="card" onClick={() => openMeasurement(m)} style={{ cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{m.name}</div>
-              {last && <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4CAF50' }}>{last.value}{last.unit && ` ${last.unit}`}</div>}
+              <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>{m.name}</div>
+              {last && (
+                <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>
+                  {last.value}{last.unit && ` ${last.unit}`}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>{m.entries.length} entr{m.entries.length !== 1 ? 'ies' : 'y'}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {m.entries.length} entr{m.entries.length !== 1 ? 'ies' : 'y'}
+            </div>
           </div>
         );
       })}
@@ -134,35 +140,42 @@ function Measurements() {
   );
 
   if (view === 'detail') return (
-    <div>
-      <button onClick={() => setView('list')} style={{ background: 'transparent', border: 'none', color: '#4CAF50', cursor: 'pointer', fontSize: '14px', padding: '0 0 16px 0' }}>← Back</button>
-      <h2 style={{ marginTop: 0 }}>{activeMeasurement.name}</h2>
-      <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
-        <p style={{ margin: '0 0 10px', fontWeight: 'bold', fontSize: '13px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Log Entry</p>
-        <div style={{ display: 'flex', gap: '8px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <button onClick={() => setView('list')}
+        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
+        ← Back
+      </button>
+      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeMeasurement.name}</h2>
+      <div className="card">
+        <p className="section-title">Log Entry</p>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
           <input value={newValue} onChange={e => setNewValue(e.target.value)}
-            placeholder="Value"
-            style={{ flex: 2, padding: '10px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px' }} />
+            placeholder="Value" className="input" style={{ flex: 2 }} />
           <input value={newUnit} onChange={e => setNewUnit(e.target.value)}
-            placeholder="Unit (lbs, in...)"
-            style={{ flex: 2, padding: '10px', borderRadius: '6px', border: '1px solid #333', background: '#222', color: 'white', fontSize: '14px' }} />
+            placeholder="Unit (lbs, in...)" className="input" style={{ flex: 2 }} />
           <button onClick={logEntry}
-            style={{ flex: 1, padding: '10px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '6px', fontSize: '20px', cursor: 'pointer' }}>+</button>
+            style={{ flex: 1, padding: '10px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
         </div>
       </div>
       {activeMeasurement.entries.length > 0 && (
-        <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
-          <p style={{ margin: '0 0 4px', fontWeight: 'bold', fontSize: '13px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Trend</p>
+        <div className="card">
+          <p className="section-title">Trend</p>
           <MiniChart entries={activeMeasurement.entries} />
         </div>
       )}
-      <p style={{ margin: '0 0 10px', fontWeight: 'bold', fontSize: '13px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>History</p>
-      {[...activeMeasurement.entries].reverse().map((entry, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a1a1a', border: '1px solid #222', borderRadius: '8px', padding: '12px 14px', marginBottom: '6px' }}>
-          <span style={{ fontSize: '13px', color: '#666' }}>{entry.date}</span>
-          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>{entry.value}{entry.unit && ` ${entry.unit}`}</span>
+      <div className="card">
+        <p className="section-title">History</p>
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[...activeMeasurement.entries].reverse().map((entry, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < activeMeasurement.entries.length - 1 ? '1px solid var(--border)' : 'none' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{entry.date}</span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                {entry.value}{entry.unit && ` ${entry.unit}`}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
