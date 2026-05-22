@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 function MiniChart({ entries }) {
   if (entries.length < 2) return null;
@@ -33,25 +34,76 @@ function Measurements() {
   const [activeMeasurement, setActiveMeasurement] = useState(null);
   const [newValue, setNewValue] = useState('');
   const [newUnit, setNewUnit] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const addMeasurement = () => {
+  useEffect(() => {
+    loadMeasurements();
+  }, []);
+
+  const loadMeasurements = async () => {
+    setLoading(true);
+    const { data: measurementData, error: measurementError } = await supabase
+      .from('measurements')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (measurementError) { console.error(measurementError); setLoading(false); return; }
+
+    const { data: entryData, error: entryError } = await supabase
+      .from('measurement_entries')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (entryError) { console.error(entryError); setLoading(false); return; }
+
+    const measurementsWithEntries = measurementData.map(m => ({
+      ...m,
+      entries: entryData.filter(e => e.measurement_id === m.id)
+    }));
+
+    setMeasurements(measurementsWithEntries);
+    setLoading(false);
+  };
+
+  const addMeasurement = async () => {
     if (!newName.trim()) return;
-    setMeasurements([...measurements, { id: Date.now(), name: newName.trim(), entries: [] }]);
+    const { data, error } = await supabase
+      .from('measurements')
+      .insert([{ name: newName.trim() }])
+      .select()
+      .single();
+
+    if (error) { console.error(error); return; }
+    setMeasurements([...measurements, { ...data, entries: [] }]);
     setNewName('');
   };
 
   const openMeasurement = (m) => { setActiveMeasurement(m); setView('detail'); };
 
-  const logEntry = () => {
+  const logEntry = async () => {
     if (!newValue.trim()) return;
-    const entry = { date: new Date().toLocaleDateString(), value: newValue, unit: newUnit };
+    const { data, error } = await supabase
+      .from('measurement_entries')
+      .insert([{
+        measurement_id: activeMeasurement.id,
+        value: newValue,
+        unit: newUnit,
+        date: new Date().toLocaleDateString()
+      }])
+      .select()
+      .single();
+
+    if (error) { console.error(error); return; }
+
     const updated = measurements.map(m =>
-      m.id === activeMeasurement.id ? { ...m, entries: [...m.entries, entry] } : m
+      m.id === activeMeasurement.id ? { ...m, entries: [...m.entries, data] } : m
     );
     setMeasurements(updated);
-    setActiveMeasurement(prev => ({ ...prev, entries: [...prev.entries, entry] }));
+    setActiveMeasurement(prev => ({ ...prev, entries: [...prev.entries, data] }));
     setNewValue('');
   };
+
+  if (loading) return <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'list') return (
     <div>

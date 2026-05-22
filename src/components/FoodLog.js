@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => {
   const hour = i % 12 === 0 ? 12 : i % 12;
@@ -8,14 +9,56 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
 
 function FoodLog() {
   const currentHour = new Date().getHours();
+  const today = new Date().toLocaleDateString();
   const [foods, setFoods] = useState({});
   const [selectedHour, setSelectedHour] = useState(currentHour);
   const [form, setForm] = useState({ name: '', calories: '', protein: '', carbs: '', fats: '' });
+  const [loading, setLoading] = useState(true);
 
-  const addFood = () => {
+  useEffect(() => {
+    loadFoods();
+  }, []);
+
+  const loadFoods = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('food_entries')
+      .select('*')
+      .eq('date', today)
+      .order('created_at', { ascending: true });
+
+    if (error) { console.error(error); setLoading(false); return; }
+
+    const grouped = {};
+    data.forEach(entry => {
+      if (!grouped[entry.hour]) grouped[entry.hour] = [];
+      grouped[entry.hour].push(entry);
+    });
+
+    setFoods(grouped);
+    setLoading(false);
+  };
+
+  const addFood = async () => {
     if (!form.name || !form.calories) return;
+    const { data, error } = await supabase
+      .from('food_entries')
+      .insert([{
+        name: form.name,
+        calories: Number(form.calories),
+        protein: Number(form.protein) || 0,
+        carbs: Number(form.carbs) || 0,
+        fats: Number(form.fats) || 0,
+        hour: selectedHour,
+        date: today
+      }])
+      .select()
+      .single();
+
+    if (error) { console.error(error); return; }
+
     const existing = foods[selectedHour] || [];
-    setFoods({ ...foods, [selectedHour]: [...existing, form] });
+    setFoods({ ...foods, [selectedHour]: [...existing, data] });
     setForm({ name: '', calories: '', protein: '', carbs: '', fats: '' });
   };
 
@@ -26,6 +69,8 @@ function FoodLog() {
     carbs: acc.carbs + Number(f.carbs),
     fats: acc.fats + Number(f.fats),
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+  if (loading) return <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   return (
     <div>
