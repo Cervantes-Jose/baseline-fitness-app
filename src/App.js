@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
 import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
@@ -85,42 +86,6 @@ function getHeaderTitle(activeTab) {
 }
 
 // ─── SCREENS ────────────────────────────────────────────────
-function Dashboard({ date }) {
-  return (
-    <div>
-      <div className="tile-grid">
-        <div className="tile tile-accent">
-          <div className="tile-icon">🔥</div>
-          <div><span className="tile-value">—</span></div>
-          <div className="tile-label">Calories</div>
-        </div>
-        <div className="tile tile-accent">
-          <div className="tile-icon">💪</div>
-          <div><span className="tile-value" style={{ fontSize: '18px' }}>—</span></div>
-          <div className="tile-label">Workout</div>
-        </div>
-        <div className="tile tile-accent">
-          <div className="tile-icon">⚖️</div>
-          <div><span className="tile-value">—</span></div>
-          <div className="tile-label">Weight</div>
-        </div>
-        <div className="tile tile-accent">
-          <div className="tile-icon">📊</div>
-          <div><span className="tile-value">—</span></div>
-          <div className="tile-label">Body Fat</div>
-        </div>
-      </div>
-      <div className="content" style={{ paddingTop: 0 }}>
-        <div className="card">
-          <p className="section-title">Coming Soon</p>
-          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-            Your daily summary will show here once your food, workouts, and measurements are connected.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ComingSoon({ label }) {
   return (
@@ -165,13 +130,35 @@ function Profile({ theme, setTheme }) {
   );
 }
 
+function getGreeting(name) {
+  const hour = new Date().getHours();
+  const greetings = {
+    morning: ['Good morning', 'Morning'],
+    afternoon: ['Good afternoon', 'Hey', `Hi ${name}`],
+    evening: ['Good evening', 'Evening', 'Hey there'],
+    night: ['Good night', 'Hey'],
+  };
+  let timeOfDay;
+  if (hour >= 5 && hour < 12) timeOfDay = 'morning';
+  else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
+  else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
+  else timeOfDay = 'night';
+
+  const options = greetings[timeOfDay];
+  const greeting = options[Math.floor(Math.random() * options.length)];
+  return greeting.includes(name) ? greeting : `${greeting}, ${name}`;
+}
+
 // ─── APP ────────────────────────────────────────────────────
 function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [activeSection, setActiveSection] = useState('main');
-  const [sidePanel, setSidePanel] = useState(false);
-  const [date, setDate] = useState(new Date());
-  const [theme, setTheme] = useState('light');
+const [activeTab, setActiveTab] = useState('dashboard');
+const [activeSection, setActiveSection] = useState('main');
+const [sidePanel, setSidePanel] = useState(false);
+const [date, setDate] = useState(new Date());
+const [theme, setTheme] = useState('light');
+const [profileName] = useState('Jose');
+const [calorieGoal] = useState(2000);
+const [stepsGoal] = useState(10000);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -218,7 +205,7 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard date={date} />;
+      case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} />;
       case 'food-dashboard': return <ComingSoon label="Food Dashboard" />;
       case 'food-log': return <div className="content"><FoodLog /></div>;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
@@ -232,7 +219,7 @@ function App() {
       case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
       case 'measurement-tbd2': return <ComingSoon label="Coming Soon" />;
       case 'profile': return <Profile theme={theme} setTheme={setTheme} />;
-      default: return <Dashboard date={date} />;
+      default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} />;
     }
   };
 
@@ -245,18 +232,12 @@ function App() {
             <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
-        <span className="header-title">{getHeaderTitle(activeTab)}</span>
+        <span className="header-title">
+  {activeTab === 'dashboard' ? getGreeting(profileName) : getHeaderTitle(activeTab)}
+</span>
         <div style={{ width: 32 }} />
       </div>
 
-      {/* Date bar — only on main dashboard */}
-      {activeTab === 'dashboard' && (
-        <div className="date-bar">
-          <button className="date-nav-btn" onClick={() => changeDate(-1)}>‹</button>
-          <span className="date-text">{formatDate(date)}</span>
-          <button className="date-nav-btn" onClick={() => changeDate(1)}>›</button>
-        </div>
-      )}
 
       {/* Main content */}
       {renderContent()}
