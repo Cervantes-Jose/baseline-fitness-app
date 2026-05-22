@@ -60,6 +60,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
   const [menuOpen, setMenuOpen] = useState(null);
   const [renamingRoutine, setRenamingRoutine] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
   
 
   useEffect(() => {
@@ -127,6 +128,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
     if (error) { console.error(error); return; }
     setRoutines([...routines, { ...data, exercises: [] }]);
     setNewRoutineName('');
+    setShowCreateModal(false);
   };
 
   const deleteRoutine = async (id) => {
@@ -257,72 +259,119 @@ const handleDragEnd = (event) => {
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'routines') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <input value={newRoutineName} onChange={e => setNewRoutineName(e.target.value)}
-          placeholder="New routine (e.g. Push)"
-          onKeyDown={e => e.key === 'Enter' && addRoutine()}
-          className="input" style={{ flex: 1 }} />
-        <button onClick={addRoutine}
-          style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
-      </div>
-      {routines.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No routines yet. Create one above.</p>
-      )}
-      {routines.map(r => (
-  <div key={r.id} className="card"
-    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
-  onClick={() => renamingRoutine?.id !== r.id && openRoutine(r)}>
-  {renamingRoutine?.id === r.id ? (
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-      <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
-        className="input" style={{ flex: 1, padding: '8px 12px', fontSize: '15px' }}
-        onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setRenamingRoutine(null); }}
-        autoFocus />
-      <button onClick={submitRename} className="btn-secondary">Save</button>
-    </div>
-  ) : (
-    <>
-      <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>{r.name}</div>
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-        {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
-      </div>
-    </>
-  )}
-</div>
-    <div style={{ position: 'relative' }}>
-      <button onClick={() => setMenuOpen(menuOpen === r.id ? null : r.id)}
-        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
-        ···
-      </button>
-      {menuOpen === r.id && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', background: 'var(--card)',
-          border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: '140px'
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      
+      {/* Create New Routine Card */}
+      <button onClick={() => setShowCreateModal(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '16px',
+          background: 'var(--accent-light)', border: '1px solid var(--border)',
+          borderRadius: '16px', padding: '16px', cursor: 'pointer',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: '100%', textAlign: 'left'
         }}>
-          {[
-            { label: 'Rename', action: () => renameRoutine(r) },
-  { label: 'Duplicate', action: () => duplicateRoutine(r) },
-  { label: 'Edit', action: () => { setActiveRoutine(r); setView('editing'); setMenuOpen(null); } },
-  { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
-].map(item => (
-            <button key={item.label} onClick={item.action}
-              style={{
-                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
-                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
-                fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
-                borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
-              }}>
-              {item.label}
+        <div style={{
+          width: '48px', height: '48px', borderRadius: '12px',
+          background: 'var(--accent)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', flexShrink: 0
+        }}>
+          <span style={{ color: 'white', fontSize: '24px', lineHeight: 1 }}>+</span>
+        </div>
+        <div>
+          <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>Create New Routine</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>e.g. Push, Pull, Legs</div>
+        </div>
+      </button>
+
+      {/* My Routines */}
+      {routines.length > 0 && (
+        <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '8px 0 0' }}>My Routines</p>
+      )}
+
+      {routines.map(r => (
+        <div key={r.id}
+          style={{
+            background: 'var(--card)', borderRadius: '16px', padding: '18px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+          <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
+            onClick={() => renamingRoutine?.id !== r.id && openRoutine(r)}>
+            {renamingRoutine?.id === r.id ? (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                  className="input" style={{ flex: 1, padding: '8px 12px', fontSize: '15px' }}
+                  onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setRenamingRoutine(null); }}
+                  autoFocus />
+                <button onClick={submitRename} className="btn-secondary">Save</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)' }}>{r.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
+                </div>
+              </>
+            )}
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setMenuOpen(menuOpen === r.id ? null : r.id)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
+              ···
             </button>
-          ))}
+            {menuOpen === r.id && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', background: 'var(--card)',
+                border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: '140px'
+              }}>
+                {[
+                  { label: 'Rename', action: () => renameRoutine(r) },
+                  { label: 'Duplicate', action: () => duplicateRoutine(r) },
+                  { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
+                ].map(item => (
+                  <button key={item.label} onClick={item.action}
+                    style={{
+                      display: 'block', width: '100%', padding: '12px 16px', background: 'none',
+                      border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
+                      fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
+                      borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
+                    }}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Click outside to close menu */}
+      {menuOpen && (
+        <div onClick={() => setMenuOpen(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+      )}
+
+      {/* Create Routine Modal */}
+      {showCreateModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500
+        }} onClick={() => setShowCreateModal(false)}>
+          <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontWeight: '600', marginBottom: '16px', fontSize: '16px', color: 'var(--text-primary)' }}>New Routine</p>
+            <input value={newRoutineName} onChange={e => setNewRoutineName(e.target.value)}
+              placeholder="e.g. Push, Pull, Legs"
+              className="input" style={{ marginBottom: '16px' }}
+              onKeyDown={e => e.key === 'Enter' && addRoutine()}
+              autoFocus />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowCreateModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={addRoutine} className="btn-primary" style={{ flex: 1 }}>Create</button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
-  </div>
-))}
 
     </div>
   );

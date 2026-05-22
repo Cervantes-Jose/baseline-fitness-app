@@ -237,7 +237,7 @@ const changeDate = (dir) => {
       {/* Header */}
       <div className="header">
         <button className="header-btn" onClick={() => setSidePanel(true)}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
             <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         </button>
