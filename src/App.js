@@ -1,38 +1,294 @@
-// v2
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import './App.css';
 import FoodLog from './components/FoodLog';
 import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
 
+// ─── TAB CONFIGS ────────────────────────────────────────────
+const MAIN_TABS = [
+  { id: 'dashboard', label: 'Home', icon: '⌂' },
+  { id: 'food-log', label: 'Add Food', icon: '+' },
+  { id: 'workout-start', label: 'Workout', icon: '▸' },
+  { id: 'measurement-add', label: 'Measure', icon: '◎' },
+  { id: 'profile', label: 'Profile', icon: '○' },
+];
 
+const FOOD_TABS = [
+  { id: 'food-dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'food-recipes', label: 'Recipes', icon: '≡' },
+  { id: 'food-log', label: 'Add Food', icon: '+' },
+  { id: 'food-nutrients', label: 'Nutrients', icon: '◑' },
+  { id: 'profile', label: 'Profile', icon: '○' },
+];
+
+const WORKOUT_TABS = [
+  { id: 'workout-dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'workout-exercises', label: 'Exercises', icon: '≡' },
+  { id: 'workout-start', label: 'Start', icon: '▸' },
+  { id: 'workout-history', label: 'History', icon: '◷' },
+  { id: 'profile', label: 'Profile', icon: '○' },
+];
+
+const MEASUREMENT_TABS = [
+  { id: 'measurement-dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'measurement-tbd1', label: 'TBD', icon: '•' },
+  { id: 'measurement-add', label: 'Add', icon: '+' },
+  { id: 'measurement-tbd2', label: 'TBD', icon: '•' },
+  { id: 'profile', label: 'Profile', icon: '○' },
+];
+
+const SECTIONS = [
+  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
+  { id: 'food', label: 'Food Log', icon: '◑' },
+  { id: 'workouts', label: 'Workouts', icon: '▸' },
+  { id: 'measurements', label: 'Measurements', icon: '◎' },
+];
+
+// ─── HELPERS ────────────────────────────────────────────────
+function formatDate(date) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function getTabsForSection(section) {
+  if (section === 'food') return FOOD_TABS;
+  if (section === 'workouts') return WORKOUT_TABS;
+  if (section === 'measurements') return MEASUREMENT_TABS;
+  return MAIN_TABS;
+}
+
+function getHeaderTitle(activeTab) {
+  const titles = {
+    'dashboard': 'Fitness Tracker',
+    'food': 'Food',
+    'food-dashboard': 'Food',
+    'food-recipes': 'Recipes',
+    'food-log': 'Food Log',
+    'food-nutrients': 'Nutrients',
+    'workouts': 'Workouts',
+    'workout-dashboard': 'Workouts',
+    'workout-exercises': 'Exercises',
+    'workout-start': 'Start Workout',
+    'workout-history': 'History',
+    'measurements': 'Measurements',
+    'measurement-dashboard': 'Measurements',
+    'measurement-add': 'Add Measurement',
+    'measurement-tbd1': 'Coming Soon',
+    'measurement-tbd2': 'Coming Soon',
+    'profile': 'Profile',
+  };
+  return titles[activeTab] || 'Fitness Tracker';
+}
+
+// ─── SCREENS ────────────────────────────────────────────────
+function Dashboard({ date }) {
+  return (
+    <div>
+      <div className="tile-grid">
+        <div className="tile tile-accent">
+          <div className="tile-icon">🔥</div>
+          <div><span className="tile-value">—</span></div>
+          <div className="tile-label">Calories</div>
+        </div>
+        <div className="tile tile-accent">
+          <div className="tile-icon">💪</div>
+          <div><span className="tile-value" style={{ fontSize: '18px' }}>—</span></div>
+          <div className="tile-label">Workout</div>
+        </div>
+        <div className="tile tile-accent">
+          <div className="tile-icon">⚖️</div>
+          <div><span className="tile-value">—</span></div>
+          <div className="tile-label">Weight</div>
+        </div>
+        <div className="tile tile-accent">
+          <div className="tile-icon">📊</div>
+          <div><span className="tile-value">—</span></div>
+          <div className="tile-label">Body Fat</div>
+        </div>
+      </div>
+      <div className="content" style={{ paddingTop: 0 }}>
+        <div className="card">
+          <p className="section-title">Coming Soon</p>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            Your daily summary will show here once your food, workouts, and measurements are connected.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ label }) {
+  return (
+    <div className="content">
+      <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🚧</div>
+        <p style={{ fontWeight: '600', marginBottom: '8px' }}>{label}</p>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Coming soon.</p>
+      </div>
+    </div>
+  );
+}
+
+function Profile({ theme, setTheme }) {
+  return (
+    <div className="content">
+      <div className="card">
+        <p className="section-title">Appearance</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+          {['system', 'light', 'dark'].map(t => (
+            <button key={t} onClick={() => setTheme(t)}
+              style={{
+                padding: '12px 16px', borderRadius: '12px', border: '1.5px solid',
+                borderColor: theme === t ? 'var(--accent)' : 'var(--border)',
+                background: theme === t ? 'var(--accent-light)' : 'var(--card)',
+                color: theme === t ? 'var(--accent)' : 'var(--text-primary)',
+                cursor: 'pointer', textAlign: 'left', fontSize: '15px', fontWeight: '500',
+                textTransform: 'capitalize'
+              }}>
+              {t === 'system' ? '⚙️ System Default' : t === 'light' ? '☀️ Light' : '🌙 Dark'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <p className="section-title">Account</p>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+          Login and account features coming soon.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ────────────────────────────────────────────────────
 function App() {
-  const [activeTab, setActiveTab] = useState('food');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeSection, setActiveSection] = useState('main');
+  const [sidePanel, setSidePanel] = useState(false);
+  const [date, setDate] = useState(new Date());
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+    } else if (theme === 'light') {
+      root.removeAttribute('data-theme');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      prefersDark ? root.setAttribute('data-theme', 'dark') : root.removeAttribute('data-theme');
+    }
+  }, [theme]);
+
+  const changeDate = (dir) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + dir);
+    setDate(d);
+  };
+
+  const openSection = (id) => {
+    if (id === 'dashboard') {
+      setActiveSection('main');
+      setActiveTab('dashboard');
+    } else {
+      setActiveSection(id);
+      setActiveTab(`${id === 'workouts' ? 'workout' : id === 'measurements' ? 'measurement' : 'food'}-dashboard`);
+    }
+    setSidePanel(false);
+  };
+
+  const currentTabs = getTabsForSection(activeSection);
+
+  const handleTabClick = (tabId) => {
+    if (tabId === 'profile') {
+      setActiveTab('profile');
+      return;
+    }
+    if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-dashboard'); return; }
+    if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-dashboard'); return; }
+    if (tabId === 'measurements') { setActiveSection('measurements'); setActiveTab('measurement-dashboard'); return; }
+    if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
+    setActiveTab(tabId);
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard': return <Dashboard date={date} />;
+      case 'food-dashboard': return <ComingSoon label="Food Dashboard" />;
+      case 'food-log': return <div className="content"><FoodLog /></div>;
+      case 'food-recipes': return <ComingSoon label="Recipes" />;
+      case 'food-nutrients': return <ComingSoon label="Nutrients" />;
+      case 'workout-dashboard': return <ComingSoon label="Workout Dashboard" />;
+      case 'workout-exercises': return <ComingSoon label="Exercises" />;
+      case 'workout-start': return <div className="content"><Workouts /></div>;
+      case 'workout-history': return <ComingSoon label="Workout History" />;
+      case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
+      case 'measurement-add': return <div className="content"><Measurements /></div>;
+      case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
+      case 'measurement-tbd2': return <ComingSoon label="Coming Soon" />;
+      case 'profile': return <Profile theme={theme} setTheme={setTheme} />;
+      default: return <Dashboard date={date} />;
+    }
+  };
 
   return (
-    <div style={{ maxWidth: '480px', margin: '0 auto', fontFamily: 'sans-serif', backgroundColor: '#111', minHeight: '100vh', color: 'white' }}>
-      <div style={{ padding: '20px', borderBottom: '1px solid #333' }}>
-        <h1 style={{ margin: 0, fontSize: '24px' }}>Fitness Tracker</h1>
+    <div className="app">
+      {/* Header */}
+      <div className="header">
+        <button className="header-btn" onClick={() => setSidePanel(true)}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <span className="header-title">{getHeaderTitle(activeTab)}</span>
+        <div style={{ width: 32 }} />
       </div>
-      <div style={{ display: 'flex', borderBottom: '1px solid #333' }}>
-        {['food', 'workouts', 'measurements'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{
-              flex: 1, padding: '14px',
-              background: activeTab === tab ? '#222' : 'transparent',
-              color: activeTab === tab ? 'white' : '#888',
-              border: 'none',
-              borderBottom: activeTab === tab ? '2px solid #4CAF50' : '2px solid transparent',
-              cursor: 'pointer', fontSize: '14px', textTransform: 'capitalize'
-            }}>
-            {tab}
+
+      {/* Date bar — only on main dashboard */}
+      {activeTab === 'dashboard' && (
+        <div className="date-bar">
+          <button className="date-nav-btn" onClick={() => changeDate(-1)}>‹</button>
+          <span className="date-text">{formatDate(date)}</span>
+          <button className="date-nav-btn" onClick={() => changeDate(1)}>›</button>
+        </div>
+      )}
+
+      {/* Main content */}
+      {renderContent()}
+
+      {/* Bottom Tab Bar */}
+      <div className="tab-bar">
+        {currentTabs.map(tab => (
+          <button key={tab.id}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && activeTab === 'profile') ? 'active' : ''}`}
+            onClick={() => handleTabClick(tab.id)}>
+            <span className="tab-icon">{tab.icon}</span>
+            <span className="tab-label">{tab.label}</span>
           </button>
         ))}
       </div>
-      <div style={{ padding: '20px' }}>
-        {activeTab === 'food' && <FoodLog />}
-        {activeTab === 'workouts' && <Workouts />}
-        {activeTab === 'measurements' && <Measurements />}
-      </div>
+
+      {/* Side Panel */}
+      {sidePanel && (
+        <>
+          <div className="overlay" onClick={() => setSidePanel(false)} />
+          <div className="side-panel">
+            <p style={{ padding: '0 24px 16px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Sections</p>
+            {SECTIONS.map(s => (
+              <button key={s.id} className={`side-panel-item ${activeSection === s.id || (s.id === 'dashboard' && activeSection === 'main') ? 'active' : ''}`}
+                onClick={() => openSection(s.id)}>
+                <span className="side-panel-icon">{s.icon}</span>
+                <span className="side-panel-label">{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

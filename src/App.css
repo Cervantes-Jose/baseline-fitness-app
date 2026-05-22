@@ -1,38 +1,358 @@
-.App {
-  text-align: center;
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+:root {
+  --blue-50: #EFF8FF;
+  --blue-100: #DBEAFE;
+  --blue-200: #BFDBFE;
+  --blue-400: #60A5FA;
+  --blue-500: #3B82F6;
+  --blue-600: #2563EB;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-700: #374151;
+  --gray-900: #111827;
+  --white: #FFFFFF;
+  --red: #EF4444;
+  --green: #22C55E;
+
+  --bg: var(--blue-50);
+  --card: var(--white);
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-500);
+  --text-muted: var(--gray-400);
+  --border: var(--gray-200);
+  --tab-bar: var(--white);
+  --accent: var(--blue-500);
+  --accent-light: var(--blue-100);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+[data-theme="dark"] {
+  --bg: #0F172A;
+  --card: #1E293B;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #475569;
+  --border: #334155;
+  --tab-bar: #1E293B;
+  --accent: #60A5FA;
+  --accent-light: #1E3A5F;
 }
 
-.App-header {
-  background-color: #282c34;
+body {
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: var(--bg);
+  position: relative;
+  padding-bottom: 80px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.header-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.header-btn:hover {
+  background: var(--gray-100);
+}
+
+/* Bottom Tab Bar */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: var(--tab-bar);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 8px 0 12px;
+  z-index: 200;
+}
+
+.tab-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+
+.tab-item.active {
+  color: var(--accent);
+}
+
+.tab-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.tab-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Side Panel */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 300;
+  opacity: 0;
+  animation: fadeIn 0.2s forwards;
+}
+
+.side-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--card);
+  z-index: 400;
+  padding: 60px 0 40px;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+  transform: translateX(-100%);
+  animation: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.side-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.side-panel-item:hover {
+  background: var(--accent-light);
+}
+
+.side-panel-item.active {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.side-panel-icon {
+  font-size: 22px;
+}
+
+.side-panel-label {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Cards */
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+}
+
+/* Dashboard Tiles */
+.tile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.tile {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 18px 16px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.tile-icon {
+  font-size: 24px;
+}
+
+.tile-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.tile-unit {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+
+.tile-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tile-accent {
+  border-top: 3px solid var(--accent);
+}
+
+/* Date Selector */
+.date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.date-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.date-nav-btn {
+  background: var(--accent-light);
+  border: none;
+  cursor: pointer;
+  color: var(--accent);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* Content padding */
+.content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Section headers */
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 10px;
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+/* Buttons */
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
   color: white;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
-.App-link {
-  color: #61dafb;
+.btn-primary:active {
+  opacity: 0.85;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.btn-secondary {
+  background: var(--accent-light);
+  color: var(--accent);
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  to { transform: translateX(0); }
 }
