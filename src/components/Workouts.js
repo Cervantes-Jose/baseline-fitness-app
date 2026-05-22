@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 function Workouts() {
   const [view, setView] = useState('routines');
@@ -8,16 +9,86 @@ function Workouts() {
   const [newExerciseName, setNewExerciseName] = useState('');
   const [sessionLog, setSessionLog] = useState({});
   const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const addRoutine = () => {
+  // Load routines from Supabase on mount
+  useEffect(() => {
+    loadRoutines();
+    loadHistory();
+  }, []);
+
+  const loadRoutines = async () => {
+    setLoading(true);
+    const { data: routineData, error: routineError } = await supabase
+      .from('routines')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (routineError) { console.error(routineError); setLoading(false); return; }
+
+    const { data: exerciseData, error: exerciseError } = await supabase
+      .from('exercises')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (exerciseError) { console.error(exerciseError); setLoading(false); return; }
+
+    const routinesWithExercises = routineData.map(r => ({
+      ...r,
+      exercises: exerciseData.filter(e => e.routine_id === r.id).map(e => ({
+        ...e,
+        lastSession: null
+      }))
+    }));
+
+    setRoutines(routinesWithExercises);
+    setLoading(false);
+  };
+
+  const loadHistory = async () => {
+    const { data: sessions, error } = await supabase
+      .from('workout_sessions')
+      .select('*, session_exercises(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) { console.error(error); return; }
+
+    const formatted = sessions.map(s => ({
+      id: s.id,
+      date: s.date,
+      routineName: s.routine_name,
+      exercises: s.session_exercises.map(e => ({
+        name: e.exercise_name,
+        sets: e.sets
+      }))
+    }));
+
+    setHistory(formatted);
+  };
+
+  const addRoutine = async () => {
     if (!newRoutineName.trim()) return;
-    setRoutines([...routines, { id: Date.now(), name: newRoutineName.trim(), exercises: [] }]);
+    const { data, error } = await supabase
+      .from('routines')
+      .insert([{ name: newRoutineName.trim() }])
+      .select()
+      .single();
+
+    if (error) { console.error(error); return; }
+    setRoutines([...routines, { ...data, exercises: [] }]);
     setNewRoutineName('');
   };
 
-  const addExercise = () => {
+  const addExercise = async () => {
     if (!newExerciseName.trim() || !activeRoutine) return;
-    const newEx = { id: Date.now(), name: newExerciseName.trim(), lastSession: null };
+    const { data, error } = await supabase
+      .from('exercises')
+      .insert([{ routine_id: activeRoutine.id, name: newExerciseName.trim() }])
+      .select()
+      .single();
+
+    if (error) { console.error(error); return; }
+    const newEx = { ...data, lastSession: null };
     setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, newEx] } : r));
     setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, newEx] }));
     setNewExerciseName('');
@@ -44,22 +115,30 @@ function Workouts() {
     setSessionLog(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { sets: '', reps: '', weight: '' }] }));
   };
 
-  const finishWorkout = () => {
-    const session = {
-      id: Date.now(),
-      date: new Date().toLocaleDateString(),
-      routineName: activeRoutine.name,
-      exercises: activeRoutine.exercises.map(ex => ({ name: ex.name, sets: sessionLog[ex.id] || [] }))
-    };
-    setHistory([session, ...history]);
-    setRoutines(routines.map(r =>
-      r.id === activeRoutine.id
-        ? { ...r, exercises: r.exercises.map(ex => ({ ...ex, lastSession: { sets: sessionLog[ex.id] || [] } })) }
-        : r
-    ));
+  const finishWorkout = async () => {
+    const { data: session, error: sessionError } = await supabase
+      .from('workout_sessions')
+      .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString() }])
+      .select()
+      .single();
+
+    if (sessionError) { console.error(sessionError); return; }
+
+    const exerciseInserts = activeRoutine.exercises.map(ex => ({
+      session_id: session.id,
+      exercise_name: ex.name,
+      sets: sessionLog[ex.id] || []
+    }));
+
+    const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
+    if (exError) { console.error(exError); return; }
+
+    await loadHistory();
     setView('routines');
     setActiveRoutine(null);
   };
+
+  if (loading) return <p style={{ color: '#888', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'routines') return (
     <div>
