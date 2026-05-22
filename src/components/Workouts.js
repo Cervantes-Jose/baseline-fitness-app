@@ -74,7 +74,7 @@ function Workouts() {
       .select()
       .single();
 
-    if (error) { console.error(error); return; }
+    if (error) { alert(JSON.stringify(error)); return; }
     setRoutines([...routines, { ...data, exercises: [] }]);
     setNewRoutineName('');
   };
