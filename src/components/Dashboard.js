@@ -1,24 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-function getGreeting(name) {
-  const hour = new Date().getHours();
-  const greetings = {
-    morning: ['Good morning', 'Rise and grind', 'Morning'],
-    afternoon: ['Good afternoon', 'Hey', `Hi ${name}`],
-    evening: ['Good evening', 'Evening', 'Hey there'],
-    night: ['Good night', 'Burning the midnight oil', 'Hey'],
-  };
-  let timeOfDay;
-  if (hour >= 5 && hour < 12) timeOfDay = 'morning';
-  else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
-  else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
-  else timeOfDay = 'night';
-
-  const options = greetings[timeOfDay];
-  const greeting = options[Math.floor(Math.random() * options.length)];
-  return greeting.includes(name) ? greeting : `${greeting}, ${name}`;
-}
 
 function CircleProgress({ value, goal, size = 100, strokeWidth = 8, color = '#5BA4CF' }) {
   const radius = (size - strokeWidth) / 2;
@@ -47,9 +29,10 @@ function Dashboard({ date, profileName, calorieGoal, stepsGoal }) {
 
   const steps = null; // placeholder until Samsung/Apple Health connected
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [date]);
+ useEffect(() => {
+  loadDashboardData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [date]);
 
   const loadDashboardData = async () => {
     const dateStr = date.toLocaleDateString();

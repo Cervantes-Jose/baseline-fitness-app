@@ -46,14 +46,6 @@ const SECTIONS = [
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────
-function formatDate(date) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
 
 function getTabsForSection(section) {
   if (section === 'food') return FOOD_TABS;
@@ -172,11 +164,6 @@ const [stepsGoal] = useState(10000);
     }
   }, [theme]);
 
-  const changeDate = (dir) => {
-    const d = new Date(date);
-    d.setDate(d.getDate() + dir);
-    setDate(d);
-  };
 
   const openSection = (id) => {
     if (id === 'dashboard') {
