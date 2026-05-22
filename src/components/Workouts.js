@@ -48,18 +48,19 @@ function SortableExercise({ ex }) {
   );
 }
 
-function Workouts() {
-  const [view, setView] = useState('routines');
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds }) {
+  const [view, setView] = useState(activeWorkout ? 'logging' : 'routines');
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
-  const [activeRoutine, setActiveRoutine] = useState(null);
+  const [activeRoutine, setActiveRoutine] = useState(activeWorkout?.routine || null);
   const [newExerciseName, setNewExerciseName] = useState('');
-  const [sessionLog, setSessionLog] = useState({});
+  const [sessionLog, setSessionLog] = useState(activeWorkout?.sessionLog || {});
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(null);
   const [renamingRoutine, setRenamingRoutine] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  
 
   useEffect(() => {
     loadRoutines();
@@ -214,6 +215,7 @@ const handleDragEnd = (event) => {
     activeRoutine.exercises.forEach(ex => { initial[ex.id] = [{ sets: '', reps: '', weight: '' }]; });
     setSessionLog(initial);
     setView('logging');
+    setActiveWorkout({ routineName: activeRoutine.name, startTime: Date.now(), routine: activeRoutine, sessionLog: initial });
   };
 
   const updateSet = (exId, setIdx, field, value) => {
@@ -228,10 +230,10 @@ const handleDragEnd = (event) => {
     setSessionLog(prev => ({ ...prev, [exId]: [...(prev[exId] || []), { sets: '', reps: '', weight: '' }] }));
   };
 
-  const finishWorkout = async () => {
+ const finishWorkout = async () => {
     const { data: session, error: sessionError } = await supabase
       .from('workout_sessions')
-      .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString() }])
+      .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString(), duration: workoutSeconds }])
       .select()
       .single();
 
@@ -246,7 +248,8 @@ const handleDragEnd = (event) => {
     const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
     if (exError) { console.error(exError); return; }
 
-    await loadHistory();
+   await loadHistory();
+    setActiveWorkout(null);
     setView('routines');
     setActiveRoutine(null);
   };
@@ -301,9 +304,10 @@ const handleDragEnd = (event) => {
         }}>
           {[
             { label: 'Rename', action: () => renameRoutine(r) },
-            { label: 'Duplicate', action: () => duplicateRoutine(r) },
-            { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
-          ].map(item => (
+  { label: 'Duplicate', action: () => duplicateRoutine(r) },
+  { label: 'Edit', action: () => { setActiveRoutine(r); setView('editing'); setMenuOpen(null); } },
+  { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
+].map(item => (
             <button key={item.label} onClick={item.action}
               style={{
                 display: 'block', width: '100%', padding: '12px 16px', background: 'none',
@@ -409,6 +413,60 @@ const handleDragEnd = (event) => {
           ))}
         </div>
       ))}
+    </div>
+  );
+
+if (view === 'editing') return (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <button onClick={() => setView('routines')}
+        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
+        ← Back
+      </button>
+      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeRoutine.name}</h2>
+      {activeRoutine.exercises.map(ex => (
+        <div key={ex.id} className="card">
+          <div style={{ fontWeight: '600', marginBottom: '10px', color: 'var(--text-primary)' }}>{ex.name}</div>
+          {ex.lastSession ? (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                <div></div>
+                {['Weight', 'Reps', 'Sets'].map(h => (
+                  <div key={h} style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</div>
+                ))}
+              </div>
+              {ex.lastSession.sets.map((set, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>{idx + 1}</div>
+                  {['weight', 'reps', 'sets'].map(field => (
+                    <input key={field} defaultValue={set[field]}
+                      onChange={e => {
+                        const updated = activeRoutine.exercises.map(exercise =>
+                          exercise.id === ex.id ? {
+                            ...exercise,
+                            lastSession: {
+                              sets: exercise.lastSession.sets.map((s, i) =>
+                                i === idx ? { ...s, [field]: e.target.value } : s
+                              )
+                            }
+                          } : exercise
+                        );
+                        setActiveRoutine(prev => ({ ...prev, exercises: updated }));
+                      }}
+                      placeholder="0" className="input"
+                      style={{ padding: '8px', textAlign: 'center' }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No previous session data.</p>
+          )}
+        </div>
+      ))}
+      <button onClick={() => {
+        setRoutines(routines.map(r => r.id === activeRoutine.id ? activeRoutine : r));
+        setView('routines');
+      }} className="btn-primary">Save Changes</button>
     </div>
   );
 }

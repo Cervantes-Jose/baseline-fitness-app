@@ -141,6 +141,13 @@ function getGreeting(name) {
   return greeting.includes(name) ? greeting : `${greeting}, ${name}`;
 }
 
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+
 // ─── APP ────────────────────────────────────────────────────
 function App() {
 const [activeTab, setActiveTab] = useState('dashboard');
@@ -151,11 +158,21 @@ const [theme, setTheme] = useState('light');
 const [profileName] = useState('Jose');
 const [calorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000);
+const [activeWorkout, setActiveWorkout] = useState(null); // { routineName, startTime }
+const [workoutSeconds, setWorkoutSeconds] = useState(0);
 const changeDate = (dir) => {
   const d = new Date(date);
   d.setDate(d.getDate() + dir);
   setDate(d);
 };
+
+ useEffect(() => {
+    if (!activeWorkout) return;
+    const interval = setInterval(() => {
+      setWorkoutSeconds(Math.floor((Date.now() - activeWorkout.startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeWorkout]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -204,7 +221,7 @@ const changeDate = (dir) => {
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <ComingSoon label="Workout Dashboard" />;
       case 'workout-exercises': return <ComingSoon label="Exercises" />;
-      case 'workout-start': return <div className="content"><Workouts /></div>;
+      case 'workout-start': return <div className="content"><Workouts activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} /></div>;
       case 'workout-history': return <ComingSoon label="Workout History" />;
       case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
       case 'measurement-add': return <div className="content"><Measurements /></div>;
@@ -230,6 +247,18 @@ const changeDate = (dir) => {
         <div style={{ width: 32 }} />
       </div>
 
+{/* Active Workout Bar */}
+      {activeWorkout && (
+        <div onClick={() => { setActiveSection('workouts'); setActiveTab('workout-start'); }}
+          style={{
+            background: '#EF4444', color: 'white', padding: '6px 20px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            cursor: 'pointer', fontSize: '13px', fontWeight: '600'
+          }}>
+          <span>{activeWorkout.routineName}</span>
+          <span>{formatTime(workoutSeconds)}</span>
+        </div>
+      )}
 
       {/* Main content */}
       {renderContent()}
