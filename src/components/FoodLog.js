@@ -15,9 +15,10 @@ function FoodLog() {
   const [form, setForm] = useState({ name: '', calories: '', protein: '', carbs: '', fats: '' });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadFoods();
-  }, []);
+ useEffect(() => {
+  loadFoods();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const loadFoods = async () => {
     setLoading(true);

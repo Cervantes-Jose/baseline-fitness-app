@@ -146,7 +146,7 @@ function App() {
 const [activeTab, setActiveTab] = useState('dashboard');
 const [activeSection, setActiveSection] = useState('main');
 const [sidePanel, setSidePanel] = useState(false);
-const [date, setDate] = useState(new Date());
+const [date] = useState(new Date());
 const [theme, setTheme] = useState('light');
 const [profileName] = useState('Jose');
 const [calorieGoal] = useState(2000);
