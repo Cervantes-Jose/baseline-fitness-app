@@ -94,6 +94,11 @@ function Workouts() {
     setNewExerciseName('');
   };
 
+  const deleteRoutine = async (id) => {
+  const { error } = await supabase.from('routines').delete().eq('id', id);
+  if (error) { console.error(error); return; }
+  setRoutines(routines.filter(r => r.id !== id));
+};
   const openRoutine = (routine) => { setActiveRoutine(routine); setSessionLog({}); setView('exercises'); };
 
   const startLogging = () => {
@@ -159,12 +164,18 @@ function Workouts() {
       </div>
       {routines.length === 0 && <p style={{ color: '#444', textAlign: 'center', marginTop: '40px' }}>No routines yet. Create one above.</p>}
       {routines.map(r => (
-        <div key={r.id} onClick={() => openRoutine(r)}
-          style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '16px', marginBottom: '10px', cursor: 'pointer' }}>
-          <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{r.name}</div>
-          <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>{r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}</div>
-        </div>
-      ))}
+  <div key={r.id}
+    style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div onClick={() => openRoutine(r)} style={{ flex: 1, cursor: 'pointer' }}>
+      <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{r.name}</div>
+      <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>{r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}</div>
+    </div>
+    <button onClick={() => deleteRoutine(r.id)}
+      style={{ background: 'transparent', border: 'none', color: '#ff4444', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center' }}>
+      ✕
+    </button>
+  </div>
+))}
     </div>
   );
 
