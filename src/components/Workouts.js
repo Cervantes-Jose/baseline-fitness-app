@@ -10,6 +10,9 @@ function Workouts() {
   const [sessionLog, setSessionLog] = useState({});
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [renamingRoutine, setRenamingRoutine] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     loadRoutines();
@@ -83,6 +86,51 @@ function Workouts() {
     if (error) { console.error(error); return; }
     setRoutines(routines.filter(r => r.id !== id));
   };
+  const renameRoutine = (routine) => {
+  setRenamingRoutine(routine);
+  setRenameValue(routine.name);
+  setMenuOpen(null);
+};
+
+const submitRename = async () => {
+  if (!renameValue.trim() || !renamingRoutine) return;
+  const { error } = await supabase
+    .from('routines')
+    .update({ name: renameValue.trim() })
+    .eq('id', renamingRoutine.id);
+
+  if (error) { console.error(error); return; }
+  setRoutines(routines.map(r => r.id === renamingRoutine.id ? { ...r, name: renameValue.trim() } : r));
+  setRenamingRoutine(null);
+  setRenameValue('');
+};
+
+const duplicateRoutine = async (routine) => {
+  setMenuOpen(null);
+  const { data: newRoutine, error: routineError } = await supabase
+    .from('routines')
+    .insert([{ name: `${routine.name} (copy)` }])
+    .select()
+    .single();
+
+  if (routineError) { console.error(routineError); return; }
+
+  if (routine.exercises.length > 0) {
+    const exerciseCopies = routine.exercises.map(ex => ({
+      routine_id: newRoutine.id,
+      name: ex.name
+    }));
+    const { data: newExercises, error: exError } = await supabase
+      .from('exercises')
+      .insert(exerciseCopies)
+      .select();
+
+    if (exError) { console.error(exError); return; }
+    setRoutines([...routines, { ...newRoutine, exercises: newExercises.map(e => ({ ...e, lastSession: null })) }]);
+  } else {
+    setRoutines([...routines, { ...newRoutine, exercises: [] }]);
+  }
+};
 
   const addExercise = async () => {
     if (!newExerciseName.trim() || !activeRoutine) return;
@@ -159,20 +207,59 @@ function Workouts() {
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No routines yet. Create one above.</p>
       )}
       {routines.map(r => (
-        <div key={r.id} className="card"
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-          <div onClick={() => openRoutine(r)} style={{ flex: 1 }}>
-            <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>{r.name}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
-            </div>
-          </div>
-          <button onClick={() => deleteRoutine(r.id)}
-            style={{ background: 'transparent', border: 'none', color: '#ff4444', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center' }}>
-            ✕
-          </button>
+  <div key={r.id} className="card"
+    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
+  onClick={() => renamingRoutine?.id !== r.id && openRoutine(r)}>
+  {renamingRoutine?.id === r.id ? (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
+        className="input" style={{ flex: 1, padding: '8px 12px', fontSize: '15px' }}
+        onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setRenamingRoutine(null); }}
+        autoFocus />
+      <button onClick={submitRename} className="btn-secondary">Save</button>
+    </div>
+  ) : (
+    <>
+      <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>{r.name}</div>
+      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+        {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
+      </div>
+    </>
+  )}
+</div>
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setMenuOpen(menuOpen === r.id ? null : r.id)}
+        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
+        ···
+      </button>
+      {menuOpen === r.id && (
+        <div style={{
+          position: 'absolute', right: 0, top: '100%', background: 'var(--card)',
+          border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: '140px'
+        }}>
+          {[
+            { label: 'Rename', action: () => renameRoutine(r) },
+            { label: 'Duplicate', action: () => duplicateRoutine(r) },
+            { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
+          ].map(item => (
+            <button key={item.label} onClick={item.action}
+              style={{
+                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
+                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
+                fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
+                borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
+              }}>
+              {item.label}
+            </button>
+          ))}
         </div>
-      ))}
+      )}
+    </div>
+  </div>
+))}
+
     </div>
   );
 
