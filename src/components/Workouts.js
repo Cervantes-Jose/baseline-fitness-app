@@ -780,7 +780,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       {routines.map(r => (
         <SortableRoutineWrapper key={r.id} id={r.id}>
         {(listeners) => (
-        <SwipeToDelete onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
         <div
           {...listeners}
           style={{
@@ -827,7 +826,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
             </button>
           </div>
         </div>
-        </SwipeToDelete>
         )}
         </SortableRoutineWrapper>
       ))}
