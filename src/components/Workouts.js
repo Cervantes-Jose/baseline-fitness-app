@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import SwipeToDelete from './SwipeToDelete';
+
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -23,7 +23,7 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDelete }) {
+function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef(null);
@@ -46,58 +46,82 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
         transform: isDragging ? 'scale(1.02)' : 'scale(1)',
         transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
       }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px', touchAction: 'none' }} {...listeners}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
-        </div>
-        <button onClick={() => setExpanded(!expanded)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', flexShrink: 0 }}>
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-            style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease' }}>
-            <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </div>
-
-      <div style={{
-        height: expanded ? `${contentHeight}px` : '0px',
-        overflow: 'hidden',
-        opacity: expanded ? 1 : 0,
-        transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
-        willChange: 'height',
-        transform: 'translateZ(0)',
-        WebkitTransform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
-        WebkitBackfaceVisibility: 'hidden',
-      }}>
-        <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
-            <div></div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px' }}>
+          {exerciseEditMode && (
+            <button onClick={onToggleSelect}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`, background: isSelected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+            </button>
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
           </div>
-          {sets.map((set, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-              <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
-              <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
-                placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
-              <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
-                placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
-              <button onClick={() => deleteSet(ex.id, idx)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+          {!exerciseEditMode && (
+            <button onClick={() => setExpanded(!expanded)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease' }}>
+                <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {exerciseEditMode && (
+            <div {...listeners} style={{ touchAction: 'none', cursor: 'grab', padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="6" cy="5" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+                <circle cx="6" cy="9" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
+                <circle cx="6" cy="13" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="13" r="1.5" fill="currentColor"/>
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {!exerciseEditMode && (
+          <div style={{
+            height: expanded ? `${contentHeight}px` : '0px',
+            overflow: 'hidden',
+            opacity: expanded ? 1 : 0,
+            transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
+            willChange: 'height',
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}>
+            <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
+                <div></div>
+              </div>
+              {sets.map((set, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                  <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
+                  <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
+                    placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+                  <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
+                    placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+                  <button onClick={() => deleteSet(ex.id, idx)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => addSet(ex.id)}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                + Add Set
               </button>
             </div>
-          ))}
-          <button onClick={() => addSet(ex.id)}
-            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            + Add Set
-          </button>
-        </div>
-      </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -261,6 +285,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [calendarView, setCalendarView] = useState(false);
   const [calendarDayModal, setCalendarDayModal] = useState(null);
   const [showShortWorkoutModal, setShowShortWorkoutModal] = useState(false);
+  const [routineEditMode, setRoutineEditMode] = useState(false);
+  const [selectedRoutines, setSelectedRoutines] = useState(new Set());
+  const [exerciseEditMode, setExerciseEditMode] = useState(false);
+  const [selectedExercises, setSelectedExercises] = useState(new Set());
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -338,6 +366,25 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setHistory(prev => prev.filter(s => !selectedSessions.has(s.id)));
     setSelectedSessions(new Set());
     setEditMode(false);
+  };
+
+  const deleteSelectedRoutines = async () => {
+    const ids = [...selectedRoutines];
+    setRoutines(prev => prev.filter(r => !selectedRoutines.has(r.id)));
+    setSelectedRoutines(new Set());
+    setRoutineEditMode(false);
+    await supabase.from('exercises').delete().in('routine_id', ids);
+    await supabase.from('routines').delete().in('id', ids);
+  };
+
+  const deleteSelectedExercises = async () => {
+    const ids = [...selectedExercises];
+    const updated = activeRoutine.exercises.filter(e => !selectedExercises.has(e.id));
+    setActiveRoutine(prev => ({ ...prev, exercises: updated }));
+    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
+    setSelectedExercises(new Set());
+    setExerciseEditMode(false);
+    await supabase.from('exercises').delete().in('id', ids);
   };
 
   const deleteSingleSession = (id) => {
@@ -460,6 +507,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     });
     setActiveRoutine(routine);
     setSessionLog(prefilled);
+    setExerciseEditMode(false);
+    setSelectedExercises(new Set());
     setView('exercises');
   };
 
@@ -772,7 +821,23 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       </button>
 
       {routines.length > 0 && (
-        <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '8px 0 0' }}>My Routines</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
+          <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {routineEditMode && selectedRoutines.size > 0 && (
+              <button onClick={deleteSelectedRoutines}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            <button onClick={() => { setRoutineEditMode(e => !e); setSelectedRoutines(new Set()); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+              {routineEditMode ? 'Done' : 'Edit'}
+            </button>
+          </div>
+        </div>
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRoutineDragEnd}>
@@ -780,15 +845,22 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       {routines.map(r => (
         <SortableRoutineWrapper key={r.id} id={r.id}>
         {(listeners) => (
-        <div
-          {...listeners}
-          style={{
-            background: 'var(--card)', borderRadius: '16px', padding: '18px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-          }}>
-          <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
+        <div style={{
+          background: 'var(--card)', borderRadius: '16px', padding: '18px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', gap: '12px'
+        }}>
+          {routineEditMode && (
+            <button onClick={() => setSelectedRoutines(prev => { const next = new Set(prev); next.has(r.id) ? next.delete(r.id) : next.add(r.id); return next; })}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${selectedRoutines.has(r.id) ? 'var(--accent)' : 'var(--border)'}`, background: selectedRoutines.has(r.id) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {selectedRoutines.has(r.id) && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+            </button>
+          )}
+          <div style={{ flex: 1, cursor: routineEditMode ? 'default' : (renamingRoutine?.id === r.id ? 'default' : 'pointer') }}
             onClick={() => {
+              if (routineEditMode) return;
               if (renamingRoutine?.id === r.id) return;
               if (activeWorkout?.routine?.id === r.id) { setActiveRoutine(activeWorkout.routine); setView('logging'); onExpand(); return; }
               openRoutine(r);
@@ -815,16 +887,30 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
               </>
             )}
           </div>
-          <div>
-            <button onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-              setMenuOpen(menuOpen === r.id ? null : r.id);
-            }}
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
-              ···
-            </button>
-          </div>
+          {!routineEditMode && (
+            <div>
+              <button onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                setMenuOpen(menuOpen === r.id ? null : r.id);
+              }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
+                ···
+              </button>
+            </div>
+          )}
+          {routineEditMode && (
+            <div {...listeners} style={{ touchAction: 'none', cursor: 'grab', padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="6" cy="5" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+                <circle cx="6" cy="9" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
+                <circle cx="6" cy="13" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="13" r="1.5" fill="currentColor"/>
+              </svg>
+            </div>
+          )}
         </div>
         )}
         </SortableRoutineWrapper>
@@ -883,10 +969,28 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   if (view === 'exercises') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', WebkitOverflowScrolling: 'touch' }}>
-      <button onClick={() => setView('routines')}
-        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', textAlign: 'left', padding: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-        ← Back
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={() => { setView('routines'); setExerciseEditMode(false); setSelectedExercises(new Set()); }}
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          ← Back
+        </button>
+        {activeRoutine?.exercises?.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {exerciseEditMode && selectedExercises.size > 0 && (
+              <button onClick={deleteSelectedExercises}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            <button onClick={() => { setExerciseEditMode(e => !e); setSelectedExercises(new Set()); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+              {exerciseEditMode ? 'Done' : 'Edit'}
+            </button>
+          </div>
+        )}
+      </div>
 
       <button onClick={() => setShowAddExerciseModal(true)} style={{
         display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
@@ -905,7 +1009,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
           {activeRoutine.exercises.map(ex => (
-            <SortableExercise key={ex.id} ex={ex} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} onDelete={() => deleteExercise(ex.id)} />
+            <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} />
           ))}
         </SortableContext>
       </DndContext>
@@ -1068,8 +1172,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
         {/* List view */}
         {!calendarView && history.map(session => (
-          <SwipeToDelete key={session.id} onDelete={() => deleteSingleSession(session.id)} style={{ borderRadius: '16px' }}>
-          <div className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div key={session.id} className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             {editMode && (
               <button onClick={() => setSelectedSessions(prev => {
                 const next = new Set(prev);
@@ -1106,7 +1209,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
               </button>
             )}
           </div>
-          </SwipeToDelete>
         ))}
 
         {/* Calendar day detail modal */}
