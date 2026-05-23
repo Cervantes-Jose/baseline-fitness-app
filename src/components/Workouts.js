@@ -524,7 +524,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
             onClick={() => {
               if (renamingRoutine?.id === r.id) return;
-              if (activeWorkout?.routine?.id === r.id) { onExpand(); return; }
+              if (activeWorkout?.routine?.id === r.id) { setActiveRoutine(activeWorkout.routine); setView('logging'); onExpand(); return; }
               openRoutine(r);
             }}>
             {renamingRoutine?.id === r.id ? (
