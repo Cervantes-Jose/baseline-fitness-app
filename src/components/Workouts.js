@@ -781,22 +781,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         <SortableRoutineWrapper key={r.id} id={r.id}>
         {(listeners) => (
         <SwipeToDelete onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
-        <div style={{
-          background: 'var(--card)', borderRadius: '16px', padding: '18px 18px 18px 0',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-        }}>
-          {/* Drag handle — scopes touchAction: none and listeners to this area only */}
-          <div
-            {...listeners}
-            style={{ touchAction: 'none', padding: '4px 12px 4px 18px', display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'grab', color: 'var(--text-muted)' }}
-          >
-            <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor" opacity="0.4">
-              <circle cx="4" cy="4" r="2"/><circle cx="10" cy="4" r="2"/>
-              <circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/>
-              <circle cx="4" cy="16" r="2"/><circle cx="10" cy="16" r="2"/>
-            </svg>
-          </div>
+        <div
+          {...listeners}
+          style={{
+            background: 'var(--card)', borderRadius: '16px', padding: '18px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
           <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
             onClick={() => {
               if (renamingRoutine?.id === r.id) return;
