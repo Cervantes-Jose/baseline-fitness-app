@@ -46,7 +46,6 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
         transform: isDragging ? 'scale(1.02)' : 'scale(1)',
         transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
       }}>
-      <SwipeToDelete onDelete={onDelete}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px', touchAction: 'none' }} {...listeners}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
@@ -99,7 +98,6 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
           </button>
         </div>
       </div>
-      </SwipeToDelete>
       </div>
     </div>
   );
