@@ -4,6 +4,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -117,7 +118,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
 
   return (
     <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0 }}>
-      <div onClick={onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: 'pointer' }}>
+      <div onClick={onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: 'pointer', touchAction: 'none' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{doneCount}/{sets.length} sets done</div>
@@ -198,7 +199,6 @@ function SortableLoggingCard({ ex, ...props }) {
         transition,
         zIndex: isDragging ? 10 : 1,
         flexShrink: 0,
-        touchAction: 'none',
         minHeight: isDragging ? 'auto' : undefined,
       }}
       {...attributes}
@@ -467,7 +467,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 600, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   const handleDragEnd = (event) => {
@@ -678,7 +679,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         {/* Exercise cards */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLoggingDragEnd}>
           <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {activeRoutine.exercises.map(ex => (
                 <SortableLoggingCard
                   key={ex.id}

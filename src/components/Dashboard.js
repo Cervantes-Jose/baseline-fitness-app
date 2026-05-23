@@ -4,6 +4,7 @@ import {
   DndContext,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -43,7 +44,7 @@ function SortableTile({ id, style: tileStyle, children }) {
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1, position: 'relative' }}
+      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1, position: 'relative', touchAction: 'none' }}
       {...attributes}
       {...listeners}
     >
@@ -55,7 +56,6 @@ function SortableTile({ id, style: tileStyle, children }) {
           : undefined,
         transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease',
         willChange: 'transform',
-        touchAction: 'none',
         cursor: isDragging ? 'grabbing' : 'grab',
       }}>
         {children}
@@ -82,7 +82,8 @@ function Dashboard({ date, profileName, calorieGoal, stepsGoal, onDateChange }) 
   });
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 600, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   const handleDragEnd = ({ active, over }) => {

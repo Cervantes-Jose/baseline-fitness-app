@@ -5,6 +5,7 @@ import FoodLog from './components/FoodLog';
 import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
 import WorkoutDashboard from './components/WorkoutDashboard';
+import ExerciseDatabase from './components/ExerciseDatabase';
 import UndoToast from './components/UndoToast';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
@@ -152,16 +153,18 @@ function formatTime(seconds) {
 
 // ─── APP ────────────────────────────────────────────────────
 function App() {
-const [activeTab, setActiveTab] = useState('dashboard');
-const [activeSection, setActiveSection] = useState('main');
+const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
+const [activeSection, setActiveSection] = useState(() => localStorage.getItem('activeSection') || 'main');
 const [sidePanel, setSidePanel] = useState(false);
 const [date, setDate] = useState(new Date())
-const [theme, setTheme] = useState('light');
+const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [profileName] = useState('Jose');
 const [calorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000);
-const [activeWorkout, setActiveWorkout] = useState(null); // { routineName, startTime }
-const [workoutSeconds, setWorkoutSeconds] = useState(0);
+const [activeWorkout, setActiveWorkout] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('activeWorkout')); } catch { return null; }
+});
+const [workoutSeconds, setWorkoutSeconds] = useState(() => Number(localStorage.getItem('workoutSeconds')) || 0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
 const [toast, setToast] = useState(null);
 const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -212,6 +215,15 @@ const changeDate = (dir) => {
     }
   }, [theme]);
 
+  useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
+  useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
+  useEffect(() => { localStorage.setItem('activeSection', activeSection); }, [activeSection]);
+  useEffect(() => {
+    if (activeWorkout) localStorage.setItem('activeWorkout', JSON.stringify(activeWorkout));
+    else localStorage.removeItem('activeWorkout');
+  }, [activeWorkout]);
+  useEffect(() => { localStorage.setItem('workoutSeconds', workoutSeconds); }, [workoutSeconds]);
+
 
   const openSection = (id) => {
     if (id === 'dashboard') {
@@ -246,7 +258,7 @@ const changeDate = (dir) => {
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
-      case 'workout-exercises': return <ComingSoon label="Exercises" />;
+      case 'workout-exercises': return <ExerciseDatabase />;
       case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} /></div>;
       case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" showToast={showToast} /></div>;
       case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
