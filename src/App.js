@@ -164,6 +164,7 @@ const [activeWorkout, setActiveWorkout] = useState(null); // { routineName, star
 const [workoutSeconds, setWorkoutSeconds] = useState(0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
 const [toast, setToast] = useState(null);
+const [updateAvailable, setUpdateAvailable] = useState(false);
 const toastTimerRef = useRef(null);
 const pendingDeleteRef = useRef(null);
 const toastIdRef = useRef(0);
@@ -192,6 +193,12 @@ const changeDate = (dir) => {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeWorkout]);
+
+  useEffect(() => {
+    const handler = () => setUpdateAvailable(true);
+    window.addEventListener('swUpdate', handler);
+    return () => window.removeEventListener('swUpdate', handler);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -266,6 +273,17 @@ const changeDate = (dir) => {
         <div style={{ width: 32 }} />
       </div>
 
+
+      {/* Update banner */}
+      {updateAvailable && (
+        <div style={{ background: 'var(--accent)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 20px', fontSize: '13px', fontWeight: '600' }}>
+          <span>Update available</span>
+          <button onClick={() => window.location.reload()}
+            style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: 'white', fontWeight: '600', fontSize: '13px', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer' }}>
+            Refresh
+          </button>
+        </div>
+      )}
 
       {/* Main content */}
       {renderContent()}

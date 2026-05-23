@@ -7,7 +7,7 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
   const startY = useRef(null);
   const baseX = useRef(0);
   const currentX = useRef(0);
-  const direction = useRef(null); // null | 'h' | 'v'
+  const direction = useRef(null);
   const snapped = useRef(false);
   const wasSwiped = useRef(false);
 
@@ -73,21 +73,23 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
     onDelete();
   };
 
+  const deleteOpacity = Math.min(1, Math.abs(translateX) / 80);
+
   return (
-    <div style={{ position: 'relative', overflow: 'visible', borderRadius: '16px', ...containerStyle }}>
-      {/* Red delete zone revealed behind sliding content */}
+    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px', ...containerStyle }}>
       <div
         onClick={onDeleteZoneTap}
         style={{
           position: 'absolute', right: 0, top: 0, bottom: 0, width: '80px',
-          background: '#EF4444', borderRadius: '0 16px 16px 0',
+          background: '#EF4444',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer',
+          opacity: deleteOpacity,
+          transition: animating ? 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
         }}
       >
         <span style={{ color: 'white', fontWeight: '700', fontSize: '14px', userSelect: 'none' }}>{deleteLabel}</span>
       </div>
-      {/* Sliding content */}
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -102,6 +104,7 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
           zIndex: 1,
           willChange: 'transform',
           background: 'var(--card)',
+          borderRadius: '16px',
         }}
       >
         {children}

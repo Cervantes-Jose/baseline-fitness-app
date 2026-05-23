@@ -119,7 +119,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   const doneCount = checkedSets.filter(Boolean).length;
 
   return (
-    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0 }}>
       <div onClick={onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: 'pointer' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
@@ -205,6 +205,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [selectedSessions, setSelectedSessions] = useState(new Set());
   const [calendarView, setCalendarView] = useState(false);
   const [calendarDayModal, setCalendarDayModal] = useState(null);
+  const [showShortWorkoutModal, setShowShortWorkoutModal] = useState(false);
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -454,7 +455,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     onWorkoutStart();
   };
 
-  const finishWorkout = async () => {
+  const confirmFinishWorkout = async () => {
     const currentLog = sessionLogRef.current;
     console.log('sessionLog at finish:', JSON.stringify(currentLog));
 
@@ -483,6 +484,14 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setActiveWorkout(null);
     setView('routines');
     setActiveRoutine(null);
+  };
+
+  const finishWorkout = () => {
+    if (workoutSeconds < 300) {
+      setShowShortWorkoutModal(true);
+      return;
+    }
+    confirmFinishWorkout();
   };
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
@@ -617,6 +626,32 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => setShowAddExerciseModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
                 <button onClick={addExerciseDuringWorkout} className="btn-primary" style={{ flex: 1 }}>Add</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showShortWorkoutModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+            onClick={() => setShowShortWorkoutModal(false)}>
+            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+              onClick={e => e.stopPropagation()}>
+              <p style={{ fontWeight: '700', marginBottom: '8px', fontSize: '17px', color: 'var(--text-primary)' }}>That was a quick one!</p>
+              <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+                This workout is under 5 minutes. Do you want to save it or discard it?
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    setShowShortWorkoutModal(false);
+                    setActiveWorkout(null);
+                    setView('routines');
+                    setActiveRoutine(null);
+                  }}
+                  className="btn-secondary" style={{ flex: 1 }}>Discard</button>
+                <button
+                  onClick={() => { setShowShortWorkoutModal(false); confirmFinishWorkout(); }}
+                  className="btn-primary" style={{ flex: 1 }}>Save</button>
               </div>
             </div>
           </div>
@@ -890,24 +925,24 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
         {/* Calendar view */}
         {calendarView && !editMode && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {months.map(({ year, month }) => {
               const cells = buildMonthCells(year, month);
               return (
-                <div key={`${year}-${month}`} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px', textAlign: 'center' }}>
-                    {MONTH_NAMES[month].slice(0, 3)} {year}
+                <div key={`${year}-${month}`}>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '12px' }}>
+                    {MONTH_NAMES[month]} {year}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '3px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '4px' }}>
                     {DAY_LABELS.map((d, i) => (
-                      <div key={i} style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center' }}>{d}</div>
+                      <div key={i} style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>{d}</div>
                     ))}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px' }}>
                     {cells.map((cell, i) => {
                       if (!cell.inMonth) return (
-                        <div key={i} style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {cell.day && <span style={{ fontSize: '9px', color: 'var(--border)' }}>{cell.day}</span>}
+                        <div key={i} style={{ minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {cell.day && <span style={{ fontSize: '13px', color: 'var(--border)' }}>{cell.day}</span>}
                         </div>
                       );
                       const dateStr = new Date(year, month, cell.day).toLocaleDateString();
@@ -916,8 +951,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
                       return (
                         <div key={i}
                           onClick={hasWorkout ? () => setCalendarDayModal({ date: dateStr, sessions: daySessions }) : undefined}
-                          style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', background: hasWorkout ? 'var(--green)' : 'transparent', cursor: hasWorkout ? 'pointer' : 'default' }}>
-                          <span style={{ fontSize: '9px', fontWeight: hasWorkout ? '700' : '400', color: hasWorkout ? 'white' : 'var(--text-primary)' }}>{cell.day}</span>
+                          style={{ minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: hasWorkout ? '#22C55E' : 'transparent', cursor: hasWorkout ? 'pointer' : 'default' }}>
+                          <span style={{ fontSize: '14px', fontWeight: hasWorkout ? '700' : '400', color: hasWorkout ? 'white' : 'var(--text-primary)' }}>{cell.day}</span>
                         </div>
                       );
                     })}
