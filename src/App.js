@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
 import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
 import WorkoutDashboard from './components/WorkoutDashboard';
+import UndoToast from './components/UndoToast';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -162,7 +163,22 @@ const [stepsGoal] = useState(10000);
 const [activeWorkout, setActiveWorkout] = useState(null); // { routineName, startTime }
 const [workoutSeconds, setWorkoutSeconds] = useState(0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
+const [toast, setToast] = useState(null);
+const toastTimerRef = useRef(null);
+const pendingDeleteRef = useRef(null);
+const toastIdRef = useRef(0);
 const greeting = useMemo(() => getGreeting(profileName), [profileName]);
+const showToast = (message, onUndo, onConfirmDelete) => {
+  if (pendingDeleteRef.current) pendingDeleteRef.current();
+  clearTimeout(toastTimerRef.current);
+  pendingDeleteRef.current = onConfirmDelete;
+  toastIdRef.current += 1;
+  setToast({ id: toastIdRef.current, message, onUndo });
+  toastTimerRef.current = setTimeout(() => {
+    if (pendingDeleteRef.current) { pendingDeleteRef.current(); pendingDeleteRef.current = null; }
+    setToast(null);
+  }, 3000);
+};
 const changeDate = (dir) => {
   const d = new Date(date);
   d.setDate(d.getDate() + dir);
@@ -219,13 +235,13 @@ const changeDate = (dir) => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
       case 'food-dashboard': return <ComingSoon label="Food Dashboard" />;
-      case 'food-log': return <div className="content"><FoodLog /></div>;
+      case 'food-log': return <div className="content"><FoodLog showToast={showToast} /></div>;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
       case 'workout-exercises': return <ComingSoon label="Exercises" />;
-      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} /></div>;
-      case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" /></div>;
+      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} /></div>;
+      case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" showToast={showToast} /></div>;
       case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
       case 'measurement-add': return <div className="content"><Measurements /></div>;
       case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
@@ -258,16 +274,26 @@ const changeDate = (dir) => {
       {activeWorkout && !workoutExpanded && (
         <div onClick={() => { setActiveSection('workouts'); setActiveTab('workout-start'); setWorkoutExpanded(true); }}
           style={{
-            position: 'fixed', bottom: '60px', left: '50%', transform: 'translateX(-50%)',
-            width: '100%', maxWidth: '480px', zIndex: 150,
-            background: 'var(--card)', borderTop: '1px solid var(--border)',
-            padding: '12px 20px',
+            position: 'fixed', bottom: '82px', left: '50%', transform: 'translateX(-50%)',
+            width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: '16px', padding: '12px 20px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            cursor: 'pointer', boxShadow: '0 -2px 12px rgba(0,0,0,0.1)',
+            cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           }}>
           <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>{activeWorkout.routineName}</span>
           <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '15px', fontVariantNumeric: 'tabular-nums' }}>{formatTime(workoutSeconds)}</span>
         </div>
+      )}
+
+      {/* Undo Toast */}
+      {toast && (
+        <UndoToast key={toast.id} message={toast.message} onUndo={() => {
+          clearTimeout(toastTimerRef.current);
+          pendingDeleteRef.current = null;
+          toast.onUndo();
+          setToast(null);
+        }} />
       )}
 
       {/* Bottom Tab Bar */}

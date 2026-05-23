@@ -46,6 +46,14 @@
   --accent-light: #1E3A5F;
 }
 
+[data-theme="dark"] .card {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2), 0 1px 4px rgba(0,0,0,0.1);
+}
+
+[data-theme="dark"] .tile {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2), 0 1px 4px rgba(0,0,0,0.1);
+}
+
 body {
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
@@ -208,6 +216,7 @@ border-bottom: none;
   border-radius: 16px;
   padding: 16px;
   border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
 }
 
 /* Dashboard Tiles */
@@ -226,7 +235,7 @@ border-bottom: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
 }
 
 .tile-icon {
@@ -315,6 +324,7 @@ border-bottom: none;
   font-size: 15px;
   outline: none;
   transition: border-color 0.15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .input:focus {
@@ -333,6 +343,7 @@ border-bottom: none;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s;
+  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
 }
 
 .btn-primary:active {

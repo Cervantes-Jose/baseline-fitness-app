@@ -10,7 +10,6 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
   const direction = useRef(null); // null | 'h' | 'v'
   const snapped = useRef(false);
   const wasSwiped = useRef(false);
-  const [deleting, setDeleting] = useState(false);
 
   const setX = (x) => {
     currentX.current = x;
@@ -56,7 +55,7 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
     if (x < -160) {
       setX(0);
       snapped.current = false;
-      triggerDelete();
+      onDelete();
     } else if (x < -80) {
       setX(-80);
       snapped.current = true;
@@ -66,32 +65,23 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
     }
   };
 
-  const triggerDelete = () => {
-    setDeleting(true);
-    setTimeout(onDelete, 300);
-  };
-
   const onDeleteZoneTap = (e) => {
     e.stopPropagation();
     setAnimating(true);
     setX(0);
     snapped.current = false;
-    triggerDelete();
+    onDelete();
   };
 
   return (
-    <div style={{
-      position: 'relative', overflow: 'hidden', borderRadius: '16px',
-      opacity: deleting ? 0 : 1, maxHeight: deleting ? 0 : '500px',
-      transition: 'opacity 0.25s ease, max-height 0.3s ease',
-      ...containerStyle
-    }}>
+    <div style={{ position: 'relative', overflow: 'visible', borderRadius: '16px', ...containerStyle }}>
       {/* Red delete zone revealed behind sliding content */}
       <div
         onClick={onDeleteZoneTap}
         style={{
           position: 'absolute', right: 0, top: 0, bottom: 0, width: '80px',
-          background: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#EF4444', borderRadius: '0 16px 16px 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer',
         }}
       >

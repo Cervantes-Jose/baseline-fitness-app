@@ -8,7 +8,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
   return { label: `${hour}:00 ${ampm}`, value: i };
 });
 
-function FoodLog() {
+function FoodLog({ showToast = () => {} }) {
   const currentHour = new Date().getHours();
   const today = new Date().toLocaleDateString();
   const [foods, setFoods] = useState({});
@@ -64,10 +64,15 @@ function FoodLog() {
     setForm({ name: '', calories: '', protein: '', carbs: '', fats: '' });
   };
 
-  const deleteFood = async (id, hour) => {
-    const { error } = await supabase.from('food_entries').delete().eq('id', id);
-    if (error) { console.error(error); return; }
+  const deleteFood = (id, hour) => {
+    const item = (foods[hour] || []).find(f => f.id === id);
+    if (!item) return;
     setFoods(prev => ({ ...prev, [hour]: prev[hour].filter(f => f.id !== id) }));
+    showToast(
+      `"${item.name}" deleted`,
+      () => setFoods(prev => ({ ...prev, [hour]: [...(prev[hour] || []), item] })),
+      async () => { await supabase.from('food_entries').delete().eq('id', id); }
+    );
   };
 
   const allFoods = Object.values(foods).flat();

@@ -39,7 +39,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
     transition,
     opacity: isDragging ? 0.5 : 1,
     background: 'var(--card)', borderRadius: '16px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
     overflow: 'hidden'
   };
 
@@ -107,7 +107,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
   );
 }
 
-function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand }) {
+function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise }) {
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
 
@@ -119,12 +119,20 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   const doneCount = checkedSets.filter(Boolean).length;
 
   return (
-    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)', overflow: 'hidden' }}>
       <div onClick={onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: 'pointer' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{doneCount}/{sets.length} sets done</div>
         </div>
+        {onDeleteExercise && (
+          <button onClick={(e) => { e.stopPropagation(); onDeleteExercise(); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
           style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease', color: 'var(--accent)', flexShrink: 0 }}>
           <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -172,7 +180,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {} }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {} }) {
   const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
@@ -182,11 +190,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const [renamingRoutine, setRenamingRoutine] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
+  const deletedExerciseIdsRef = useRef([]);
   const [checkedSets, setCheckedSets] = useState({});
   const [expandedExId, setExpandedExId] = useState(null);
   const [dragY, setDragY] = useState(0);
@@ -262,18 +272,34 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setEditMode(false);
   };
 
-  const deleteSingleSession = async (id) => {
-    await supabase.from('session_exercises').delete().eq('session_id', id);
-    await supabase.from('workout_sessions').delete().eq('id', id);
+  const deleteSingleSession = (id) => {
+    const item = history.find(s => s.id === id);
+    if (!item) return;
     setHistory(prev => prev.filter(s => s.id !== id));
+    showToast(
+      'Workout deleted',
+      () => setHistory(prev => [...prev, item]),
+      async () => {
+        await supabase.from('session_exercises').delete().eq('session_id', id);
+        await supabase.from('workout_sessions').delete().eq('id', id);
+      }
+    );
   };
 
-  const deleteExercise = async (id) => {
-    const { error } = await supabase.from('exercises').delete().eq('id', id);
-    if (error) { console.error(error); return; }
+  const deleteExercise = (id) => {
+    const item = activeRoutine.exercises.find(e => e.id === id);
+    if (!item) return;
     const updated = activeRoutine.exercises.filter(e => e.id !== id);
     setActiveRoutine(prev => ({ ...prev, exercises: updated }));
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
+    showToast(
+      `"${item.name}" deleted`,
+      () => {
+        setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, item] }));
+        setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, item] } : r));
+      },
+      async () => { await supabase.from('exercises').delete().eq('id', id); }
+    );
   };
 
   const addRoutine = async () => {
@@ -286,10 +312,15 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setShowCreateModal(false);
   };
 
-  const deleteRoutine = async (id) => {
-    const { error } = await supabase.from('routines').delete().eq('id', id);
-    if (error) { console.error(error); return; }
-    setRoutines(routines.filter(r => r.id !== id));
+  const deleteRoutine = (id) => {
+    const item = routines.find(r => r.id === id);
+    if (!item) return;
+    setRoutines(prev => prev.filter(r => r.id !== id));
+    showToast(
+      `"${item.name}" deleted`,
+      () => setRoutines(prev => [...prev, item]),
+      async () => { await supabase.from('routines').delete().eq('id', id); }
+    );
   };
 
   const renameRoutine = (routine) => {
@@ -331,6 +362,23 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const newEx = { ...data, lastSession: null };
     setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, newEx] } : r));
     setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, newEx] }));
+    if (view === 'logging') {
+      setSessionLog(prev => ({ ...prev, [newEx.id]: [{ weight: '', reps: '' }] }));
+      setExpandedExId(newEx.id);
+    }
+    setNewExerciseName('');
+    setShowAddExerciseModal(false);
+  };
+
+  const addExerciseDuringWorkout = async () => {
+    if (!newExerciseName.trim() || !activeRoutine) return;
+    const { data, error } = await supabase.from('exercises')
+      .insert([{ routine_id: activeRoutine.id, name: newExerciseName.trim() }]).select().single();
+    if (error) { console.error(error); return; }
+    const newEx = { ...data, lastSession: null };
+    setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, newEx] }));
+    setSessionLog(prev => ({ ...prev, [newEx.id]: [{ sets: '', reps: '', weight: '' }] }));
+    setExpandedExId(newEx.id);
     setNewExerciseName('');
     setShowAddExerciseModal(false);
   };
@@ -425,6 +473,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
     if (exError) { console.error(exError); return; }
 
+    if (deletedExerciseIdsRef.current.length > 0) {
+      await supabase.from('exercises').delete().in('id', deletedExerciseIdsRef.current);
+      deletedExerciseIdsRef.current = [];
+    }
+
     await loadHistory();
     await loadRoutines();
     setActiveWorkout(null);
@@ -477,6 +530,20 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
         </div>
 
+        {/* Add Exercise button */}
+        <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
+          <button onClick={() => setShowAddExerciseModal(true)} style={{
+            display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--accent-light)',
+            border: '1px solid var(--border)', borderRadius: '14px', padding: '10px 14px',
+            cursor: 'pointer', width: '100%', textAlign: 'left'
+          }}>
+            <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ color: 'white', fontSize: '20px', lineHeight: 1 }}>+</span>
+            </div>
+            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--accent)' }}>Add Exercise</span>
+          </button>
+        </div>
+
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '0 16px 12px', flexShrink: 0 }}>
           {/* Left column: timer + volume stacked */}
@@ -520,6 +587,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
               toggleCheck={(idx) => toggleCheck(ex.id, idx)}
               isExpanded={expandedExId === ex.id}
               onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
+              onDeleteExercise={() => {
+                const updated = activeRoutine.exercises.filter(e => e.id !== ex.id);
+                setActiveRoutine(prev => ({ ...prev, exercises: updated }));
+                setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+                setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+                deletedExerciseIdsRef.current.push(ex.id);
+              }}
             />
           ))}
         </div>
@@ -530,6 +604,23 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
             Finish Workout
           </button>
         </div>
+
+        {showAddExerciseModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+            onClick={() => setShowAddExerciseModal(false)}>
+            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+              onClick={e => e.stopPropagation()}>
+              <p style={{ fontWeight: '600', marginBottom: '16px', fontSize: '16px', color: 'var(--text-primary)' }}>Add Exercise</p>
+              <input value={newExerciseName} onChange={e => setNewExerciseName(e.target.value)}
+                placeholder="e.g. Bench Press" className="input" style={{ marginBottom: '16px' }}
+                onKeyDown={e => e.key === 'Enter' && addExerciseDuringWorkout()} autoFocus />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => setShowAddExerciseModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={addExerciseDuringWorkout} className="btn-primary" style={{ flex: 1 }}>Add</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -539,7 +630,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       <button onClick={() => setShowCreateModal(true)} style={{
         display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
         border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: '100%', textAlign: 'left'
+        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', width: '100%', textAlign: 'left'
       }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <span style={{ color: 'white', fontSize: '24px', lineHeight: 1 }}>+</span>
@@ -558,7 +649,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         <SwipeToDelete key={r.id} onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
         <div style={{
           background: 'var(--card)', borderRadius: '16px', padding: '18px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
           <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
@@ -589,39 +680,48 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
               </>
             )}
           </div>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setMenuOpen(menuOpen === r.id ? null : r.id)}
+          <div>
+            <button onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+              setMenuOpen(menuOpen === r.id ? null : r.id);
+            }}
               style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
               ···
             </button>
-            {menuOpen === r.id && (
-              <div style={{
-                position: 'absolute', right: 0, top: '100%', background: 'var(--card)',
-                border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: '140px'
-              }}>
-                {[
-                  { label: 'Rename', action: () => renameRoutine(r) },
-                  { label: 'Duplicate', action: () => duplicateRoutine(r) },
-                  { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
-                ].map(item => (
-                  <button key={item.label} onClick={item.action} style={{
-                    display: 'block', width: '100%', padding: '12px 16px', background: 'none',
-                    border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
-                    fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
-                    borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
-                  }}>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
         </SwipeToDelete>
       ))}
 
-      {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+      {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />}
+
+      {menuOpen && routines.find(r => r.id === menuOpen) && (() => {
+        const r = routines.find(r => r.id === menuOpen);
+        return (
+          <div style={{
+            position: 'fixed', top: menuPosition.top, right: menuPosition.right,
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: '12px', overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 300, minWidth: '140px'
+          }}>
+            {[
+              { label: 'Rename', action: () => renameRoutine(r) },
+              { label: 'Duplicate', action: () => duplicateRoutine(r) },
+              { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
+            ].map(item => (
+              <button key={item.label} onClick={item.action} style={{
+                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
+                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
+                fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
+                borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
+              }}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
@@ -653,7 +753,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       <button onClick={() => setShowAddExerciseModal(true)} style={{
         display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
         border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)', width: '100%', textAlign: 'left', marginBottom: '4px'
+        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', width: '100%', textAlign: 'left', marginBottom: '4px'
       }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <span style={{ color: 'white', fontSize: '24px', lineHeight: 1 }}>+</span>
