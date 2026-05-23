@@ -14,6 +14,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import SwipeToDelete from './SwipeToDelete';
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -21,7 +22,7 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
+function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef(null);
@@ -46,6 +47,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
 
   return (
     <div ref={setNodeRef} style={style}>
+      <SwipeToDelete onDelete={onDelete}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px' }}>
         <div {...attributes} {...listeners}
           style={{ cursor: 'grab', color: 'var(--text-muted)', padding: '4px', touchAction: 'none', flexShrink: 0 }}>
@@ -100,6 +102,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet }) {
           </button>
         </div>
       </div>
+      </SwipeToDelete>
     </div>
   );
 }
@@ -188,6 +191,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [expandedExId, setExpandedExId] = useState(null);
   const [dragY, setDragY] = useState(0);
   const dragStartY = useRef(null);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedSessions, setSelectedSessions] = useState(new Set());
+  const [calendarView, setCalendarView] = useState(false);
+  const [calendarDayModal, setCalendarDayModal] = useState(null);
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -244,6 +251,29 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       id: s.id, date: s.date, routineName: s.routine_name,
       exercises: s.session_exercises.map(e => ({ name: e.exercise_name, sets: Array.isArray(e.sets) ? e.sets : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []) }))
     })));
+  };
+
+  const deleteSelectedSessions = async () => {
+    const ids = [...selectedSessions];
+    await supabase.from('session_exercises').delete().in('session_id', ids);
+    await supabase.from('workout_sessions').delete().in('id', ids);
+    setHistory(prev => prev.filter(s => !selectedSessions.has(s.id)));
+    setSelectedSessions(new Set());
+    setEditMode(false);
+  };
+
+  const deleteSingleSession = async (id) => {
+    await supabase.from('session_exercises').delete().eq('session_id', id);
+    await supabase.from('workout_sessions').delete().eq('id', id);
+    setHistory(prev => prev.filter(s => s.id !== id));
+  };
+
+  const deleteExercise = async (id) => {
+    const { error } = await supabase.from('exercises').delete().eq('id', id);
+    if (error) { console.error(error); return; }
+    const updated = activeRoutine.exercises.filter(e => e.id !== id);
+    setActiveRoutine(prev => ({ ...prev, exercises: updated }));
+    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
   };
 
   const addRoutine = async () => {
@@ -447,23 +477,32 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
         </div>
 
-        {/* Stats row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 20px 8px', flexShrink: 0 }}>
-          <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-            {formatTime(workoutSeconds)}
-          </span>
-          <span style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)' }}>
-            {totalVolume.toLocaleString()} LB
-          </span>
-        </div>
-
-        {/* Progress row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 20px 16px', flexShrink: 0 }}>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-            {completedExCount}/{activeRoutine.exercises.length}
-          </span>
-          <div style={{ flex: 1, height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px', transition: 'width 0.3s ease' }} />
+        {/* Stats grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '0 16px 12px', flexShrink: 0 }}>
+          {/* Left column: timer + volume stacked */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</div>
+              <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px' }}>
+                {formatTime(workoutSeconds)}
+              </div>
+            </div>
+            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</div>
+              <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)', letterSpacing: '-0.5px' }}>
+                {totalVolume.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>LB</span>
+              </div>
+            </div>
+          </div>
+          {/* Right column: exercise progress spanning full height */}
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Exercises</div>
+            <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1 }}>
+              {completedExCount}<span style={{ fontSize: '20px', color: 'var(--text-muted)' }}>/{activeRoutine.exercises.length}</span>
+            </div>
+            <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+            </div>
           </div>
         </div>
 
@@ -516,7 +555,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       )}
 
       {routines.map(r => (
-        <div key={r.id} style={{
+        <SwipeToDelete key={r.id} onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
+        <div style={{
           background: 'var(--card)', borderRadius: '16px', padding: '18px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid var(--border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
@@ -543,9 +583,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
                     <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>Active</span>
                   )}
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid var(--blue-200)', borderRadius: '20px', padding: '2px 10px' }}>
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
-                </div>
+                </span>
               </>
             )}
           </div>
@@ -578,6 +618,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
             )}
           </div>
         </div>
+        </SwipeToDelete>
       ))}
 
       {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
@@ -626,7 +667,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
           {activeRoutine.exercises.map(ex => (
-            <SortableExercise key={ex.id} ex={ex} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} />
+            <SortableExercise key={ex.id} ex={ex} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} onDelete={() => deleteExercise(ex.id)} />
           ))}
         </SortableContext>
       </DndContext>
@@ -661,37 +702,206 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     </div>
   );
 
-  if (view === 'history') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {initialView !== 'history' && (
-        <button onClick={() => setView('routines')}
-          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
-          ← Back
-        </button>
-      )}
-      <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Workout History</h2>
-      {history.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>
-      )}
-      {history.map(session => (
-        <div key={session.id} className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{session.routineName}</span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{session.date}</span>
-          </div>
-          {session.exercises.map((ex, i) => {
-            const filledSets = ex.sets.filter(s => s.weight || s.reps);
-            if (filledSets.length === 0) return null;
-            return (
-              <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                {ex.name}: {filledSets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
+  if (view === 'history') {
+    const workoutDayMap = {};
+    history.forEach(session => {
+      if (!workoutDayMap[session.date]) workoutDayMap[session.date] = [];
+      workoutDayMap[session.date].push(session);
+    });
+    const todayDate = new Date();
+    const months = [];
+    for (let i = 0; i <= 5; i++) {
+      const d = new Date(todayDate.getFullYear(), todayDate.getMonth() - i, 1);
+      months.push({ year: d.getFullYear(), month: d.getMonth() });
+    }
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const DAY_LABELS = ['S','M','T','W','T','F','S'];
+    const buildMonthCells = (year, month) => {
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const cells = [];
+      for (let i = 0; i < firstDay; i++) cells.push({ day: null, inMonth: false });
+      for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, inMonth: true });
+      const rem = cells.length % 7;
+      if (rem > 0) for (let d = 1; d <= 7 - rem; d++) cells.push({ day: d, inMonth: false });
+      return cells;
+    };
+    const isAllSelected = history.length > 0 && history.every(s => selectedSessions.has(s.id));
+
+    return (
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {editMode ? (
+            <button onClick={() => setSelectedSessions(isAllSelected ? new Set() : new Set(history.map(s => s.id)))}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: '2px solid var(--accent)', background: isAllSelected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isAllSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </div>
-            );
-          })}
+            </button>
+          ) : (
+            initialView !== 'history' && (
+              <button onClick={() => setView('routines')}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: 0 }}>
+                ←
+              </button>
+            )
+          )}
+          <h2 style={{ margin: 0, color: 'var(--text-primary)', flex: 1 }}>Workout History</h2>
+          {!editMode && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button onClick={() => setCalendarView(v => !v)}
+                style={{ background: calendarView ? 'var(--accent-light)' : 'none', border: calendarView ? '1px solid var(--border)' : '1px solid transparent', borderRadius: '8px', cursor: 'pointer', padding: '6px', color: calendarView ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              {history.length > 0 && (
+                <button onClick={() => { setEditMode(true); setCalendarView(false); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+                  Edit
+                </button>
+              )}
+            </div>
+          )}
+          {editMode && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {selectedSessions.size > 0 && (
+                <button onClick={deleteSelectedSessions}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              )}
+              <button onClick={() => { setEditMode(false); setSelectedSessions(new Set()); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+                Done
+              </button>
+            </div>
+          )}
         </div>
-      ))}
-    </div>
-  );
+
+        {history.length === 0 && (
+          <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>
+        )}
+
+        {/* Calendar view */}
+        {calendarView && !editMode && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            {months.map(({ year, month }) => {
+              const cells = buildMonthCells(year, month);
+              return (
+                <div key={`${year}-${month}`} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px', textAlign: 'center' }}>
+                    {MONTH_NAMES[month].slice(0, 3)} {year}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '3px' }}>
+                    {DAY_LABELS.map((d, i) => (
+                      <div key={i} style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center' }}>{d}</div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+                    {cells.map((cell, i) => {
+                      if (!cell.inMonth) return (
+                        <div key={i} style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {cell.day && <span style={{ fontSize: '9px', color: 'var(--border)' }}>{cell.day}</span>}
+                        </div>
+                      );
+                      const dateStr = new Date(year, month, cell.day).toLocaleDateString();
+                      const daySessions = workoutDayMap[dateStr];
+                      const hasWorkout = !!(daySessions && daySessions.length > 0);
+                      return (
+                        <div key={i}
+                          onClick={hasWorkout ? () => setCalendarDayModal({ date: dateStr, sessions: daySessions }) : undefined}
+                          style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', background: hasWorkout ? 'var(--green)' : 'transparent', cursor: hasWorkout ? 'pointer' : 'default' }}>
+                          <span style={{ fontSize: '9px', fontWeight: hasWorkout ? '700' : '400', color: hasWorkout ? 'white' : 'var(--text-primary)' }}>{cell.day}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* List view */}
+        {!calendarView && history.map(session => (
+          <SwipeToDelete key={session.id} onDelete={() => deleteSingleSession(session.id)} style={{ borderRadius: '16px' }}>
+          <div className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            {editMode && (
+              <button onClick={() => setSelectedSessions(prev => {
+                const next = new Set(prev);
+                next.has(session.id) ? next.delete(session.id) : next.add(session.id);
+                return next;
+              })}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', flexShrink: 0, marginTop: '2px' }}>
+                <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${selectedSessions.has(session.id) ? 'var(--accent)' : 'var(--border)'}`, background: selectedSessions.has(session.id) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {selectedSessions.has(session.id) && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+              </button>
+            )}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{session.routineName}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{session.date}</span>
+              </div>
+              {session.exercises.map((ex, i) => {
+                const filledSets = ex.sets.filter(s => s.weight || s.reps);
+                if (filledSets.length === 0) return null;
+                return (
+                  <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    {ex.name}: {filledSets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
+                  </div>
+                );
+              })}
+            </div>
+            {editMode && (
+              <button onClick={() => deleteSingleSession(session.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', flexShrink: 0, marginTop: '2px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
+          </SwipeToDelete>
+        ))}
+
+        {/* Calendar day detail modal */}
+        {calendarDayModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: '20px' }}
+            onClick={() => setCalendarDayModal(null)}>
+            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '340px', maxHeight: '70vh', overflowY: 'auto' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{calendarDayModal.date}</span>
+                <button onClick={() => setCalendarDayModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+              </div>
+              {calendarDayModal.sessions.map((session, si) => (
+                <div key={si} style={{ marginBottom: si < calendarDayModal.sessions.length - 1 ? '16px' : 0 }}>
+                  <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '6px' }}>{session.routineName}</div>
+                  {session.exercises.map((ex, i) => {
+                    const filledSets = ex.sets.filter(s => s.weight || s.reps);
+                    if (filledSets.length === 0) return null;
+                    return (
+                      <div key={i} style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        {ex.name}: {filledSets.map(s => `${s.weight}lb × ${s.reps}`).join(' · ')}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 }
 
 export default Workouts;

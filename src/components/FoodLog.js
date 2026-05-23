@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import SwipeToDelete from './SwipeToDelete';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => {
   const hour = i % 12 === 0 ? 12 : i % 12;
@@ -138,7 +139,8 @@ function FoodLog() {
                   ? <span style={{ fontSize: '12px', color: 'var(--border)' }}>—</span>
                   : <div style={{ flex: 1 }}>
                     {hourFoods.map((f, i) => (
-                      <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: i < hourFoods.length - 1 ? '6px' : 0 }}>
+                      <SwipeToDelete key={f.id} onDelete={() => deleteFood(f.id, h.value)} style={{ borderRadius: '8px', marginBottom: i < hourFoods.length - 1 ? '6px' : 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--card)' }}>
                         <div>
                           <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>{f.name}</span>
                           <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
@@ -150,6 +152,7 @@ function FoodLog() {
                           ×
                         </button>
                       </div>
+                      </SwipeToDelete>
                     ))}
                   </div>
                 }

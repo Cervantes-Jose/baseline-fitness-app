@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
 import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
+import WorkoutDashboard from './components/WorkoutDashboard';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -221,7 +222,7 @@ const changeDate = (dir) => {
       case 'food-log': return <div className="content"><FoodLog /></div>;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
-      case 'workout-dashboard': return <ComingSoon label="Workout Dashboard" />;
+      case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
       case 'workout-exercises': return <ComingSoon label="Exercises" />;
       case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} /></div>;
       case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" /></div>;
