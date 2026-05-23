@@ -34,29 +34,19 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
     }
   }, [expanded, sessionLog]);
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    background: 'var(--card)', borderRadius: '16px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
-    overflow: 'hidden'
-  };
-
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none', zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes} {...listeners}>
+      <div style={{
+        background: 'var(--card)', borderRadius: '16px',
+        boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+        border: '1px solid var(--border)', overflow: 'hidden',
+        transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+        transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
+      }}>
       <SwipeToDelete onDelete={onDelete}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px' }}>
-        <div {...attributes} {...listeners}
-          style={{ cursor: 'grab', color: 'var(--text-muted)', padding: '4px', touchAction: 'none', flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/>
-            <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
-            <circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/>
-          </svg>
-        </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
         </div>
@@ -109,11 +99,12 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
         </div>
       </div>
       </SwipeToDelete>
+      </div>
     </div>
   );
 }
 
-function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise }) {
+function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise, isDragging }) {
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
 
@@ -140,11 +131,11 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
           </button>
         )}
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease', color: 'var(--accent)', flexShrink: 0 }}>
+          style={{ transform: isExpanded && !isDragging ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease', color: 'var(--accent)', flexShrink: 0 }}>
           <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </div>
-      <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+      <div style={{ height: isExpanded && !isDragging ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded && !isDragging ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
@@ -181,6 +172,67 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
             + Add Set
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SortableLoggingCard({ ex, ...props }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  useEffect(() => {
+    if (isDragging) {
+      const t = setTimeout(() => setIsDragActive(true), 50);
+      return () => clearTimeout(t);
+    } else {
+      setIsDragActive(false);
+    }
+  }, [isDragging]);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        flexShrink: 0,
+        touchAction: 'none',
+        minHeight: isDragging ? 'auto' : undefined,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <div style={{
+        width: '100%',
+        borderRadius: '16px',
+        boxShadow: isDragActive ? '0 8px 24px rgba(0,0,0,0.15)' : undefined,
+        transform: isDragActive ? 'scale(1.02)' : 'scale(1)',
+        transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
+      }}>
+        <LoggingExerciseCard ex={ex} {...props} isDragging={isDragging} />
+      </div>
+    </div>
+  );
+}
+
+function SortableRoutineWrapper({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1, touchAction: 'none' }}
+      {...attributes}
+      {...listeners}
+    >
+      <div style={{
+        borderRadius: '16px',
+        transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+        boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.12)' : undefined,
+        transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease',
+      }}>
+        {children}
       </div>
     </div>
   );
@@ -256,7 +308,19 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       ...r,
       exercises: exerciseData.filter(e => e.routine_id === r.id).map(e => ({ ...e, lastSession: lastSessionMap[`${r.id}::${e.name}`] || null }))
     }));
-    setRoutines(routinesWithExercises);
+    try {
+      const savedOrder = localStorage.getItem('routineOrder');
+      if (savedOrder) {
+        const order = JSON.parse(savedOrder);
+        setRoutines([...routinesWithExercises].sort((a, b) =>
+          (order.indexOf(a.id) + 1 || Infinity) - (order.indexOf(b.id) + 1 || Infinity)
+        ));
+      } else {
+        setRoutines(routinesWithExercises);
+      }
+    } catch {
+      setRoutines(routinesWithExercises);
+    }
     setLoading(false);
   };
 
@@ -402,7 +466,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setView('exercises');
   };
 
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 600, tolerance: 5 } })
+  );
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -413,6 +479,27 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       setActiveRoutine(prev => ({ ...prev, exercises: reordered }));
       setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: reordered } : r));
     }
+  };
+
+  const handleRoutineDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    setRoutines(prev => {
+      const next = arrayMove(prev, prev.findIndex(r => r.id === active.id), prev.findIndex(r => r.id === over.id));
+      localStorage.setItem('routineOrder', JSON.stringify(next.map(r => r.id)));
+      return next;
+    });
+  };
+
+  const handleLoggingDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    setActiveRoutine(prev => ({
+      ...prev,
+      exercises: arrayMove(
+        prev.exercises,
+        prev.exercises.findIndex(e => e.id === active.id),
+        prev.exercises.findIndex(e => e.id === over.id)
+      ),
+    }));
   };
 
   const updateSet = (exId, setIdx, field, value) => {
@@ -589,29 +676,33 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         </div>
 
         {/* Exercise cards */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {activeRoutine.exercises.map(ex => (
-            <LoggingExerciseCard
-              key={ex.id}
-              ex={ex}
-              sessionLog={sessionLog}
-              updateSet={updateSet}
-              addSet={addSet}
-              deleteSet={deleteSet}
-              checkedSets={checkedSets[ex.id] || []}
-              toggleCheck={(idx) => toggleCheck(ex.id, idx)}
-              isExpanded={expandedExId === ex.id}
-              onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
-              onDeleteExercise={() => {
-                const updated = activeRoutine.exercises.filter(e => e.id !== ex.id);
-                setActiveRoutine(prev => ({ ...prev, exercises: updated }));
-                setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
-                setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
-                deletedExerciseIdsRef.current.push(ex.id);
-              }}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLoggingDragEnd}>
+          <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {activeRoutine.exercises.map(ex => (
+                <SortableLoggingCard
+                  key={ex.id}
+                  ex={ex}
+                  sessionLog={sessionLog}
+                  updateSet={updateSet}
+                  addSet={addSet}
+                  deleteSet={deleteSet}
+                  checkedSets={checkedSets[ex.id] || []}
+                  toggleCheck={(idx) => toggleCheck(ex.id, idx)}
+                  isExpanded={expandedExId === ex.id}
+                  onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
+                  onDeleteExercise={() => {
+                    const updated = activeRoutine.exercises.filter(e => e.id !== ex.id);
+                    setActiveRoutine(prev => ({ ...prev, exercises: updated }));
+                    setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+                    setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+                    deletedExerciseIdsRef.current.push(ex.id);
+                  }}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
 
         {/* Finish button */}
         <div style={{ padding: '12px 16px 28px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
@@ -686,8 +777,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '8px 0 0' }}>My Routines</p>
       )}
 
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRoutineDragEnd}>
+        <SortableContext items={routines.map(r => r.id)} strategy={verticalListSortingStrategy}>
       {routines.map(r => (
-        <SwipeToDelete key={r.id} onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
+        <SortableRoutineWrapper key={r.id} id={r.id}>
+        <SwipeToDelete onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
         <div style={{
           background: 'var(--card)', borderRadius: '16px', padding: '18px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
@@ -733,7 +827,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           </div>
         </div>
         </SwipeToDelete>
+        </SortableRoutineWrapper>
       ))}
+        </SortableContext>
+      </DndContext>
 
       {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />}
 
