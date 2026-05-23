@@ -1,7 +1,7 @@
 // Requires custom_exercises table in Supabase:
 // create table custom_exercises (id uuid default uuid_generate_v4() primary key, name text, category text, created_at timestamp default now());
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 const EXERCISE_DATABASE = {
@@ -51,6 +51,59 @@ function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onDelete }) {
           <path d="M8 3v10M3 8h10" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round"/>
         </svg>
       </button>
+    </div>
+  );
+}
+
+function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useEffect(() => {
+    if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
+  }, [isExpanded, exercises.length]);
+
+  return (
+    <div>
+      <div
+        onClick={onToggle}
+        style={{
+          position: 'sticky', top: '60px', zIndex: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px', cursor: 'pointer',
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: '16px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>
+            {exercises.length}
+          </span>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+          style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)', flexShrink: 0 }}>
+          <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div style={{
+        height: isExpanded ? `${contentHeight}px` : '0px',
+        overflow: 'hidden',
+        opacity: isExpanded ? 1 : 0,
+        transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease',
+        willChange: 'height',
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
+      }}>
+        <div ref={contentRef} style={{
+          display: 'flex', flexDirection: 'column', gap: '6px',
+          padding: '8px 16px 16px',
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+        }}>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
@@ -186,6 +239,8 @@ function ExerciseDatabase() {
             pointerEvents: searchOpen ? 'auto' : 'none',
           }}>
             <input
+              id="exercise-search"
+              name="exercise-search"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exercises..."
@@ -244,55 +299,26 @@ function ExerciseDatabase() {
             const exercises = getExercises(cat);
             const isExpanded = expanded.has(cat);
             return (
-              <div key={cat}>
-                {/* Header tile — sticks in place while exercises scroll under */}
-                <div
-                  onClick={() => toggleCategory(cat)}
-                  style={{
-                    position: 'sticky', top: '60px', zIndex: 10,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '18px', cursor: 'pointer',
-                    background: 'var(--card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '16px',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>
-                      {exercises.length}
-                    </span>
-                  </div>
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-                    style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)', flexShrink: 0 }}>
-                    <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                {/* Exercises — sibling to header so they scroll under the sticky tile */}
-                {isExpanded && (
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', gap: '6px',
-                    padding: '8px 16px 16px',
-                    background: 'var(--card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '16px',
-                  }}>
-                    {exercises.map(name => {
-                      const customEx = isCustom(cat, name) ? customExercises.find(e => e.category === cat && e.name === name) : null;
-                      return (
-                        <ExerciseRow
-                          key={name}
-                          name={name}
-                          isCustom={!!customEx}
-                          onAdd={() => setAddTarget({ name, category: cat })}
-                          onDelete={customEx ? () => deleteCustom(customEx.id) : undefined}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <CategorySection
+                key={cat}
+                cat={cat}
+                exercises={exercises}
+                isExpanded={isExpanded}
+                onToggle={() => toggleCategory(cat)}
+              >
+                {exercises.map(name => {
+                  const customEx = isCustom(cat, name) ? customExercises.find(e => e.category === cat && e.name === name) : null;
+                  return (
+                    <ExerciseRow
+                      key={name}
+                      name={name}
+                      isCustom={!!customEx}
+                      onAdd={() => setAddTarget({ name, category: cat })}
+                      onDelete={customEx ? () => deleteCustom(customEx.id) : undefined}
+                    />
+                  );
+                })}
+              </CategorySection>
             );
           })}
         </div>
@@ -339,6 +365,8 @@ function ExerciseDatabase() {
           >
             <p style={{ fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)', marginBottom: '16px' }}>Custom Exercise</p>
             <input
+              id="custom-exercise-name"
+              name="custom-exercise-name"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               placeholder="Exercise name"
@@ -348,6 +376,8 @@ function ExerciseDatabase() {
               onKeyDown={e => e.key === 'Enter' && createCustom()}
             />
             <select
+              id="custom-exercise-category"
+              name="custom-exercise-category"
               value={newCategory}
               onChange={e => setNewCategory(e.target.value)}
               className="input"

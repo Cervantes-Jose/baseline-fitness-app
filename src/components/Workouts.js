@@ -38,7 +38,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, touchAction: 'none', zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes} {...listeners}>
       <div style={{
         background: 'var(--card)', borderRadius: '16px',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
@@ -47,7 +47,7 @@ function SortableExercise({ ex, sessionLog, updateSet, addSet, deleteSet, onDele
         transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
       }}>
       <SwipeToDelete onDelete={onDelete}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px', touchAction: 'none' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
         </div>
@@ -883,7 +883,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   );
 
   if (view === 'exercises') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', WebkitOverflowScrolling: 'touch' }}>
       <button onClick={() => setView('routines')}
         style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', textAlign: 'left', padding: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
         ← Back
