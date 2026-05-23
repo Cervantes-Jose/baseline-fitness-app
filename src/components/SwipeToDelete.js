@@ -30,7 +30,7 @@ function SwipeToDelete({ children, onDelete, deleteLabel = 'Delete', style: cont
     const dy = e.clientY - startY.current;
 
     if (direction.current === null) {
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
       direction.current = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
       if (direction.current === 'v') {
         try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
