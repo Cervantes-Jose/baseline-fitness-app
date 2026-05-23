@@ -220,9 +220,8 @@ function SortableRoutineWrapper({ id, children }) {
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1, touchAction: 'none' }}
+      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1 }}
       {...attributes}
-      {...listeners}
     >
       <div style={{
         borderRadius: '16px',
@@ -230,7 +229,7 @@ function SortableRoutineWrapper({ id, children }) {
         boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.12)' : undefined,
         transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease',
       }}>
-        {children}
+        {children(listeners, isDragging)}
       </div>
     </div>
   );
@@ -780,12 +779,24 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         <SortableContext items={routines.map(r => r.id)} strategy={verticalListSortingStrategy}>
       {routines.map(r => (
         <SortableRoutineWrapper key={r.id} id={r.id}>
+        {(listeners) => (
         <SwipeToDelete onDelete={() => deleteRoutine(r.id)} style={{ borderRadius: '16px' }}>
         <div style={{
-          background: 'var(--card)', borderRadius: '16px', padding: '18px',
+          background: 'var(--card)', borderRadius: '16px', padding: '18px 18px 18px 0',
           boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
+          {/* Drag handle — scopes touchAction: none and listeners to this area only */}
+          <div
+            {...listeners}
+            style={{ touchAction: 'none', padding: '4px 12px 4px 18px', display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'grab', color: 'var(--text-muted)' }}
+          >
+            <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor" opacity="0.4">
+              <circle cx="4" cy="4" r="2"/><circle cx="10" cy="4" r="2"/>
+              <circle cx="4" cy="10" r="2"/><circle cx="10" cy="10" r="2"/>
+              <circle cx="4" cy="16" r="2"/><circle cx="10" cy="16" r="2"/>
+            </svg>
+          </div>
           <div style={{ flex: 1, cursor: renamingRoutine?.id === r.id ? 'default' : 'pointer' }}
             onClick={() => {
               if (renamingRoutine?.id === r.id) return;
@@ -826,6 +837,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           </div>
         </div>
         </SwipeToDelete>
+        )}
         </SortableRoutineWrapper>
       ))}
         </SortableContext>
