@@ -85,6 +85,7 @@ function Measurements({ metricSystem = 'imperial' }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeMeasurement) setNewUnit(getDefaultUnit(activeMeasurement.name, metricSystem));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metricSystem]);
 
   const loadMeasurements = async () => {

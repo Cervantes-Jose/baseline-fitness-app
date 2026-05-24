@@ -344,6 +344,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       setExerciseEditMode(false);
       setSelectedExercises(new Set());
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
