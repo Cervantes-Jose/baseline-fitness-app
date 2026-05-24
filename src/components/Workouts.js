@@ -346,6 +346,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
   }, [resetKey]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadRoutines();
     loadHistory();

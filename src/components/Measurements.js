@@ -77,10 +77,12 @@ function Measurements({ metricSystem = 'imperial' }) {
   const [renamingMeasurement, setRenamingMeasurement] = useState(null);
   const [renameValue, setRenameValue] = useState('');
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadMeasurements();
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeMeasurement) setNewUnit(getDefaultUnit(activeMeasurement.name, metricSystem));
   }, [metricSystem]);
