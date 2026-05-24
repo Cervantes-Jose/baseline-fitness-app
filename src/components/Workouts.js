@@ -335,6 +335,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
   }, [showExercisePicker]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!resetKey) return;
     if (view !== 'logging') {
