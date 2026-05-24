@@ -236,7 +236,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const selectedCount = Object.keys(selectedFoods).length;
   const isSearchActive = searchQuery.trim().length > 0;
-  const displayedFoods = (isSearchActive && searchResults !== null) ? searchResults : recentFoodList;
+  const displayedFoods = isSearchActive && !searchError ? (searchResults || []) : recentFoodList;
   const listLabel = isSearchActive ? 'Results' : 'Recent';
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
@@ -420,7 +420,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             )}
 
             {/* Food list */}
-            {(searchError ? recentFoodList : displayedFoods).map(food => {
+            {displayedFoods.map(food => {
               const isSelected = !!selectedFoods[food.name];
               const sel = selectedFoods[food.name];
               const currentServing = sel ? Number(sel._serving) : 0;
