@@ -18,10 +18,10 @@ const MAIN_TABS = [
 ];
 
 const FOOD_TABS = [
-  { id: 'food-dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'food-recipes', label: 'Recipes', icon: '≡' },
   { id: 'food-log', label: 'Add Food', icon: '+' },
+  { id: 'food-recipes', label: 'Recipes', icon: '≡' },
   { id: 'food-nutrients', label: 'Nutrients', icon: '◑' },
+  { id: 'food-goals', label: 'Goals', icon: '◎' },
   { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
@@ -55,6 +55,7 @@ function getHeaderTitle(activeTab) {
     'food-recipes': 'Recipes',
     'food-log': 'Calories',
     'food-nutrients': 'Nutrients',
+    'food-goals': 'Goals',
     'workouts': 'Workouts',
     'workout-dashboard': 'Workouts',
     'workout-exercises': 'Exercises',
@@ -146,8 +147,11 @@ const [sidePanel, setSidePanel] = useState(false);
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [profileName] = useState('Jose');
-const [calorieGoal] = useState(2000);
-const [stepsGoal] = useState(10000);
+const [calorieGoal] = useState(2000); // TODO: move to Goals tab settings when built
+const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
+const [proteinGoal] = useState(180);
+const [carbsGoal] = useState(200);
+const [fatsGoal] = useState(60);
 const [activeWorkout, setActiveWorkout] = useState(() => {
   try { return JSON.parse(localStorage.getItem('activeWorkout')); } catch { return null; }
 });
@@ -218,7 +222,7 @@ const changeDate = (dir) => {
       setActiveTab('dashboard');
     } else {
       setActiveSection(id);
-      setActiveTab(id === 'workouts' ? 'workout-start' : 'food-dashboard');
+      setActiveTab(id === 'workouts' ? 'workout-start' : 'food-log');
     }
     setSidePanel(false);
   };
@@ -230,7 +234,7 @@ const changeDate = (dir) => {
       setActiveTab('profile');
       return;
     }
-    if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-dashboard'); return; }
+    if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-log'); return; }
     if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-start'); return; }
     if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
     setActiveTab(tabId);
@@ -239,8 +243,8 @@ const changeDate = (dir) => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
-      case 'food-dashboard': return <ComingSoon label="Food Dashboard" />;
-      case 'food-log': return <div className="content"><FoodLog showToast={showToast} /></div>;
+      case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} /></div>;
+      case 'food-goals': return <ComingSoon label="Goals — Coming Soon" />;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
