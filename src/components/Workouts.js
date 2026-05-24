@@ -530,22 +530,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
   };
 
-  const addExercise = async () => {
-    if (!newExerciseName.trim() || !activeRoutine) return;
-    const { data, error } = await supabase.from('exercises')
-      .insert([{ routine_id: activeRoutine.id, name: newExerciseName.trim() }]).select().single();
-    if (error) { console.error(error); return; }
-    const newEx = { ...data, lastSession: null };
-    setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, newEx] } : r));
-    setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, newEx] }));
-    if (view === 'logging') {
-      setSessionLog(prev => ({ ...prev, [newEx.id]: [{ weight: '', reps: '' }] }));
-      setExpandedExId(newEx.id);
-    }
-    setNewExerciseName('');
-    setShowAddExerciseModal(false);
-  };
-
   const addExerciseDuringWorkout = async () => {
     if (!newExerciseName.trim() || !activeRoutine) return;
     const { data, error } = await supabase.from('exercises')
