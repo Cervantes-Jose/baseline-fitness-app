@@ -7,6 +7,7 @@ import Measurements from './components/Measurements';
 import WorkoutDashboard from './components/WorkoutDashboard';
 import ExerciseDatabase from './components/ExerciseDatabase';
 import UndoToast from './components/UndoToast';
+import Goals from './components/Goals';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -147,11 +148,11 @@ const [sidePanel, setSidePanel] = useState(false);
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [profileName] = useState('Jose');
-const [calorieGoal] = useState(2000); // TODO: move to Goals tab settings when built
+const [calorieGoal, setCalorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
-const [proteinGoal] = useState(180);
-const [carbsGoal] = useState(200);
-const [fatsGoal] = useState(60);
+const [proteinGoal, setProteinGoal] = useState(180);
+const [carbsGoal, setCarbsGoal] = useState(200);
+const [fatsGoal, setFatsGoal] = useState(60);
 const [activeWorkout, setActiveWorkout] = useState(() => {
   try { return JSON.parse(localStorage.getItem('activeWorkout')); } catch { return null; }
 });
@@ -244,7 +245,7 @@ const changeDate = (dir) => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} /></div>;
-      case 'food-goals': return <ComingSoon label="Goals — Coming Soon" />;
+      case 'food-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
