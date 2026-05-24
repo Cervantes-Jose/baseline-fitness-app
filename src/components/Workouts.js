@@ -321,6 +321,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [pickerCustomExercises, setPickerCustomExercises] = useState([]);
   const [pickerDragY, setPickerDragY] = useState(0);
   const pickerDragStartY = useRef(null);
+  const pickerSearchInputRef = useRef(null);
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -328,8 +329,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   useEffect(() => {
     if (showExercisePicker) {
-      const id = requestAnimationFrame(() => setPickerOpen(true));
-      return () => cancelAnimationFrame(id);
+      const rafId = requestAnimationFrame(() => setPickerOpen(true));
+      const focusId = setTimeout(() => pickerSearchInputRef.current?.focus(), 350);
+      return () => { cancelAnimationFrame(rafId); clearTimeout(focusId); };
     }
   }, [showExercisePicker]);
 
@@ -1103,6 +1105,7 @@ const updateSet = (exId, setIdx, field, value) => {
         {/* Search bar */}
         <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
           <input
+            ref={pickerSearchInputRef}
             value={exercisePickerSearch}
             onChange={e => setExercisePickerSearch(e.target.value)}
             placeholder="Search exercises..."
