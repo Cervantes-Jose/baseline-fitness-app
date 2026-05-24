@@ -283,7 +283,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {} }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0 }) {
   const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
@@ -334,6 +334,16 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       return () => { cancelAnimationFrame(rafId); clearTimeout(focusId); };
     }
   }, [showExercisePicker]);
+
+  useEffect(() => {
+    if (!resetKey) return;
+    if (view !== 'logging') {
+      setView('routines');
+      setActiveRoutine(null);
+      setExerciseEditMode(false);
+      setSelectedExercises(new Set());
+    }
+  }, [resetKey]);
 
   useEffect(() => {
     loadRoutines();

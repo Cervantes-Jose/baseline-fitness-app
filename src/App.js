@@ -65,6 +65,7 @@ function getHeaderTitle(activeTab) {
     'workout-measurements': 'Measurements',
     'measurement-add': 'Add Measurement',
     'profile': 'Profile',
+    'settings': 'Settings',
   };
   return titles[activeTab] || 'Fitness Tracker';
 }
@@ -83,7 +84,33 @@ function ComingSoon({ label }) {
   );
 }
 
-function Profile({ theme, setTheme }) {
+function Profile({ onOpenSettings }) {
+  return (
+    <div className="content">
+      <div className="card">
+        <p className="section-title">General</p>
+        <button onClick={onOpenSettings} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '14px 0', background: 'none', border: 'none',
+          borderTop: '1px solid var(--border)', cursor: 'pointer', marginTop: '8px',
+        }}>
+          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Settings</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div className="card">
+        <p className="section-title">Account</p>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+          Login and account features coming soon.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Settings({ theme, setTheme, metricSystem, setMetricSystem }) {
   return (
     <div className="content">
       <div className="card">
@@ -97,18 +124,31 @@ function Profile({ theme, setTheme }) {
                 background: theme === t ? 'var(--accent-light)' : 'var(--card)',
                 color: theme === t ? 'var(--accent)' : 'var(--text-primary)',
                 cursor: 'pointer', textAlign: 'left', fontSize: '15px', fontWeight: '500',
-                textTransform: 'capitalize'
               }}>
-              {t === 'system' ? '⚙️ System Default' : t === 'light' ? '☀️ Light' : '🌙 Dark'}
+              {t === 'system' ? 'System Default' : t === 'light' ? 'Light' : 'Dark'}
             </button>
           ))}
         </div>
       </div>
       <div className="card">
-        <p className="section-title">Account</p>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-          Login and account features coming soon.
-        </p>
+        <p className="section-title">Units</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+          {[
+            { id: 'imperial', label: 'Imperial', sub: 'lbs, inches' },
+            { id: 'metric', label: 'Metric', sub: 'kg, cm' },
+          ].map(opt => (
+            <button key={opt.id} onClick={() => setMetricSystem(opt.id)}
+              style={{
+                padding: '12px 16px', borderRadius: '12px', border: '1.5px solid',
+                borderColor: metricSystem === opt.id ? 'var(--accent)' : 'var(--border)',
+                background: metricSystem === opt.id ? 'var(--accent-light)' : 'var(--card)',
+                cursor: 'pointer', textAlign: 'left', fontSize: '15px',
+              }}>
+              <span style={{ fontWeight: '600', color: metricSystem === opt.id ? 'var(--accent)' : 'var(--text-primary)' }}>{opt.label}</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: '8px' }}>{opt.sub}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -147,6 +187,7 @@ const [activeSection, setActiveSection] = useState(() => localStorage.getItem('a
 const [sidePanel, setSidePanel] = useState(false);
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
+const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
 const [profileName] = useState('Jose');
 const [calorieGoal, setCalorieGoal] = useState(2000);
 const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
@@ -158,6 +199,7 @@ const [activeWorkout, setActiveWorkout] = useState(() => {
 });
 const [workoutSeconds, setWorkoutSeconds] = useState(() => Number(localStorage.getItem('workoutSeconds')) || 0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
+const [workoutsResetKey, setWorkoutsResetKey] = useState(0);
 const [toast, setToast] = useState(null);
 const [updateAvailable, setUpdateAvailable] = useState(false);
 const toastTimerRef = useRef(null);
@@ -208,6 +250,7 @@ const changeDate = (dir) => {
   }, [theme]);
 
   useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
+  useEffect(() => { localStorage.setItem('metricSystem', metricSystem); }, [metricSystem]);
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
   useEffect(() => { localStorage.setItem('activeSection', activeSection); }, [activeSection]);
   useEffect(() => {
@@ -237,6 +280,7 @@ const changeDate = (dir) => {
     }
     if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-log'); return; }
     if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-start'); return; }
+    if (tabId === 'workout-start') { if (activeTab === 'workout-start') setWorkoutsResetKey(k => k + 1); else setActiveTab('workout-start'); return; }
     if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
     setActiveTab(tabId);
   };
@@ -250,11 +294,12 @@ const changeDate = (dir) => {
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
       case 'workout-exercises': return <div className="content"><ExerciseDatabase /></div>;
-      case 'workout-measurements': return <div className="content"><Measurements /></div>;
-      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} /></div>;
+      case 'workout-measurements': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
+      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} resetKey={workoutsResetKey} /></div>;
       case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" showToast={showToast} /></div>;
-      case 'measurement-add': return <div className="content"><Measurements /></div>;
-      case 'profile': return <Profile theme={theme} setTheme={setTheme} />;
+      case 'measurement-add': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
+      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} />;
+      case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
     }
   };
