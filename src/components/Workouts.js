@@ -401,22 +401,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     );
   };
 
-  const deleteExercise = (id) => {
-    const item = activeRoutine.exercises.find(e => e.id === id);
-    if (!item) return;
-    const updated = activeRoutine.exercises.filter(e => e.id !== id);
-    setActiveRoutine(prev => ({ ...prev, exercises: updated }));
-    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
-    showToast(
-      `"${item.name}" deleted`,
-      () => {
-        setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, item] }));
-        setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, item] } : r));
-      },
-      async () => { await supabase.from('exercises').delete().eq('id', id); }
-    );
-  };
-
   const addRoutine = async () => {
     if (!newRoutineName.trim()) return;
     const { data, error } = await supabase.from('routines')
