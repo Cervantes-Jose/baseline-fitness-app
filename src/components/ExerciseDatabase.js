@@ -119,6 +119,14 @@ function ExerciseDatabase() {
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [successMsg, setSuccessMsg] = useState('');
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (searchOpen) {
+      const id = setTimeout(() => searchInputRef.current?.focus(), 100);
+      return () => clearTimeout(id);
+    }
+  }, [searchOpen]);
 
   useEffect(() => {
     supabase.from('custom_exercises').select('*').order('created_at').then(({ data }) => {
@@ -240,6 +248,7 @@ function ExerciseDatabase() {
             pointerEvents: searchOpen ? 'auto' : 'none',
           }}>
             <input
+              ref={searchInputRef}
               id="exercise-search"
               name="exercise-search"
               value={search}
