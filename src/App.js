@@ -26,18 +26,10 @@ const FOOD_TABS = [
 ];
 
 const WORKOUT_TABS = [
-  { id: 'workout-dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'workout-exercises', label: 'Exercises', icon: '≡' },
   { id: 'workout-start', label: 'Start', icon: '▸' },
+  { id: 'workout-exercises', label: 'Exercises', icon: '≡' },
+  { id: 'workout-measurements', label: 'Measurements', icon: '◎' },
   { id: 'workout-history', label: 'History', icon: '◷' },
-  { id: 'profile', label: 'Profile', icon: '○' },
-];
-
-const MEASUREMENT_TABS = [
-  { id: 'measurement-dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'measurement-tbd1', label: 'TBD', icon: '•' },
-  { id: 'measurement-add', label: 'Add', icon: '+' },
-  { id: 'measurement-tbd2', label: 'TBD', icon: '•' },
   { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
@@ -45,7 +37,6 @@ const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
   { id: 'food', label: 'Calories', icon: '◑' },
   { id: 'workouts', label: 'Workouts', icon: '▸' },
-  { id: 'measurements', label: 'Measurements', icon: '◎' },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────
@@ -53,7 +44,6 @@ const SECTIONS = [
 function getTabsForSection(section) {
   if (section === 'food') return FOOD_TABS;
   if (section === 'workouts') return WORKOUT_TABS;
-  if (section === 'measurements') return MEASUREMENT_TABS;
   return MAIN_TABS;
 }
 
@@ -70,11 +60,8 @@ function getHeaderTitle(activeTab) {
     'workout-exercises': 'Exercises',
     'workout-start': 'Start Workout',
     'workout-history': 'History',
-    'measurements': 'Measurements',
-    'measurement-dashboard': 'Measurements',
+    'workout-measurements': 'Measurements',
     'measurement-add': 'Add Measurement',
-    'measurement-tbd1': 'Coming Soon',
-    'measurement-tbd2': 'Coming Soon',
     'profile': 'Profile',
   };
   return titles[activeTab] || 'Fitness Tracker';
@@ -231,7 +218,7 @@ const changeDate = (dir) => {
       setActiveTab('dashboard');
     } else {
       setActiveSection(id);
-      setActiveTab(`${id === 'workouts' ? 'workout' : id === 'measurements' ? 'measurement' : 'food'}-dashboard`);
+      setActiveTab(id === 'workouts' ? 'workout-start' : 'food-dashboard');
     }
     setSidePanel(false);
   };
@@ -244,8 +231,7 @@ const changeDate = (dir) => {
       return;
     }
     if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-dashboard'); return; }
-    if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-dashboard'); return; }
-    if (tabId === 'measurements') { setActiveSection('measurements'); setActiveTab('measurement-dashboard'); return; }
+    if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-start'); return; }
     if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
     setActiveTab(tabId);
   };
@@ -258,13 +244,11 @@ const changeDate = (dir) => {
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
       case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
-      case 'workout-exercises': return <ExerciseDatabase />;
+      case 'workout-exercises': return <div className="content"><ExerciseDatabase /></div>;
+      case 'workout-measurements': return <div className="content"><Measurements /></div>;
       case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} /></div>;
       case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" showToast={showToast} /></div>;
-      case 'measurement-dashboard': return <ComingSoon label="Measurements Dashboard" />;
       case 'measurement-add': return <div className="content"><Measurements /></div>;
-      case 'measurement-tbd1': return <ComingSoon label="Coming Soon" />;
-      case 'measurement-tbd2': return <ComingSoon label="Coming Soon" />;
       case 'profile': return <Profile theme={theme} setTheme={setTheme} />;
       default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
     }

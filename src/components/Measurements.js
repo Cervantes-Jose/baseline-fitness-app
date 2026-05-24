@@ -35,6 +35,7 @@ function Measurements() {
   const [newValue, setNewValue] = useState('');
   const [newUnit, setNewUnit] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     loadMeasurements();
@@ -76,6 +77,7 @@ function Measurements() {
     if (error) { console.error(error); return; }
     setMeasurements([...measurements, { ...data, entries: [] }]);
     setNewName('');
+    setShowModal(false);
   };
 
   const openMeasurement = (m) => { setActiveMeasurement(m); setView('detail'); };
@@ -107,16 +109,53 @@ function Measurements() {
 
   if (view === 'list') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <input value={newName} onChange={e => setNewName(e.target.value)}
-          placeholder="New measurement (e.g. Weight)"
-          onKeyDown={e => e.key === 'Enter' && addMeasurement()}
-          className="input" style={{ flex: 1 }} />
-        <button onClick={addMeasurement}
-          style={{ padding: '12px 18px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '20px', cursor: 'pointer' }}>+</button>
-      </div>
+      <button onClick={() => setShowModal(true)} style={{
+        display: 'flex', alignItems: 'center', gap: '16px',
+        background: 'var(--accent-light)', border: '1px solid var(--border)',
+        borderRadius: '16px', padding: '16px', cursor: 'pointer',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.08)', width: '100%', textAlign: 'left',
+      }}>
+        <div style={{
+          width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <span style={{ color: 'white', fontSize: '24px', fontWeight: '300', lineHeight: 1 }}>+</span>
+        </div>
+        <div>
+          <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>Add Measurement</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>e.g. Weight, Body Fat, Arms</div>
+        </div>
+      </button>
+
+      {showModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          zIndex: 300, padding: '16px',
+        }} onClick={() => { setShowModal(false); setNewName(''); }}>
+          <div className="card" style={{ width: '100%', maxWidth: '448px', padding: '24px' }}
+            onClick={e => e.stopPropagation()}>
+            <p className="section-title" style={{ marginBottom: '16px' }}>New Measurement</p>
+            <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addMeasurement()}
+              placeholder="e.g. Weight, Body Fat, Arms"
+              className="input" style={{ width: '100%', marginBottom: '16px' }} />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setShowModal(false); setNewName(''); }}
+                style={{ flex: 1, padding: '14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '15px', fontWeight: '600', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={addMeasurement}
+                style={{ flex: 1, padding: '14px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {measurements.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No measurements yet. Create one above.</p>
+        <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No measurements yet. Add one above.</p>
       )}
       {measurements.map(m => {
         const last = m.entries[m.entries.length - 1];

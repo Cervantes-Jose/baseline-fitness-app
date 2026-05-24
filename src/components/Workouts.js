@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { EXERCISE_DATABASE, CATEGORIES } from './ExerciseDatabase';
 import {
   DndContext,
   closestCenter,
@@ -259,6 +260,67 @@ function SortableRoutineWrapper({ id, children }) {
   );
 }
 
+function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedExercises, onToggleExercise, pickerCustomExercises }) {
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
+  useEffect(() => {
+    if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
+  }, [isExpanded, exercises.length, selectedExercises]);
+  return (
+    <div>
+      <div onClick={onToggle} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '18px', cursor: 'pointer',
+        background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>{exercises.length}</span>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+          style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)', flexShrink: 0 }}>
+          <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div style={{
+        height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden',
+        opacity: isExpanded ? 1 : 0,
+        transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease', willChange: 'height',
+      }}>
+        <div ref={contentRef} style={{
+          display: 'flex', flexDirection: 'column', gap: '6px',
+          padding: '8px 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+        }}>
+          {exercises.map(name => {
+            const isSelected = selectedExercises.has(name);
+            const isCustom = pickerCustomExercises.some(e => e.category === cat && e.name === name);
+            return (
+              <div key={name} onClick={() => onToggleExercise(name)}
+                style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'var(--bg)', cursor: 'pointer' }}>
+                <div style={{
+                  width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                  border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                  background: isSelected ? 'var(--accent)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px',
+                }}>
+                  {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{name}</span>
+                    {isCustom && <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {} }) {
   const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
@@ -289,10 +351,25 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [selectedRoutines, setSelectedRoutines] = useState(new Set());
   const [exerciseEditMode, setExerciseEditMode] = useState(false);
   const [selectedExercises, setSelectedExercises] = useState(new Set());
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [exercisePickerSearch, setExercisePickerSearch] = useState('');
+  const [expandedPickerCategories, setExpandedPickerCategories] = useState(new Set());
+  const [selectedPickerExercises, setSelectedPickerExercises] = useState(new Set());
+  const [pickerCustomExercises, setPickerCustomExercises] = useState([]);
+  const [pickerDragY, setPickerDragY] = useState(0);
+  const pickerDragStartY = useRef(null);
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
   }, [sessionLog]);
+
+  useEffect(() => {
+    if (showExercisePicker) {
+      const id = requestAnimationFrame(() => setPickerOpen(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [showExercisePicker]);
 
   useEffect(() => {
     loadRoutines();
@@ -618,6 +695,70 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     confirmFinishWorkout();
   };
 
+  const pickerGetExercises = (cat) => {
+    const base = EXERCISE_DATABASE[cat] || [];
+    const customs = pickerCustomExercises.filter(e => e.category === cat && !base.includes(e.name)).map(e => e.name);
+    return [...base, ...customs];
+  };
+
+  const pickerSearchResults = exercisePickerSearch.trim()
+    ? CATEGORIES.flatMap(cat =>
+        pickerGetExercises(cat)
+          .filter(name => name.toLowerCase().includes(exercisePickerSearch.toLowerCase()))
+          .map(name => ({ name, category: cat }))
+      )
+    : null;
+
+  const openExercisePicker = async () => {
+    setExercisePickerSearch('');
+    setSelectedPickerExercises(new Set());
+    setExpandedPickerCategories(new Set());
+    setPickerDragY(0);
+    setShowExercisePicker(true);
+    const { data } = await supabase.from('custom_exercises').select('*').order('created_at');
+    if (data) setPickerCustomExercises(data);
+  };
+
+  const closeExercisePicker = () => {
+    setPickerOpen(false);
+    setTimeout(() => setShowExercisePicker(false), 350);
+  };
+
+  const togglePickerExercise = (name) => {
+    setSelectedPickerExercises(prev => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
+  };
+
+  const addPickerExercises = async () => {
+    if (selectedPickerExercises.size === 0 || !activeRoutine) return;
+    const inserts = [...selectedPickerExercises].map(name => ({ routine_id: activeRoutine.id, name }));
+    const { data, error } = await supabase.from('exercises').insert(inserts).select();
+    if (error) { console.error(error); return; }
+    const newExs = data.map(ex => ({ ...ex, lastSession: null }));
+    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, ...newExs] } : r));
+    setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, ...newExs] }));
+    closeExercisePicker();
+  };
+
+  const onPickerPointerDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pickerDragStartY.current = e.clientY;
+  };
+  const onPickerPointerMove = (e) => {
+    if (pickerDragStartY.current === null) return;
+    setPickerDragY(Math.max(0, e.clientY - pickerDragStartY.current));
+  };
+  const onPickerPointerUp = (e) => {
+    if (pickerDragStartY.current === null) return;
+    const dy = Math.max(0, e.clientY - pickerDragStartY.current);
+    pickerDragStartY.current = null;
+    setPickerDragY(0);
+    if (dy > 80) closeExercisePicker();
+  };
+
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   let loggingModal = null;
@@ -659,7 +800,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
-          style={{ paddingTop: '14px', paddingBottom: '6px', display: 'flex', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+          style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
         </div>
 
@@ -952,7 +1093,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   );
 
   if (view === 'exercises') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', WebkitOverflowScrolling: 'touch' }}>
+    <>
+    <div style={{ padding: '16px', paddingBottom: '80px', display: 'flex', flexDirection: 'column', gap: '10px', WebkitOverflowScrolling: 'touch' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={() => { setView('routines'); setExerciseEditMode(false); setSelectedExercises(new Set()); }}
           style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -976,7 +1118,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         )}
       </div>
 
-      <button onClick={() => setShowAddExerciseModal(true)} style={{
+      <button onClick={openExercisePicker} style={{
         display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
         border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', cursor: 'pointer',
         boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', width: '100%', textAlign: 'left', marginBottom: '4px'
@@ -998,34 +1140,123 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         </SortableContext>
       </DndContext>
 
-      {activeRoutine.exercises.length > 0 && (
-        <button onClick={startLogging} style={{
-          width: '100%', padding: '18px', background: 'var(--accent)', color: 'white',
-          border: 'none', borderRadius: '16px', fontSize: '17px', cursor: 'pointer',
-          fontWeight: '700', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-        }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M3 2l10 6-10 6V2z"/></svg>
-          Start Workout
-        </button>
-      )}
-
-      {showAddExerciseModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
-          onClick={() => setShowAddExerciseModal(false)}>
-          <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
-            onClick={e => e.stopPropagation()}>
-            <p style={{ fontWeight: '600', marginBottom: '16px', fontSize: '16px', color: 'var(--text-primary)' }}>Add Exercise</p>
-            <input value={newExerciseName} onChange={e => setNewExerciseName(e.target.value)}
-              placeholder="e.g. Bench Press" className="input" style={{ marginBottom: '16px' }}
-              onKeyDown={e => e.key === 'Enter' && addExercise()} autoFocus />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowAddExerciseModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={addExercise} className="btn-primary" style={{ flex: 1 }}>Add</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
+    {activeRoutine.exercises.length > 0 && (
+      <button onClick={startLogging} style={{
+        position: 'fixed', bottom: '82px', left: '50%', transform: 'translateX(-50%)',
+        width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,
+        padding: '18px', background: 'var(--accent)', color: 'white',
+        border: 'none', borderRadius: '16px', fontSize: '17px', cursor: 'pointer',
+        fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+        boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+      }}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M3 2l10 6-10 6V2z"/></svg>
+        Start Workout
+      </button>
+    )}
+    {showExercisePicker && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
+        transform: pickerOpen ? `translateY(${pickerDragY}px)` : 'translateY(100%)',
+        transition: pickerDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Drag handle — full 60px touch area */}
+        <div
+          onPointerDown={onPickerPointerDown}
+          onPointerMove={onPickerPointerMove}
+          onPointerUp={onPickerPointerUp}
+          style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}
+        >
+          <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
+        </div>
+        {/* Search bar */}
+        <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
+          <input
+            value={exercisePickerSearch}
+            onChange={e => setExercisePickerSearch(e.target.value)}
+            placeholder="Search exercises..."
+            className="input"
+            style={{ width: '100%' }}
+          />
+        </div>
+        {/* Scrollable exercise list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', paddingBottom: '100px' }}>
+          {pickerSearchResults ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {pickerSearchResults.length === 0
+                ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>No exercises found</p>
+                : pickerSearchResults.map(({ name, category }) => {
+                    const isSelected = selectedPickerExercises.has(name);
+                    const isCustom = pickerCustomExercises.some(e => e.category === category && e.name === name);
+                    return (
+                      <div key={`${category}::${name}`} onClick={() => togglePickerExercise(name)}
+                        style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'var(--card)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                        <div style={{
+                          width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                          border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                          background: isSelected ? 'var(--accent)' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px',
+                        }}>
+                          {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{name}</span>
+                            {isCustom && <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '1px' }}>{category}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {CATEGORIES.map(cat => {
+                const exercises = pickerGetExercises(cat);
+                const isExpanded = expandedPickerCategories.has(cat);
+                return (
+                  <PickerCategorySection
+                    key={cat}
+                    cat={cat}
+                    exercises={exercises}
+                    isExpanded={isExpanded}
+                    onToggle={() => setExpandedPickerCategories(prev => {
+                      const next = new Set(prev);
+                      next.has(cat) ? next.delete(cat) : next.add(cat);
+                      return next;
+                    })}
+                    selectedExercises={selectedPickerExercises}
+                    onToggleExercise={togglePickerExercise}
+                    pickerCustomExercises={pickerCustomExercises}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {/* Add button */}
+        <div style={{ padding: '12px 16px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+          <button
+            onClick={addPickerExercises}
+            disabled={selectedPickerExercises.size === 0}
+            style={{
+              width: '100%', padding: '18px',
+              background: selectedPickerExercises.size > 0 ? 'var(--accent)' : 'var(--border)',
+              color: selectedPickerExercises.size > 0 ? 'white' : 'var(--text-muted)',
+              border: 'none', borderRadius: '16px', fontSize: '17px', cursor: selectedPickerExercises.size > 0 ? 'pointer' : 'default',
+              fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              transition: 'background 0.2s ease, color 0.2s ease',
+            }}
+          >
+            {selectedPickerExercises.size === 0 ? 'Select exercises' : `Add ${selectedPickerExercises.size} Exercise${selectedPickerExercises.size > 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 
   if (view === 'history') {

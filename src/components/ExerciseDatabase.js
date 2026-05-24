@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
-const EXERCISE_DATABASE = {
+export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
   "Shoulders": ["Arnold Press","Band External Shoulder Rotation","Band Internal Shoulder Rotation","Band Pull-Apart","Banded Face Pull","Barbell Front Raise","Barbell Rear Delt Row","Barbell Upright Row","Behind the Neck Press","Cable Internal Shoulder Rotation","Cable External Shoulder Rotation","Cable Front Raise","Cable Lateral Raise","Cable Rear Delt Row","Cuban Press","Devils Press","Dumbbell Front Raise","Dumbbell Lateral Raise","Dumbbell Rear Delt Row","Dumbbell Shoulder Press","Face Pull","Front Hold","Handstand Push-Up","Kettlebell Halo","Kettlebell Press","Kettlebell Push Press","Landmine Press","Machine Lateral Raise","Machine Shoulder Press","Overhead Press","Plate Front Raise","Push Press","Resistance Band Lateral Raise","Reverse Cable Flyes","Reverse Dumbbell Flyes","Reverse Machine Fly","Seated Dumbbell Shoulder Press","Seated Barbell Overhead Press","Seated Smith Machine Shoulder Press","Turkish Get-Up","Z Press"],
   "Biceps": ["Barbell Curl","Barbell Preacher Curl","Bayesian Curl","Bodyweight Curl","Cable Crossover Bicep Curl","Cable Curl With Bar","Cable Curl With Rope","Concentration Curl","Drag Curl","Dumbbell Curl","Dumbbell Preacher Curl","EZ Curl","Hammer Curl","Incline Dumbbell Curl","Kettlebell Curl","Machine Bicep Curl","Overhead Cable Curl","Reverse Barbell Curl","Reverse Dumbbell Curl","Resistance Band Curl","Spider Curl","Zottman Curl"],
@@ -17,7 +17,7 @@ const EXERCISE_DATABASE = {
   "Forearms & Grip": ["Barbell Wrist Curl","Barbell Wrist Extension","Bar Hang","Dumbbell Wrist Curl","Dumbbell Wrist Extension","Farmers Walk","Gripper","One-Handed Bar Hang","Plate Pinch","Towel Pull-Up","Wrist Roller"],
 };
 
-const CATEGORIES = Object.keys(EXERCISE_DATABASE);
+export const CATEGORIES = Object.keys(EXERCISE_DATABASE);
 
 function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onDelete }) {
   return (
@@ -203,7 +203,7 @@ function ExerciseDatabase() {
       {/* Top bar */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '16px 16px 12px' }}>
         {/* Animated button/search container */}
-        <div style={{ flex: 1, position: 'relative', height: '64px' }}>
+        <div style={{ flex: 1, position: 'relative', height: '80px' }}>
           {/* Add Custom Exercise button */}
           <button
             onClick={() => setShowCreateModal(true)}
@@ -233,6 +233,7 @@ function ExerciseDatabase() {
           {/* Search input */}
           <div style={{
             position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center',
             opacity: searchOpen ? 1 : 0,
             transform: searchOpen ? 'translateX(0)' : 'translateX(20px)',
             transition: 'opacity 0.25s ease, transform 0.25s ease',
@@ -245,7 +246,7 @@ function ExerciseDatabase() {
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exercises..."
               className="input"
-              style={{ width: '100%', height: '100%', boxSizing: 'border-box' }}
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
           </div>
         </div>
