@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+
+const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => {
   const hour = i % 12 === 0 ? 12 : i % 12;
@@ -53,6 +55,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [selectedFoods, setSelectedFoods] = useState({});
   const [recentFoodList, setRecentFoodList] = useState([]);
 
+  // Search state
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const searchDebounceRef = useRef(null);
+
   useEffect(() => {
     loadFoods();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,6 +70,23 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (showAddFoodScreen) loadRecentFoods();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
+
+  // Debounced USDA search
+  useEffect(() => {
+    if (!showAddFoodScreen) return;
+    const query = searchQuery.trim();
+    if (!query) {
+      clearTimeout(searchDebounceRef.current);
+      setSearchResults(null);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => searchFoods(query), 400);
+    return () => clearTimeout(searchDebounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, showAddFoodScreen]);
 
   const loadFoods = async () => {
     setLoading(true);
@@ -103,6 +128,31 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setRecentFoodList(recent);
   };
 
+  const searchFoods = async (query) => {
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const res = await fetch(
+        `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${supabase.supabaseKey}`,
+            'apikey': supabase.supabaseKey,
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSearchResults(Array.isArray(data) ? data : (data.foods || []));
+    } catch (err) {
+      console.error('Food search error:', err);
+      setSearchError('Search unavailable');
+      setSearchResults(null);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
   const deleteFood = (id, hour) => {
     const item = (foods[hour] || []).find(f => f.id === id);
     if (!item) return;
@@ -123,29 +173,47 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(false);
     setSearchQuery('');
     setSelectedFoods({});
+    setSearchResults(null);
+    setSearchError(null);
   };
 
   const toggleFood = (food) => {
     setSelectedFoods(prev => {
+      const key = food.name;
       const next = { ...prev };
-      if (next[food.name]) delete next[food.name];
-      else next[food.name] = food;
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = { ...food, _serving: food.servingSize ?? null };
+      }
       return next;
     });
+  };
+
+  const updateServing = (foodName, value) => {
+    setSelectedFoods(prev => ({
+      ...prev,
+      [foodName]: { ...prev[foodName], _serving: value },
+    }));
   };
 
   const handleAddSelected = async () => {
     const foodsToAdd = Object.values(selectedFoods);
     if (foodsToAdd.length === 0) return;
-    const inserts = foodsToAdd.map(f => ({
-      name: f.name,
-      calories: Number(f.calories),
-      protein: Number(f.protein) || 0,
-      carbs: Number(f.carbs) || 0,
-      fats: Number(f.fats) || 0,
-      hour: addFoodHour,
-      date: today,
-    }));
+    const inserts = foodsToAdd.map(f => {
+      const base = f.servingSize;
+      const current = Number(f._serving);
+      const ratio = (base && current > 0) ? current / base : 1;
+      return {
+        name: f.name,
+        calories: Math.round(Number(f.calories) * ratio),
+        protein: Math.round(Number(f.protein) * ratio),
+        carbs: Math.round(Number(f.carbs) * ratio),
+        fats: Math.round(Number(f.fats) * ratio),
+        hour: addFoodHour,
+        date: today,
+      };
+    });
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
     if (error) { console.error(error); return; }
     const newFoods = { ...foods };
@@ -166,9 +234,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
   const selectedCount = Object.keys(selectedFoods).length;
-  const displayedFoods = searchQuery
-    ? recentFoodList.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : recentFoodList;
+  const isSearchActive = searchQuery.trim().length > 0;
+  const displayedFoods = (isSearchActive && searchResults !== null) ? searchResults : recentFoodList;
+  const listLabel = isSearchActive ? 'Results' : 'Recent';
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
@@ -249,7 +317,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           display: 'flex', flexDirection: 'column',
           animation: 'slideUpFull 0.3s cubic-bezier(0.4,0,0.2,1) forwards',
         }}>
-          <style>{`@keyframes slideUpFull { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+          <style>{`
+            @keyframes slideUpFull { from { transform: translateY(100%); } to { transform: translateY(0); } }
+            @keyframes slideUpBar  { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            @keyframes spin        { to { transform: rotate(360deg); } }
+          `}</style>
 
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', padding: '20px 20px 12px', gap: '12px', background: 'var(--bg)' }}>
@@ -257,9 +329,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-secondary)', fontSize: '22px', lineHeight: 1,
               padding: '4px', borderRadius: '8px', display: 'flex', alignItems: 'center',
-            }}>
-              ←
-            </button>
+            }}>←</button>
             <span style={{ flex: 1, textAlign: 'center', fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)' }}>Add Food</span>
             <div style={{
               background: 'var(--accent-light)', color: 'var(--accent)',
@@ -278,75 +348,139 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               className="input"
               style={{ paddingRight: '48px' }}
             />
-            <button
-              onClick={() => showToast('Coming Soon', null, null)}
-              style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="2"  y="4" width="2" height="16"/>
-                <rect x="6"  y="4" width="1" height="16"/>
-                <rect x="9"  y="4" width="2" height="16"/>
-                <rect x="13" y="4" width="1" height="16"/>
-                <rect x="16" y="4" width="2" height="16"/>
-                <rect x="20" y="4" width="2" height="16"/>
-              </svg>
-            </button>
+            <div style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+              {searchLoading ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" stroke="var(--border)" strokeWidth="3" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <button
+                  onClick={() => showToast('Coming Soon', null, null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="2"  y="4" width="2" height="16"/>
+                    <rect x="6"  y="4" width="1" height="16"/>
+                    <rect x="9"  y="4" width="2" height="16"/>
+                    <rect x="13" y="4" width="1" height="16"/>
+                    <rect x="16" y="4" width="2" height="16"/>
+                    <rect x="20" y="4" width="2" height="16"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Scrollable content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
 
-            {/* Favorites + Recipes tiles */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-              {[
-                { label: 'Favorites', icon: '★' },
-                { label: 'Recipes',   icon: '📖' },
-              ].map(({ label, icon }) => (
-                <button key={label} onClick={() => showToast('Coming Soon', null, null)} style={{
-                  flex: 1, background: 'var(--accent-light)', border: '1px solid var(--border)',
-                  borderRadius: '16px', padding: '16px 12px', cursor: 'pointer', textAlign: 'left',
-                  position: 'relative',
-                }}>
-                  <div style={{ fontSize: '20px', marginBottom: '6px' }}>{icon}</div>
-                  <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{label}</div>
-                  <div style={{
-                    marginTop: '6px', display: 'inline-block',
-                    background: 'var(--border)', color: 'var(--text-muted)',
-                    fontSize: '10px', fontWeight: '600', padding: '2px 6px',
-                    borderRadius: '6px', letterSpacing: '0.3px',
+            {/* Favorites + Recipes tiles — hidden while searching */}
+            {!isSearchActive && (
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                {[
+                  { label: 'Favorites', icon: '★' },
+                  { label: 'Recipes',   icon: '📖' },
+                ].map(({ label, icon }) => (
+                  <button key={label} onClick={() => showToast('Coming Soon', null, null)} style={{
+                    flex: 1, background: 'var(--accent-light)', border: '1px solid var(--border)',
+                    borderRadius: '16px', padding: '16px 12px', cursor: 'pointer', textAlign: 'left',
                   }}>
-                    Coming Soon
-                  </div>
-                </button>
-              ))}
-            </div>
+                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>{icon}</div>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{label}</div>
+                    <div style={{
+                      marginTop: '6px', display: 'inline-block',
+                      background: 'var(--border)', color: 'var(--text-muted)',
+                      fontSize: '10px', fontWeight: '600', padding: '2px 6px',
+                      borderRadius: '6px', letterSpacing: '0.3px',
+                    }}>Coming Soon</div>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            {/* Recent header */}
-            <p className="section-title" style={{ marginBottom: '4px' }}>Recent</p>
+            {/* Search error fallback */}
+            {searchError && (
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
+                {searchError} — showing recent foods
+              </p>
+            )}
+
+            {/* List section header */}
+            {(!isSearchActive || searchError || (searchResults && searchResults.length > 0)) && (
+              <p className="section-title" style={{ marginBottom: '4px' }}>{searchError ? 'Recent' : listLabel}</p>
+            )}
+
+            {/* No results state */}
+            {isSearchActive && !searchLoading && !searchError && searchResults && searchResults.length === 0 && (
+              <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>
+                No results found
+              </p>
+            )}
 
             {/* Food list */}
-            {displayedFoods.map(food => {
+            {(searchError ? recentFoodList : displayedFoods).map(food => {
               const isSelected = !!selectedFoods[food.name];
+              const sel = selectedFoods[food.name];
+              const currentServing = sel ? Number(sel._serving) : 0;
+              const base = food.servingSize;
+              const ratio = (base && currentServing > 0) ? currentServing / base : 1;
+
               return (
-                <div key={food.name} onClick={() => toggleFood(food)} style={{
-                  display: 'flex', alignItems: 'center', gap: '14px',
-                  padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
-                }}>
-                  <div style={{
-                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    border: isSelected ? 'none' : '2px solid var(--border)',
-                    background: isSelected ? 'var(--accent)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background 0.15s, border 0.15s',
+                <div key={food.name + (food.brandOwner || '')}>
+                  <div onClick={() => toggleFood(food)} style={{
+                    display: 'flex', alignItems: 'center', gap: '14px',
+                    padding: '12px 0', borderBottom: isSelected && base ? 'none' : '1px solid var(--border)',
+                    cursor: 'pointer',
                   }}>
-                    {isSelected && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                      border: isSelected ? 'none' : '2px solid var(--border)',
+                      background: isSelected ? 'var(--accent)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.15s',
+                    }}>
+                      {isSelected && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</div>
+                      {food.brandOwner && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
+                      )}
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {Math.round(food.calories * ratio)} cal · {Math.round(food.protein * ratio)}g P · {Math.round(food.carbs * ratio)}g C · {Math.round(food.fats * ratio)}g F
+                      </div>
                     </div>
                   </div>
+
+                  {/* Serving size row — only for foods with servingSize (USDA results) */}
+                  {isSelected && base != null && (
+                    <div onClick={e => e.stopPropagation()} style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '8px 0 12px', paddingLeft: '36px',
+                      borderBottom: '1px solid var(--border)',
+                    }}>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={sel._serving ?? ''}
+                        onChange={e => updateServing(food.name, e.target.value)}
+                        style={{
+                          width: '72px', padding: '6px 10px', borderRadius: '8px',
+                          border: '1.5px solid var(--accent)', background: 'var(--bg)',
+                          color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
+                        }}
+                      />
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                        {food.servingSizeUnit || 'g'}
+                      </span>
+                      {currentServing > 0 && (
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          = {Math.round(food.calories * ratio)} cal
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -356,10 +490,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           {selectedCount > 0 && (
             <div style={{
               padding: '12px 20px 32px', borderTop: '1px solid var(--border)',
-              background: 'var(--bg)',
-              animation: 'slideUpBar 0.2s ease forwards',
+              background: 'var(--bg)', animation: 'slideUpBar 0.2s ease forwards',
             }}>
-              <style>{`@keyframes slideUpBar { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
               <button onClick={handleAddSelected} className="btn-primary">
                 Add {selectedCount} Food{selectedCount !== 1 ? 's' : ''}
               </button>
