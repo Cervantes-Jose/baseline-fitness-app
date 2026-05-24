@@ -921,7 +921,7 @@ const updateSet = (exId, setIdx, field, value) => {
               openRoutine(r);
             }}>
             {renamingRoutine?.id === r.id ? (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setRenamingRoutine(null); }}>
                 <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
                   className="input" style={{ flex: 1, padding: '8px 12px', fontSize: '15px' }}
                   onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setRenamingRoutine(null); }}
