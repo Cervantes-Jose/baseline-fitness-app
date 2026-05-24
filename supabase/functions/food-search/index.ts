@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const USDA_API_KEY = Deno.env.get("USDA_API_KEY") ?? "";
-const USDA_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,41 +15,34 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const query = url.searchParams.get("query");
-    const barcode = url.searchParams.get("barcode");
 
-    if (!query && !barcode) {
+    if (!query) {
       return new Response(
-        JSON.stringify({ error: "query or barcode parameter required" }),
+        JSON.stringify({ error: "query parameter required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    let usdaUrl = "";
-
-    if (barcode) {
-      // Barcode lookup
-      usdaUrl = `${USDA_BASE_URL}/foods/search?query=${encodeURIComponent(barcode)}&api_key=${USDA_API_KEY}&pageSize=5`;
-    } else {
-      // Text search
-      const sanitized = query!.trim().slice(0, 100).replace(/[^a-zA-Z0-9\s%.\-]/g, "");
-      usdaUrl = `${USDA_BASE_URL}/foods/search?query=${encodeURIComponent(sanitized)}&api_key=${USDA_API_KEY}&pageSize=20&dataType=Survey%20(FNDDS),SR%20Legacy,Branded`;
-    }
+    const sanitized = query.trim().slice(0, 100);
+    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=20";
 
     const response = await fetch(usdaUrl);
+    const responseText = await response.text();
 
     if (!response.ok) {
-      throw new Error(`USDA API error: ${response.status}`);
+      throw new Error("USDA API error: " + response.status + " - " + responseText);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
 
-    // Parse and clean the results
     const foods = (data.foods ?? [])
-      .filter((f: any) => f.description && f.foodNutrients)
+      .filter((f: any) => f.description)
       .map((f: any) => {
-        const getNutrient = (id: number) => {
-          const n = f.foodNutrients?.find((n: any) => n.nutrientId === id);
-          return n ? Math.round(n.value * 10) / 10 : 0;
+        const getNutrient = (name: string) => {
+          const n = f.foodNutrients?.find((n: any) =>
+            n.nutrientName?.toLowerCase().includes(name)
+          );
+          return n ? Math.round((n.value ?? 0) * 10) / 10 : 0;
         };
 
         return {
@@ -59,10 +51,10 @@ serve(async (req) => {
           brandOwner: f.brandOwner ?? null,
           servingSize: f.servingSize ?? 100,
           servingSizeUnit: f.servingSizeUnit ?? "g",
-          calories: getNutrient(1008),
-          protein: getNutrient(1003),
-          carbs: getNutrient(1005),
-          fats: getNutrient(1004),
+          calories: getNutrient("energy"),
+          protein: getNutrient("protein"),
+          carbs: getNutrient("carbohydrate"),
+          fats: getNutrient("total lipid"),
         };
       })
       .filter((f: any) => f.calories > 0);
