@@ -190,6 +190,7 @@ const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
 const [profileName] = useState('Jose');
 const [calorieGoal, setCalorieGoal] = useState(2000);
+// eslint-disable-next-line no-unused-vars
 const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
 const [proteinGoal, setProteinGoal] = useState(180);
 const [carbsGoal, setCarbsGoal] = useState(200);
@@ -205,6 +206,7 @@ const [updateAvailable, setUpdateAvailable] = useState(false);
 const toastTimerRef = useRef(null);
 const pendingDeleteRef = useRef(null);
 const toastIdRef = useRef(0);
+// eslint-disable-next-line no-unused-vars
 const greeting = useMemo(() => getGreeting(profileName), [profileName]);
 const showToast = (message, onUndo, onConfirmDelete) => {
   if (pendingDeleteRef.current) pendingDeleteRef.current();
@@ -217,6 +219,7 @@ const showToast = (message, onUndo, onConfirmDelete) => {
     setToast(null);
   }, 3000);
 };
+// eslint-disable-next-line no-unused-vars
 const changeDate = (dir) => {
   const d = new Date(date);
   d.setDate(d.getDate() + dir);

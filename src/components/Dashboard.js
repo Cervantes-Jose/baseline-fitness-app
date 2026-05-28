@@ -196,6 +196,7 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
 
   const today = new Date().toLocaleDateString();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
@@ -329,11 +330,11 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
       </div>
 
       {/* At a Glance chips */}
-      <div style={{ display: 'flex', overflowX: 'auto', paddingTop: 4, paddingBottom: 8, paddingLeft: 20, paddingRight: 20, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <div style={{ display: 'flex', overflowX: 'auto', paddingTop: 4, paddingBottom: 8, paddingLeft: 20, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {chips.map((chip, i) => (
           <div key={i} style={{
             display: 'flex', alignItems: 'center',
-            gap: 8, marginRight: 20, flexShrink: 0,
+            gap: 8, marginRight: 24, flexShrink: 0,
           }}>
             {chip.icon}
             <div>
@@ -342,6 +343,7 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
             </div>
           </div>
         ))}
+        <div style={{ minWidth: 20, flexShrink: 0 }} />
       </div>
 
       {/* Two Circle Tiles */}
