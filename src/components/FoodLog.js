@@ -333,6 +333,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   return (
     <div style={{ margin: '-20px' }}>
 
+      {/* Calendar button — fixed to App header's right slot */}
+      <button onClick={() => setShowCalendar(true)} style={{
+        position: 'fixed', top: 0, right: 0, zIndex: 150,
+        padding: '24px 20px 16px',
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
+      }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2"/>
+          <path d="M16 2v4M8 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <path d="M3 10h18" stroke="currentColor" strokeWidth="2"/>
+        </svg>
+      </button>
+
       {/* ─── DATE NAV ───────────────────────────────────────── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -355,10 +369,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         padding: '12px 16px',
         scrollbarWidth: 'none', msOverflowStyle: 'none',
       }}>
-        <MacroCircle value={totals.calories} goal={calorieGoal} color="#F97316" trackColor="#FED7AA" label="Calories" isCalories />
-        <MacroCircle value={totals.protein}  goal={proteinGoal} color="#3B82F6" trackColor="#DBEAFE" label="Protein" />
-        <MacroCircle value={totals.fats}     goal={fatsGoal}    color="#EAB308" trackColor="#FEF9C3" label="Fat" />
-        <MacroCircle value={totals.carbs}    goal={carbsGoal}   color="#22C55E" trackColor="#DCFCE7" label="Carbs" />
+        <MacroCircle value={totals.calories} goal={calorieGoal} color="#3B82F6" trackColor="#DBEAFE" label="Calories" isCalories />
+        <MacroCircle value={totals.protein}  goal={proteinGoal} color="#22C55E" trackColor="#DCFCE7" label="Protein" />
+        <MacroCircle value={totals.fats}     goal={fatsGoal}    color="#3B82F6" trackColor="#DBEAFE" label="Fat" />
+        <MacroCircle value={totals.carbs}    goal={carbsGoal}   color="#EAB308" trackColor="#FEF9C3" label="Carbs" />
         <div style={{ minWidth: 4, flexShrink: 0 }} />
       </div>
 

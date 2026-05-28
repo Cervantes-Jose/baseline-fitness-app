@@ -373,7 +373,7 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
             <span style={{ fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <CircleRing value={protein} goal={proteinGoal} size={110} strokeWidth={10} color="#A855F7" trackColor="#EDE9FE">
+            <CircleRing value={protein} goal={proteinGoal} size={110} strokeWidth={10} color="#22C55E" trackColor="#DCFCE7">
               <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{protein}</div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
             </CircleRing>

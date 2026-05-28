@@ -2,10 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
-import Workouts from './components/Workouts';
 import Measurements from './components/Measurements';
-import WorkoutDashboard from './components/WorkoutDashboard';
-import ExerciseDatabase from './components/ExerciseDatabase';
+import WorkoutHome from './components/WorkoutHome';
 import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
 
@@ -295,11 +293,23 @@ const changeDate = (dir) => {
       case 'food-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
       case 'food-nutrients': return <ComingSoon label="Nutrients" />;
-      case 'workout-dashboard': return <WorkoutDashboard profileName={profileName} />;
-      case 'workout-exercises': return <div className="content"><ExerciseDatabase /></div>;
-      case 'workout-measurements': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
-      case 'workout-start': return <div className="content"><Workouts key="workout-start" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} workoutExpanded={workoutExpanded} onCollapse={() => setWorkoutExpanded(false)} onWorkoutStart={() => setWorkoutExpanded(true)} onExpand={() => setWorkoutExpanded(true)} showToast={showToast} resetKey={workoutsResetKey} /></div>;
-      case 'workout-history': return <div className="content"><Workouts key="workout-history" activeWorkout={activeWorkout} setActiveWorkout={setActiveWorkout} workoutSeconds={workoutSeconds} initialView="history" showToast={showToast} /></div>;
+      case 'workout-start':
+      case 'workout-exercises':
+      case 'workout-measurements':
+      case 'workout-history':
+        return <WorkoutHome
+          appActiveTab={activeTab}
+          activeWorkout={activeWorkout}
+          setActiveWorkout={setActiveWorkout}
+          workoutSeconds={workoutSeconds}
+          workoutExpanded={workoutExpanded}
+          onCollapse={() => setWorkoutExpanded(false)}
+          onWorkoutStart={() => setWorkoutExpanded(true)}
+          onExpand={() => setWorkoutExpanded(true)}
+          showToast={showToast}
+          resetKey={workoutsResetKey}
+          metricSystem={metricSystem}
+        />;
       case 'measurement-add': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
       case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;

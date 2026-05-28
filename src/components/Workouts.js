@@ -313,6 +313,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [selectedRoutines, setSelectedRoutines] = useState(new Set());
   const [exerciseEditMode, setExerciseEditMode] = useState(false);
   const [selectedExercises, setSelectedExercises] = useState(new Set());
+  const [lastPerformed, setLastPerformed] = useState({});
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [exercisePickerSearch, setExercisePickerSearch] = useState('');
@@ -322,6 +323,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [pickerDragY, setPickerDragY] = useState(0);
   const pickerDragStartY = useRef(null);
   const pickerSearchInputRef = useRef(null);
+
+  const daysAgoText = (dateStr) => {
+    const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days} days ago`;
+  };
 
   useEffect(() => {
     sessionLogRef.current = sessionLog;
@@ -382,6 +390,18 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         }
       });
     }
+
+    const lastPerformedMap = {};
+    if (sessionExData) {
+      sessionExData.forEach(e => {
+        const rid = e.workout_sessions?.routine_id;
+        const ts = e.workout_sessions?.created_at;
+        if (rid && ts && (!lastPerformedMap[rid] || ts > lastPerformedMap[rid])) {
+          lastPerformedMap[rid] = ts;
+        }
+      });
+    }
+    setLastPerformed(lastPerformedMap);
 
     const routinesWithExercises = routineData.map(r => ({
       ...r,
@@ -954,6 +974,9 @@ const updateSet = (exId, setIdx, field, value) => {
                 <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid var(--blue-200)', borderRadius: '20px', padding: '2px 10px' }}>
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
                 </span>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  {lastPerformed[r.id] ? `Last: ${daysAgoText(lastPerformed[r.id])}` : 'Never performed'}
+                </div>
               </>
             )}
           </div>
