@@ -54,7 +54,7 @@ function getHeaderTitle(activeTab) {
     'food': 'Calories',
     'food-dashboard': 'Calories',
     'food-recipes': 'Recipes',
-    'food-log': 'Calories',
+    'food-log': 'Food Log',
     'food-nutrients': 'Nutrients',
     'food-goals': 'Goals',
     'workouts': 'Workouts',

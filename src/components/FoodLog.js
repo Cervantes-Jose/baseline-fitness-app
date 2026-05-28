@@ -5,9 +5,9 @@ const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/f
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => {
-  const hour = i % 12 === 0 ? 12 : i % 12;
+  const h = i % 12 === 0 ? 12 : i % 12;
   const ampm = i < 12 ? 'AM' : 'PM';
-  return { label: `${hour}:00 ${ampm}`, value: i };
+  return { label: `${h} ${ampm}`, range: `${h}:00 ${ampm} – ${h}:59 ${ampm}`, value: i };
 });
 
 const PLACEHOLDER_FOODS = [
@@ -28,51 +28,145 @@ const PLACEHOLDER_FOODS = [
   { name: 'Protein Shake',   calories: 150, protein: 25, carbs: 8,  fats: 3  },
 ];
 
-function CircleProgress({ value, goal, size = 90, strokeWidth = 8, color = 'var(--accent)' }) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(value / goal, 1);
-  const offset = circumference - progress * circumference;
+const FILTER_TABS = ['Favorites', 'Recipes', 'Recents', 'Quick Add', 'Meals', 'History'];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+// ─── CALENDAR MODAL ─────────────────────────────────────────
+function CalendarModal({ selected, onSelect, onClose }) {
+  const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+  const year = month.getFullYear();
+  const monthIdx = month.getMonth();
+  const firstDay = new Date(year, monthIdx, 1).getDay();
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  const todayStr = new Date().toDateString();
+
+  const days = [];
+  for (let i = 0; i < firstDay; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, monthIdx, d));
+
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--border)" strokeWidth={strokeWidth} />
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
-        strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
-    </svg>
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500 }} />
+      <div style={{
+        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: 480,
+        background: 'var(--card)', borderRadius: '24px 24px 0 0',
+        padding: '12px 20px 44px', zIndex: 501,
+        boxShadow: '0 -4px 24px rgba(0,0,0,0.12)',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 20px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <button onClick={() => setMonth(new Date(year, monthIdx - 1, 1))} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary)', fontSize: 22, padding: '4px 10px', lineHeight: 1,
+          }}>‹</button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
+            {MONTH_NAMES[monthIdx]} {year}
+          </span>
+          <button onClick={() => setMonth(new Date(year, monthIdx + 1, 1))} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary)', fontSize: 22, padding: '4px 10px', lineHeight: 1,
+          }}>›</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 6 }}>
+          {['S','M','T','W','T','F','S'].map((d, i) => (
+            <div key={i} style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, padding: '2px 0' }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          {days.map((d, i) => {
+            if (!d) return <div key={i} />;
+            const isToday = d.toDateString() === todayStr;
+            const isSel = d.toDateString() === selected.toDateString();
+            return (
+              <button key={i} onClick={() => onSelect(d)} style={{
+                aspectRatio: '1', borderRadius: '50%', border: 'none',
+                background: isSel ? 'var(--accent)' : isToday ? 'var(--accent-light)' : 'transparent',
+                color: isSel ? '#fff' : isToday ? 'var(--accent)' : 'var(--text-primary)',
+                fontWeight: isSel || isToday ? 700 : 400,
+                fontSize: 14, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{d.getDate()}</button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
+// ─── MACRO CIRCLE TILE ───────────────────────────────────────
+function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
+  const size = 80;
+  const sw = 7;
+  const radius = (size - sw) / 2;
+  const circ = 2 * Math.PI * radius;
+  const progress = Math.min(goal > 0 ? value / goal : 0, 1);
+  const offset = circ - progress * circ;
+  const pct = Math.round(progress * 100);
+
+  return (
+    <div style={{
+      background: 'var(--card)', borderRadius: 16, padding: '12px 10px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      flexShrink: 0, minWidth: 104,
+      border: '1px solid var(--border)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', position: 'absolute', top: 0, left: 0 }}>
+          <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={trackColor} strokeWidth={sw} />
+          <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth={sw}
+            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, textAlign: 'center' }}>
+            {isCalories ? value : `${value}g`}
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1 }}>
+            /{isCalories ? goal : `${goal}g`}
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{pct}%</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+// ─── FOOD LOG ────────────────────────────────────────────────
 function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60 }) {
   const currentHour = new Date().getHours();
-  const today = new Date().toLocaleDateString();
+
+  const [date, setDate] = useState(new Date());
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('Recents');
   const [foods, setFoods] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Add Food screen
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFoods, setSelectedFoods] = useState({});
   const [recentFoodList, setRecentFoodList] = useState([]);
 
-  // Search state
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const searchDebounceRef = useRef(null);
 
-  useEffect(() => {
-    loadFoods();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const isToday = date.toDateString() === new Date().toDateString();
+  const dateStr = date.toLocaleDateString();
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadFoods(); }, [date]);
 
   useEffect(() => {
     if (showAddFoodScreen) loadRecentFoods();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
 
-  // Debounced USDA search
   useEffect(() => {
     if (!showAddFoodScreen) return;
     const query = searchQuery.trim();
@@ -94,7 +188,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { data, error } = await supabase
       .from('food_entries')
       .select('*')
-      .eq('date', today)
+      .eq('date', dateStr)
       .order('created_at', { ascending: true });
     if (error) { console.error(error); setLoading(false); return; }
     const grouped = {};
@@ -135,12 +229,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     try {
       const res = await fetch(
         `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'apikey': SUPABASE_ANON_KEY,
-          },
-        }
+        { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY } }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -165,10 +254,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     );
   };
 
-  const openAddFood = (hour) => {
-    setAddFoodHour(hour);
-    setShowAddFoodScreen(true);
-  };
+  const openAddFood = (hour) => { setAddFoodHour(hour); setShowAddFoodScreen(true); };
 
   const closeAddFood = () => {
     setShowAddFoodScreen(false);
@@ -182,20 +268,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setSelectedFoods(prev => {
       const key = food.name;
       const next = { ...prev };
-      if (next[key]) {
-        delete next[key];
-      } else {
-        next[key] = { ...food, _serving: food.servingSize ?? null };
-      }
+      if (next[key]) { delete next[key]; }
+      else { next[key] = { ...food, _serving: food.servingSize ?? null }; }
       return next;
     });
   };
 
   const updateServing = (foodName, value) => {
-    setSelectedFoods(prev => ({
-      ...prev,
-      [foodName]: { ...prev[foodName], _serving: value },
-    }));
+    setSelectedFoods(prev => ({ ...prev, [foodName]: { ...prev[foodName], _serving: value } }));
   };
 
   const handleAddSelected = async () => {
@@ -212,7 +292,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         carbs: Math.round(Number(f.carbs) * ratio),
         fats: Math.round(Number(f.fats) * ratio),
         hour: addFoodHour,
-        date: today,
+        date: dateStr,
       };
     });
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
@@ -234,84 +314,175 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     fats: acc.fats + Number(f.fats),
   }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
 
+  const changeDate = (dir) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + dir);
+    setDate(d);
+  };
+
+  const navDateText = isToday
+    ? `Today, ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
   const selectedCount = Object.keys(selectedFoods).length;
   const isSearchActive = searchQuery.trim().length > 0;
   const displayedFoods = isSearchActive && !searchError ? (searchResults || []) : recentFoodList;
   const listLabel = isSearchActive ? 'Results' : 'Recent';
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
-
+  // Break out of the .content wrapper's 20px padding
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ margin: '-20px' }}>
 
-      {/* Summary Tile */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '40%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CircleProgress value={totals.calories} goal={calorieGoal} />
-              <div style={{ position: 'absolute', textAlign: 'center' }}>
-                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1 }}>{totals.calories}</div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>kcal</div>
-              </div>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>of {calorieGoal}</div>
-          </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {[
-              { label: 'PROTEIN', consumed: totals.protein, goal: proteinGoal },
-              { label: 'CARBS',   consumed: totals.carbs,   goal: carbsGoal   },
-              { label: 'FATS',    consumed: totals.fats,    goal: fatsGoal    },
-            ].map(({ label, consumed, goal }) => (
-              <div key={label}>
-                <div style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', color: 'var(--text-primary)', marginBottom: '4px' }}>{label}</div>
-                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--border)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: '3px', background: 'var(--accent)', width: `${Math.min(goal > 0 ? consumed / goal * 100 : 0, 100)}%`, transition: 'width 0.4s ease' }} />
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '2px' }}>{consumed}g / {goal}g</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* ─── DATE NAV ───────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '4px 20px 8px',
+      }}>
+        <button onClick={() => changeDate(-1)} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,
+        }}>‹</button>
+        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--accent)' }}>{navDateText}</span>
+        <button onClick={() => changeDate(1)} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,
+        }}>›</button>
       </div>
 
-      {/* Hour Cards */}
-      {HOURS.map(h => {
-        const hourFoods = foods[h.value] || [];
-        const isNow = h.value === currentHour;
-        return (
-          <div key={h.value} className="card" style={{
-            borderLeft: isNow ? '3px solid #22C55E' : undefined,
-            background: isNow ? 'var(--accent-light)' : undefined,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: '600', fontSize: '15px', color: 'var(--text-primary)' }}>{h.label}</span>
-              <button onClick={() => openAddFood(h.value)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: '600', fontSize: '13px', padding: '4px 0' }}>
-                + Add Food
-              </button>
-            </div>
-            {hourFoods.length > 0 && (
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {hourFoods.map(f => (
-                  <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{f.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{f.calories} cal · {f.protein}g P · {f.carbs}g C · {f.fats}g F</div>
-                    </div>
-                    <button onClick={() => deleteFood(f.id, h.value)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px', fontSize: '18px', lineHeight: 1, flexShrink: 0 }}>
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* ─── MACRO CIRCLES ──────────────────────────────────── */}
+      <div style={{
+        display: 'flex', overflowX: 'auto', gap: 10,
+        padding: '12px 16px',
+        scrollbarWidth: 'none', msOverflowStyle: 'none',
+      }}>
+        <MacroCircle value={totals.calories} goal={calorieGoal} color="#F97316" trackColor="#FED7AA" label="Calories" isCalories />
+        <MacroCircle value={totals.protein}  goal={proteinGoal} color="#3B82F6" trackColor="#DBEAFE" label="Protein" />
+        <MacroCircle value={totals.fats}     goal={fatsGoal}    color="#EAB308" trackColor="#FEF9C3" label="Fat" />
+        <MacroCircle value={totals.carbs}    goal={carbsGoal}   color="#22C55E" trackColor="#DCFCE7" label="Carbs" />
+        <div style={{ minWidth: 4, flexShrink: 0 }} />
+      </div>
 
-      {/* Add Food Screen */}
+      {/* ─── FILTER TABS ────────────────────────────────────── */}
+      <style>{`
+        .fl-tab-inactive { background: #F3F4F6; }
+        [data-theme="dark"] .fl-tab-inactive { background: var(--border); }
+      `}</style>
+      <div style={{
+        display: 'flex', overflowX: 'auto', gap: 8,
+        padding: '4px 16px 12px',
+        scrollbarWidth: 'none', msOverflowStyle: 'none',
+      }}>
+        {FILTER_TABS.map(tab => {
+          const isActive = activeFilter === tab;
+          return (
+            <button key={tab}
+              className={isActive ? '' : 'fl-tab-inactive'}
+              onClick={() => {
+                if (tab === 'Recents') setActiveFilter(tab);
+                else showToast('Coming soon', null, null);
+              }} style={{
+                flexShrink: 0, padding: '7px 16px', borderRadius: 20,
+                border: 'none',
+                background: isActive ? 'var(--accent)' : undefined,
+                color: isActive ? '#fff' : 'var(--text-primary)',
+                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+              }}>{tab}</button>
+          );
+        })}
+        <div style={{ minWidth: 4, flexShrink: 0 }} />
+      </div>
+
+      {/* ─── HOUR TIMELINE ──────────────────────────────────── */}
+      {loading ? (
+        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Loading...</p>
+      ) : (
+        <div style={{ position: 'relative', paddingBottom: 40 }}>
+          {/* Vertical connecting line through dot centers */}
+          <div style={{
+            position: 'absolute', left: 28, top: 0, bottom: 0,
+            width: 1, background: 'var(--border)', zIndex: 0,
+          }} />
+
+          {HOURS.map(h => {
+            const hourFoods = foods[h.value] || [];
+            const isNow = isToday && h.value === currentHour;
+            const [num, ap] = h.label.split(' ');
+            return (
+              <React.Fragment key={h.value}>
+                {/* [dot col 16px] [hour label 44px] [tile] */}
+                <div style={{ display: 'flex', alignItems: 'center', padding: '3px 20px', gap: 8 }}>
+                  {/* Dot column — line runs through its center */}
+                  <div style={{
+                    width: 16, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    position: 'relative', zIndex: 1,
+                  }}>
+                    <div style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      border: '2px solid var(--accent)',
+                      background: 'var(--card)',
+                    }} />
+                  </div>
+
+                  {/* Hour label — two lines */}
+                  <div style={{ width: 44, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: isNow ? 'var(--accent)' : 'var(--text-primary)', lineHeight: 1 }}>{num}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1, marginTop: 2 }}>{ap}</span>
+                  </div>
+
+                  {/* Card */}
+                  <div style={{
+                    flex: 1, background: isNow ? 'var(--accent-light)' : 'var(--card)',
+                    borderRadius: 12,
+                    border: isNow ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    padding: '14px 16px',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={() => openAddFood(h.value)} style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0,
+                      }}>+ Add Food</button>
+                    </div>
+                    {hourFoods.length > 0 && (
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {hourFoods.map(f => (
+                          <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{f.name}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{f.calories} cal · {f.protein}g P</div>
+                            </div>
+                            <button onClick={() => deleteFood(f.id, h.value)} style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'var(--text-muted)', fontSize: 18, padding: '2px 4px',
+                              lineHeight: 1, flexShrink: 0,
+                            }}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section dividers after 5 AM and 11 AM */}
+                {(h.value === 5 || h.value === 11) && (
+                  <div style={{ margin: '4px 20px 4px 96px', borderTop: '1px dashed var(--border)' }} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ─── CALENDAR MODAL ─────────────────────────────────── */}
+      {showCalendar && (
+        <CalendarModal
+          selected={date}
+          onSelect={d => { setDate(d); setShowCalendar(false); }}
+          onClose={() => setShowCalendar(false)}
+        />
+      )}
+
+      {/* ─── ADD FOOD SCREEN ────────────────────────────────── */}
       {showAddFoodScreen && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
@@ -324,7 +495,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             @keyframes spin        { to { transform: rotate(360deg); } }
           `}</style>
 
-          {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', padding: '20px 20px 12px', gap: '12px', background: 'var(--bg)' }}>
             <button onClick={closeAddFood} style={{
               background: 'none', border: 'none', cursor: 'pointer',
@@ -340,7 +510,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             </div>
           </div>
 
-          {/* Search bar */}
           <div style={{ padding: '0 20px 12px', position: 'relative' }}>
             <input
               placeholder="Search foods..."
@@ -356,10 +525,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               ) : (
-                <button
-                  onClick={() => showToast('Coming Soon', null, null)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}
-                >
+                <button onClick={() => showToast('Coming Soon', null, null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="2"  y="4" width="2" height="16"/>
                     <rect x="6"  y="4" width="1" height="16"/>
@@ -373,16 +540,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             </div>
           </div>
 
-          {/* Scrollable content */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-
-            {/* Favorites + Recipes tiles — hidden while searching */}
             {!isSearchActive && (
               <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                {[
-                  { label: 'Favorites', icon: '★' },
-                  { label: 'Recipes',   icon: '📖' },
-                ].map(({ label, icon }) => (
+                {[{ label: 'Favorites', icon: '★' }, { label: 'Recipes', icon: '📖' }].map(({ label, icon }) => (
                   <button key={label} onClick={() => showToast('Coming Soon', null, null)} style={{
                     flex: 1, background: 'var(--accent-light)', border: '1px solid var(--border)',
                     borderRadius: '16px', padding: '16px 12px', cursor: 'pointer', textAlign: 'left',
@@ -400,33 +561,26 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               </div>
             )}
 
-            {/* Search error fallback */}
             {searchError && (
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
                 {searchError} — showing recent foods
               </p>
             )}
 
-            {/* List section header */}
             {(!isSearchActive || searchError || (searchResults && searchResults.length > 0)) && (
               <p className="section-title" style={{ marginBottom: '4px' }}>{searchError ? 'Recent' : listLabel}</p>
             )}
 
-            {/* No results state */}
             {isSearchActive && !searchLoading && !searchError && searchResults && searchResults.length === 0 && (
-              <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>
-                No results found
-              </p>
+              <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No results found</p>
             )}
 
-            {/* Food list */}
             {displayedFoods.map(food => {
               const isSelected = !!selectedFoods[food.name];
               const sel = selectedFoods[food.name];
               const currentServing = sel ? Number(sel._serving) : 0;
               const base = food.servingSize;
               const ratio = (base && currentServing > 0) ? currentServing / base : 1;
-
               return (
                 <div key={food.name + (food.brandOwner || '')}>
                   <div onClick={() => toggleFood(food)} style={{
@@ -454,7 +608,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     </div>
                   </div>
 
-                  {/* Serving size row — only for foods with servingSize (USDA results) */}
                   {isSelected && base != null && (
                     <div onClick={e => e.stopPropagation()} style={{
                       display: 'flex', alignItems: 'center', gap: '10px',
@@ -462,8 +615,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                       borderBottom: '1px solid var(--border)',
                     }}>
                       <input
-                        type="number"
-                        inputMode="decimal"
+                        type="number" inputMode="decimal"
                         value={sel._serving ?? ''}
                         onChange={e => updateServing(food.name, e.target.value)}
                         style={{
@@ -472,13 +624,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                           color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
                         }}
                       />
-                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                        {food.servingSizeUnit || 'g'}
-                      </span>
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{food.servingSizeUnit || 'g'}</span>
                       {currentServing > 0 && (
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          = {Math.round(food.calories * ratio)} cal
-                        </span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>= {Math.round(food.calories * ratio)} cal</span>
                       )}
                     </div>
                   )}
@@ -487,7 +635,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             })}
           </div>
 
-          {/* Bottom action bar */}
           {selectedCount > 0 && (
             <div style={{
               padding: '12px 20px 32px', borderTop: '1px solid var(--border)',
