@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
-import Measurements from './components/Measurements';
 import WorkoutHome from './components/WorkoutHome';
 import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
@@ -12,7 +11,6 @@ const MAIN_TABS = [
   { id: 'dashboard', label: 'Home', icon: '⌂' },
   { id: 'food-log', label: 'Add Food', icon: '+' },
   { id: 'workout-start', label: 'Workout', icon: '▸' },
-  { id: 'measurement-add', label: 'Measure', icon: '◎' },
   { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
@@ -46,7 +44,6 @@ function getHeaderTitle(activeTab) {
     'food-nutrients': 'Nutrients',
     'food-goals': 'Goals',
     'workout-start': 'Workouts',
-    'measurement-add': 'Add Measurement',
     'profile': 'Profile',
     'settings': 'Settings',
   };
@@ -298,7 +295,6 @@ const changeDate = (dir) => {
           resetKey={workoutsResetKey}
           metricSystem={metricSystem}
         />;
-      case 'measurement-add': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
       case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onMenuOpen={() => setSidePanel(true)} />;

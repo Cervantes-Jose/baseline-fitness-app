@@ -123,23 +123,27 @@ function WorkoutHome({
       </div>
 
       {/* Tab pills */}
+      <style>{`
+        .fl-tab-inactive { background: #F3F4F6; }
+        [data-theme="dark"] .fl-tab-inactive { background: var(--border); }
+      `}</style>
       <div style={{ display: 'flex', gap: '8px', padding: '12px 20px 4px', overflowX: 'auto', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
         {TABS.map(t => (
           <button
             key={t}
+            className={tab === t ? '' : 'fl-tab-inactive'}
             onClick={() => setTab(t)}
             style={{
-              padding: '8px 16px',
-              borderRadius: '20px',
-              border: tab === t ? 'none' : '1px solid var(--border)',
-              background: tab === t ? 'var(--accent)' : 'var(--card)',
-              color: tab === t ? 'white' : 'var(--text-secondary)',
-              fontSize: '14px',
-              fontWeight: '600',
+              padding: '7px 16px',
+              borderRadius: 20,
+              border: 'none',
+              background: tab === t ? 'var(--accent)' : undefined,
+              color: tab === t ? '#fff' : 'var(--text-primary)',
+              fontSize: 13,
+              fontWeight: 600,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               flexShrink: 0,
-              boxShadow: tab === t ? 'none' : '0 1px 4px rgba(0,0,0,0.06)',
             }}
           >
             {t}

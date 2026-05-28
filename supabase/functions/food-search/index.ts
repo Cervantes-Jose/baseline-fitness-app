@@ -24,7 +24,7 @@ serve(async (req) => {
     }
 
     const sanitized = query.trim().slice(0, 100);
-    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=20";
+    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=25&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS),Branded";
 
     const response = await fetch(usdaUrl);
     const responseText = await response.text();
@@ -35,8 +35,28 @@ serve(async (req) => {
 
     const data = JSON.parse(responseText);
 
+    const dataTypePriority: Record<string, number> = {
+      "Foundation": 0,
+      "SR Legacy": 1,
+      "Survey (FNDDS)": 2,
+      "Branded": 3,
+    };
+
+    const isAllCaps = (s: string) => s === s.toUpperCase() && /[A-Z]/.test(s);
+
+    const toTitleCase = (s: string) =>
+      s.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
     const foods = (data.foods ?? [])
-      .filter((f: any) => f.description)
+      .filter((f: any) => {
+        const desc: string = f.description ?? "";
+        return desc.length >= 4;
+      })
+      .sort((a: any, b: any) => {
+        const pa = dataTypePriority[a.dataType] ?? 4;
+        const pb = dataTypePriority[b.dataType] ?? 4;
+        return pa - pb;
+      })
       .map((f: any) => {
         const getNutrient = (name: string) => {
           const n = f.foodNutrients?.find((n: any) =>
@@ -45,9 +65,12 @@ serve(async (req) => {
           return n ? Math.round((n.value ?? 0) * 10) / 10 : 0;
         };
 
+        const rawName: string = f.description ?? "";
+        const cleanedName = isAllCaps(rawName) ? toTitleCase(rawName) : rawName.trim();
+
         return {
           fdcId: f.fdcId,
-          name: f.description,
+          name: cleanedName,
           brandOwner: f.brandOwner ?? null,
           servingSize: f.servingSize ?? 100,
           servingSizeUnit: f.servingSizeUnit ?? "g",

@@ -76,6 +76,10 @@ function Measurements({ metricSystem = 'imperial' }) {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const [renamingMeasurement, setRenamingMeasurement] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  const [entryMenuOpen, setEntryMenuOpen] = useState(null);
+  const [entryMenuPosition, setEntryMenuPosition] = useState({ top: 0, right: 0 });
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [editValue, setEditValue] = useState('');
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -177,6 +181,28 @@ function Measurements({ metricSystem = 'imperial' }) {
     setMeasurements(prev => prev.map(m => m.id === renamingMeasurement.id ? { ...m, name: renameValue.trim() } : m));
     setRenamingMeasurement(null);
     setRenameValue('');
+  };
+
+  const deleteEntry = async (entryId) => {
+    setActiveMeasurement(prev => ({ ...prev, entries: prev.entries.filter(e => e.id !== entryId) }));
+    setMeasurements(prev => prev.map(m =>
+      m.id === activeMeasurement.id ? { ...m, entries: m.entries.filter(e => e.id !== entryId) } : m
+    ));
+    setEntryMenuOpen(null);
+    await supabase.from('measurement_entries').delete().eq('id', entryId);
+  };
+
+  const saveEditEntry = async (entry) => {
+    if (!editValue.trim()) return;
+    const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id);
+    if (error) { console.error(error); return; }
+    const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: editValue } : e);
+    setActiveMeasurement(prev => ({ ...prev, entries: updater(prev.entries) }));
+    setMeasurements(prev => prev.map(m =>
+      m.id === activeMeasurement.id ? { ...m, entries: updater(m.entries) } : m
+    ));
+    setEditingEntry(null);
+    setEditValue('');
   };
 
   const logEntry = async () => {
@@ -375,6 +401,79 @@ function Measurements({ metricSystem = 'imperial' }) {
           </div>
         </div>
       </div>
+      {activeMeasurement.entries.length > 0 && (
+        <div className="card">
+          <p className="section-title">History</p>
+          {entryMenuOpen && <div onClick={() => setEntryMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />}
+          {entryMenuOpen && (
+            <div style={{
+              position: 'fixed', top: entryMenuPosition.top, right: entryMenuPosition.right,
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: '12px', overflow: 'hidden',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 300, minWidth: '120px',
+            }}>
+              <button onClick={() => {
+                const entry = activeMeasurement.entries.find(e => e.id === entryMenuOpen);
+                if (entry) { setEditingEntry(entry.id); setEditValue(String(entry.value)); }
+                setEntryMenuOpen(null);
+              }} style={{
+                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
+                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
+                fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)',
+              }}>Edit</button>
+              <button onClick={() => deleteEntry(entryMenuOpen)} style={{
+                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
+                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
+                fontWeight: '500', color: '#ff4444',
+              }}>Delete</button>
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px' }}>
+            {[...activeMeasurement.entries]
+              .sort((a, b) => {
+                const pd = s => s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00').getTime() : new Date(s).getTime();
+                return pd(b.date) - pd(a.date);
+              })
+              .map((entry, i, arr) => {
+                const s = entry.date;
+                const dateLabel = !s ? '' : /^\d{4}-\d{2}-\d{2}$/.test(s)
+                  ? new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : s;
+                const isEditing = editingEntry === entry.id;
+                return (
+                  <div key={entry.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '10px 0',
+                    borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+                  }}>
+                    <span style={{ flex: 1, fontSize: '14px', color: 'var(--text-secondary)' }}>{dateLabel}</span>
+                    {isEditing ? (
+                      <>
+                        <input type="number" inputMode="decimal" value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          autoFocus
+                          style={{ width: '72px', padding: '4px 8px', borderRadius: '8px', border: '1.5px solid var(--accent)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }} />
+                        <button onClick={() => saveEditEntry(entry)} style={{ padding: '4px 10px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Save</button>
+                        <button onClick={() => { setEditingEntry(null); setEditValue(''); }} style={{ padding: '4px 10px', background: 'none', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                          {entry.value}{entry.unit ? ` ${entry.unit}` : ''}
+                        </span>
+                        <button onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setEntryMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                          setEntryMenuOpen(entryMenuOpen === entry.id ? null : entry.id);
+                        }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '4px 6px', letterSpacing: '2px', flexShrink: 0, lineHeight: 1 }}>···</button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
