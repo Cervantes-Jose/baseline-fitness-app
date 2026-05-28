@@ -287,7 +287,7 @@ const changeDate = (dir) => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
+      case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onMenuOpen={() => setSidePanel(true)} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} /></div>;
       case 'food-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'food-recipes': return <ComingSoon label="Recipes" />;
@@ -300,24 +300,24 @@ const changeDate = (dir) => {
       case 'measurement-add': return <div className="content"><Measurements metricSystem={metricSystem} /></div>;
       case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
-      default: return <Dashboard date={date} profileName={profileName} calorieGoal={calorieGoal} stepsGoal={stepsGoal} onDateChange={changeDate} />;
+      default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onMenuOpen={() => setSidePanel(true)} />;
     }
   };
 
   return (
     <div className="app">
-      {/* Header */}
-      <div className="header">
-        <button className="header-btn" onClick={() => setSidePanel(true)}>
-          <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
-            <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </button>
-        <span className="header-title">
-  {activeTab === 'dashboard' ? greeting : getHeaderTitle(activeTab)}
-</span>
-        <div style={{ width: 32 }} />
-      </div>
+      {/* Header — hidden on dashboard (Dashboard renders its own) */}
+      {activeTab !== 'dashboard' && (
+        <div className="header">
+          <button className="header-btn" onClick={() => setSidePanel(true)}>
+            <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
+              <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <span className="header-title">{getHeaderTitle(activeTab)}</span>
+          <div style={{ width: 32 }} />
+        </div>
+      )}
 
 
       {/* Update banner */}

@@ -34,6 +34,17 @@ npm test -- --watchAll=false  # single run
 7. **Never hardcode API keys, secrets, or service role keys in frontend code**
 8. **Environment variables in frontend code are not secure** — they are visible to anyone. Only use them on the server side for sensitive values
 
+## Supabase Table Creation (required for every new table)
+
+Every new table must include all four steps. Never skip any of them:
+
+1. CREATE the table
+2. GRANT access: grant select, insert, update, delete on public.your_table to anon, authenticated, service_role;
+3. ENABLE RLS: alter table public.your_table enable row level security;
+4. ADD POLICY: create policy "Allow all for now" on public.your_table for all using (true) with check (true);
+
+Missing the GRANT step causes a 403 permission denied error from the Data API.
+
 ## RLS Audit Scenarios (run these checks whenever auth or database rules are added or changed)
 
 Before any Supabase RLS policy is considered done, verify these specific scenarios:

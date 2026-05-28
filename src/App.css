@@ -24,8 +24,8 @@
   --red: #EF4444;
   --green: #22C55E;
 
-  --bg: var(--blue-50);
-  --card: var(--white);
+  --bg: #F8FAFC;
+  --card: #FFFFFF;
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-500);
   --text-muted: var(--gray-400);
@@ -56,7 +56,7 @@
 }
 
 body {
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   color: var(--text-primary);
   min-height: 100vh;
@@ -361,6 +361,9 @@ border-bottom: none;
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Hide scrollbar for chip rows */
+.chips-scroll::-webkit-scrollbar { display: none; }
 
 /* Animations */
 @keyframes fadeIn {

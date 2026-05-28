@@ -1,257 +1,418 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  rectSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
-
-function CircleProgress({ value, goal, size = 100, strokeWidth = 8, color = '#5BA4CF' }) {
+// ─── CIRCLE PROGRESS ────────────────────────────────────────
+function CircleRing({ value, goal, size = 110, strokeWidth = 10, color, trackColor, children }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(value / goal, 1);
+  const progress = Math.min(goal > 0 ? value / goal : 0, 1);
   const offset = circumference - progress * circumference;
-
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke="#DBEAFE" strokeWidth={strokeWidth} />
-      <circle cx={size / 2} cy={size / 2} r={radius}
-        fill="none" stroke={color} strokeWidth={strokeWidth}
-        strokeDasharray={circumference} strokeDashoffset={offset}
-        strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
-    </svg>
-  );
-}
-
-const DEFAULT_TILE_ORDER = ['calories', 'steps', 'weight', 'bodyfat'];
-const TILE_ORDER_KEY = 'dashboard-tile-order';
-
-function SortableTile({ id, style: tileStyle, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 10 : 1, position: 'relative', touchAction: 'none' }}
-      {...attributes}
-      {...listeners}
-    >
-      <div className="tile" style={{
-        ...tileStyle,
-        transform: isDragging ? 'scale(1.05)' : 'scale(1)',
-        boxShadow: isDragging
-          ? '0 16px 48px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.14)'
-          : undefined,
-        transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease',
-        willChange: 'transform',
-        cursor: isDragging ? 'grabbing' : 'grab',
-      }}>
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', position: 'absolute', top: 0, left: 0 }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={circumference} strokeDashoffset={offset}
+          strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         {children}
       </div>
     </div>
   );
 }
 
-function Dashboard({ date, profileName, calorieGoal, stepsGoal, onDateChange }) {
-  const [calories, setCalories] = useState(0);
-  const [weight, setWeight] = useState(null);
-  const [bodyFat, setBodyFat] = useState(null);
-  
-
-  const steps = null; // placeholder until Samsung/Apple Health connected
-
-  const [tileOrder, setTileOrder] = useState(() => {
-    try {
-      const saved = localStorage.getItem(TILE_ORDER_KEY);
-      return saved ? JSON.parse(saved) : DEFAULT_TILE_ORDER;
-    } catch {
-      return DEFAULT_TILE_ORDER;
-    }
-  });
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+// ─── MINI LINE CHART (SVG) ───────────────────────────────────
+function LineChart({ data, color, height = 80 }) {
+  if (!data || data.length < 2) return (
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No data yet</span>
+    </div>
   );
 
-  const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    setTileOrder(prev => {
-      const next = arrayMove(prev, prev.indexOf(active.id), prev.indexOf(over.id));
-      localStorage.setItem(TILE_ORDER_KEY, JSON.stringify(next));
-      return next;
-    });
-  };
+  const values = data.map(d => d.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const width = 320;
+  const padX = 4;
+  const padY = 8;
+  const chartW = width - padX * 2;
+  const chartH = height - padY * 2;
 
-  const tileStyles = {
-    calories: { alignItems: 'center', padding: '20px 12px' },
-    steps: { alignItems: 'center', padding: '20px 12px' },
-    weight: {},
-    bodyfat: {},
-  };
+  const pts = data.map((d, i) => {
+    const x = padX + (i / (data.length - 1)) * chartW;
+    const y = padY + (1 - (d.value - min) / range) * chartH;
+    return [x, y];
+  });
 
-  const renderTileContent = (id) => {
-    if (id === 'calories') return (
-      <>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <CircleProgress value={calories} goal={calorieGoal} />
-          <div style={{ position: 'absolute', textAlign: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: '#5BA4CF' }}>
-              <path d="M12 2C8.5 6 6 9 6 13a6 6 0 0012 0c0-4-2.5-7-6-11z" fill="#5BA4CF"/>
-            </svg>
-          </div>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {calories.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>of {calorieGoal.toLocaleString()}</div>
-        </div>
-        <div className="tile-label">Calories</div>
-      </>
-    );
-    if (id === 'steps') return (
-      <>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <CircleProgress value={steps || 0} goal={stepsGoal} />
-          <div style={{ position: 'absolute', textAlign: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M8 4a2 2 0 100-4 2 2 0 000 4zm8 4a2 2 0 100-4 2 2 0 000 4zM6 20l2-8 3 3 3-6 2 11" stroke="#5BA4CF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {steps ? steps.toLocaleString() : '—'}
-          </div>
-          {steps && <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>of {stepsGoal.toLocaleString()}</div>}
-        </div>
-        <div className="tile-label">Steps</div>
-      </>
-    );
-    if (id === 'weight') return (
-      <>
-        <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M6 3h12l1 7H5L6 3z" stroke="#5BA4CF" strokeWidth="2" strokeLinejoin="round"/>
-            <path d="M5 10l-1 11h16l-1-11" stroke="#5BA4CF" strokeWidth="2" strokeLinejoin="round"/>
-            <path d="M12 6v4" stroke="#5BA4CF" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div className="tile-label" style={{ marginTop: '8px' }}>Weight</div>
-        <div>
-          <span style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {weight ? weight.value : '—'}
-          </span>
-          {weight && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: '3px' }}>{weight.unit}</span>}
-        </div>
-      </>
-    );
-    if (id === 'bodyfat') return (
-      <>
-        <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="9" stroke="#5BA4CF" strokeWidth="2"/>
-            <path d="M12 7v5l3 3" stroke="#5BA4CF" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <div className="tile-label" style={{ marginTop: '8px' }}>Body Fat</div>
-        <div>
-          <span style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-            {bodyFat ? bodyFat.value : '—'}
-          </span>
-          {bodyFat && <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: '3px' }}>%</span>}
-        </div>
-      </>
-    );
-    return null;
-  };
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
+  const fillPath = `${linePath} L${pts[pts.length - 1][0]},${padY + chartH} L${pts[0][0]},${padY + chartH} Z`;
 
- useEffect(() => {
-  loadDashboardData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [date]);
-
-  const loadDashboardData = async () => {
-    const dateStr = date.toLocaleDateString();
-
-    // Load calories for the day
-    const { data: foodData } = await supabase
-      .from('food_entries')
-      .select('calories')
-      .eq('date', dateStr);
-
-    if (foodData) {
-      const total = foodData.reduce((sum, f) => sum + Number(f.calories), 0);
-      setCalories(total);
-    }
-
-    // Load latest weight
-    const { data: weightData } = await supabase
-      .from('measurement_entries')
-      .select('value, unit, measurements(name)')
-      .ilike('measurements.name', 'weight')
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (weightData && weightData.length > 0) {
-      setWeight(weightData[0]);
-    }
-
-    // Load latest body fat
-    const { data: bfData } = await supabase
-      .from('measurement_entries')
-      .select('value, unit, measurements(name)')
-      .ilike('measurements.name', 'body fat')
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (bfData && bfData.length > 0) {
-      setBodyFat(bfData[0]);
-    }
-  };
+  const dateLabels = [data[0], data[Math.floor(data.length / 2)], data[data.length - 1]];
 
   return (
-    <div>
-      {/* Date Bar */}
-      <div style={{
-        background: 'var(--card)', borderBottom: '1px solid var(--border)',
-        padding: '10px 20px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <button className="date-nav-btn" onClick={() => onDateChange(-1)}>‹</button>
-<span className="date-text">{
-  date.toDateString() === new Date().toDateString() ? 'Today' :
-  date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
-}</span>
-<button className="date-nav-btn" onClick={() => onDateChange(1)}>›</button>
+    <div style={{ width: '100%' }}>
+      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={`grad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={fillPath} fill={`url(#grad-${color.replace('#', '')})`} />
+        <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {pts.map(([x, y], i) => i === pts.length - 1 && (
+          <circle key={i} cx={x} cy={y} r={3} fill={color} />
+        ))}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        {dateLabels.map((d, i) => (
+          <span key={i} style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+            {new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── MEASUREMENT CHART SECTION ──────────────────────────────
+function MeasurementSection({ title, measurementName, color, unit }) {
+  const [range, setRange] = useState('7D');
+  const [entries, setEntries] = useState([]);
+
+  useEffect(() => {
+    const days = range === '7D' ? 7 : 14;
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const sinceStr = since.toISOString();
+
+    (async () => {
+      const { data: mData } = await supabase
+        .from('measurements')
+        .select('id')
+        .ilike('name', measurementName)
+        .limit(1);
+      if (!mData || mData.length === 0) return;
+
+      const { data } = await supabase
+        .from('measurement_entries')
+        .select('value, created_at')
+        .eq('measurement_id', mData[0].id)
+        .gte('created_at', sinceStr)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.created_at })));
+      }
+    })();
+  }, [range, measurementName]);
+
+  const latest = entries.length > 0 ? entries[entries.length - 1].value : null;
+  const first = entries.length > 1 ? entries[0].value : null;
+
+  // Only show trend if there are at least 2 entries and the earliest is at least 3 days ago
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const firstDate = first !== null ? new Date(entries[0].date) : null;
+  const daysSinceFirst = firstDate ? Math.round((today - firstDate) / 86400000) : 0;
+  const showTrend = first !== null && daysSinceFirst >= 3;
+
+  const diff = showTrend ? (latest - first) : null;
+  const improving = diff !== null && diff < 0;
+  const worsening = diff !== null && diff > 0;
+
+  return (
+    <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', marginBottom: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['7D', '14D'].map(r => (
+            <button key={r} onClick={() => setRange(r)} style={{
+              fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 8, border: 'none',
+              background: range === r ? color : 'var(--bg)',
+              color: range === r ? '#fff' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}>{r}</button>
+          ))}
+        </div>
       </div>
 
-
-      {/* Tiles */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={tileOrder} strategy={rectSortingStrategy}>
-          <div className="tile-grid">
-            {tileOrder.map(id => (
-              <SortableTile key={id} id={id} style={tileStyles[id]}>
-                {renderTileContent(id)}
-              </SortableTile>
-            ))}
+      {latest !== null ? (
+        <>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1, marginBottom: 2 }}>
+            {latest} <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>{unit}</span>
           </div>
-        </SortableContext>
-      </DndContext>
+          {diff !== null && (
+            <div style={{ fontSize: 12, color: improving ? '#22C55E' : worsening ? '#EF4444' : 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>
+              {improving ? '▼' : worsening ? '▲' : '–'} {Math.abs(diff).toFixed(1)} {unit} vs {range === '7D' ? '7 days' : '14 days'} ago
+            </div>
+          )}
+          <LineChart data={entries} color={color} height={72} />
+        </>
+      ) : (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingTop: 8 }}>No data yet</div>
+      )}
+    </div>
+  );
+}
+
+// ─── MACRO ROW ───────────────────────────────────────────────
+function MacroRow({ label, consumed, goal, color, iconColor }) {
+  const pct = Math.min(goal > 0 ? consumed / goal : 0, 1);
+  const pctLabel = Math.round(pct * 100);
+  const done = pct >= 1;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? color : 'var(--bg)', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {done && <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'baseline' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{consumed}g / {goal}g</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color }}>{pctLabel}%</span>
+          </div>
+        </div>
+        <div style={{ height: 6, borderRadius: 4, background: 'var(--bg)', overflow: 'hidden' }}>
+          <div style={{ width: `${pct * 100}%`, height: '100%', borderRadius: 4, background: color, transition: 'width 0.5s ease' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────
+function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal, onMenuOpen }) {
+  const [calories, setCalories] = useState(0);
+  const [protein, setProtein] = useState(0);
+  const [carbs, setCarbs] = useState(0);
+  const [fats, setFats] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [weekWorkouts, setWeekWorkouts] = useState(0);
+
+  const today = new Date().toLocaleDateString();
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    // Today's food
+    const { data: food } = await supabase
+      .from('food_entries')
+      .select('calories, protein, carbs, fats')
+      .eq('date', today);
+
+    if (food) {
+      setCalories(Math.round(food.reduce((s, f) => s + Number(f.calories || 0), 0)));
+      setProtein(Math.round(food.reduce((s, f) => s + Number(f.protein || 0), 0)));
+      setCarbs(Math.round(food.reduce((s, f) => s + Number(f.carbs || 0), 0)));
+      setFats(Math.round(food.reduce((s, f) => s + Number(f.fats || 0), 0)));
+    }
+
+    // Streak: consecutive days with at least one workout session
+    const { data: sessions } = await supabase
+      .from('workout_sessions')
+      .select('date')
+      .order('date', { ascending: false });
+
+    if (sessions && sessions.length > 0) {
+      const uniqueDates = [...new Set(sessions.map(s => s.date))];
+      let count = 0;
+      let cursor = new Date();
+      cursor.setHours(0, 0, 0, 0);
+      for (const d of uniqueDates) {
+        const sd = new Date(d);
+        sd.setHours(0, 0, 0, 0);
+        const diff = Math.round((cursor - sd) / 86400000);
+        if (diff === 0 || diff === 1) { count++; cursor = sd; }
+        else break;
+      }
+      setStreak(count);
+    }
+
+    // Workouts this week (Sunday–Saturday)
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const { data: weekData } = await supabase
+      .from('workout_sessions')
+      .select('id')
+      .gte('date', weekStart.toISOString().split('T')[0])
+      .lte('date', weekEnd.toISOString().split('T')[0]);
+
+    if (weekData) setWeekWorkouts(weekData.length);
+  };
+
+  const hour = new Date().getHours();
+  const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  const greeting = `Good ${timeOfDay}, ${profileName}`;
+
+  const remaining = Math.max(calorieGoal - calories, 0);
+
+  const chips = [
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#F97316"><path d="M12 2C8.5 6 6 9 6 13a6 6 0 0012 0c0-4-2.5-7-6-11z"/></svg>
+      ),
+      value: streak,
+      label: 'Day streak',
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="11" width="18" height="3" rx="1.5" fill="var(--accent)"/>
+          <rect x="7" y="7" width="3" height="11" rx="1.5" fill="var(--accent)"/>
+          <rect x="14" y="7" width="3" height="11" rx="1.5" fill="var(--accent)"/>
+        </svg>
+      ),
+      value: weekWorkouts,
+      label: 'This week',
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="#22C55E" strokeWidth="2"/>
+          <circle cx="12" cy="12" r="4" stroke="#22C55E" strokeWidth="2"/>
+          <circle cx="12" cy="12" r="1" fill="#22C55E"/>
+        </svg>
+      ),
+      value: calorieGoal,
+      label: 'Cal goal',
+    },
+    {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M8 18l2-8 3 4 2-6 3 10" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      value: '—',
+      label: 'Steps taken',
+    },
+  ];
+
+  return (
+    <div style={{ paddingBottom: 8 }}>
+      {/* Header */}
+      <div style={{ padding: '20px 20px 8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <button onClick={onMenuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4, display: 'flex', alignItems: 'center' }}>
+            <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
+              <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4, display: 'flex', alignItems: 'center' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+          {greeting}
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4, fontWeight: 400 }}>
+          Let's crush your goals today.
+        </div>
+      </div>
+
+      {/* At a Glance label */}
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', padding: '0 20px', marginBottom: 4, marginTop: 16 }}>
+        Today at a glance
+      </div>
+
+      {/* At a Glance chips */}
+      <div style={{ display: 'flex', overflowX: 'auto', paddingTop: 4, paddingBottom: 8, paddingLeft: 20, paddingRight: 20, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        {chips.map((chip, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center',
+            gap: 8, marginRight: 20, flexShrink: 0,
+          }}>
+            {chip.icon}
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{chip.value}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginTop: 1 }}>{chip.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Two Circle Tiles */}
+      <div style={{ display: 'flex', gap: 12, padding: '8px 16px' }}>
+        {/* Calories Tile */}
+        <div style={{ flex: 1, background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Calories</span>
+            <span style={{ fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <CircleRing value={calories} goal={calorieGoal} size={110} strokeWidth={10} color="#3B82F6" trackColor="#DBEAFE">
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{calories}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>kcal</div>
+            </CircleRing>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{remaining}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Remaining</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{calorieGoal}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Protein Tile */}
+        <div style={{ flex: 1, background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Protein</span>
+            <span style={{ fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <CircleRing value={protein} goal={proteinGoal} size={110} strokeWidth={10} color="#A855F7" trackColor="#EDE9FE">
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{protein}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
+            </CircleRing>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{protein}g</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Consumed</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{proteinGoal}g</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Measurement Charts */}
+      <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <MeasurementSection title="Weight" measurementName="weight" color="#3B82F6" unit="lbs" />
+        <MeasurementSection title="Body Fat" measurementName="body fat" color="#F97316" unit="%" />
+      </div>
+
+      {/* Macro Progress */}
+      <div style={{ margin: '8px 16px 0', background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Today's Macro Progress</span>
+          <button style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Edit</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <MacroRow label="Protein" consumed={protein} goal={proteinGoal} color="#22C55E" />
+          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
+          <MacroRow label="Fats" consumed={fats} goal={fatsGoal} color="#3B82F6" />
+        </div>
+      </div>
     </div>
   );
 }
