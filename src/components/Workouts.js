@@ -975,7 +975,7 @@ const updateSet = (exId, setIdx, field, value) => {
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
                 </span>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  {lastPerformed[r.id] ? `Last: ${daysAgoText(lastPerformed[r.id])}` : 'Never performed'}
+                  {lastPerformed[r.id] ? `Last performed ${daysAgoText(lastPerformed[r.id])}` : 'Never performed'}
                 </div>
               </>
             )}

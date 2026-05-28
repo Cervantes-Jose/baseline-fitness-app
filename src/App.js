@@ -24,25 +24,15 @@ const FOOD_TABS = [
   { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
-const WORKOUT_TABS = [
-  { id: 'workout-start', label: 'Start', icon: '▸' },
-  { id: 'workout-exercises', label: 'Exercises', icon: '≡' },
-  { id: 'workout-measurements', label: 'Measurements', icon: '◎' },
-  { id: 'workout-history', label: 'History', icon: '◷' },
-  { id: 'profile', label: 'Profile', icon: '○' },
-];
-
 const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
   { id: 'food', label: 'Calories', icon: '◑' },
-  { id: 'workouts', label: 'Workouts', icon: '▸' },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────
 
 function getTabsForSection(section) {
   if (section === 'food') return FOOD_TABS;
-  if (section === 'workouts') return WORKOUT_TABS;
   return MAIN_TABS;
 }
 
@@ -55,12 +45,7 @@ function getHeaderTitle(activeTab) {
     'food-log': 'Food Log',
     'food-nutrients': 'Nutrients',
     'food-goals': 'Goals',
-    'workouts': 'Workouts',
-    'workout-dashboard': 'Workouts',
-    'workout-exercises': 'Exercises',
-    'workout-start': 'Start Workout',
-    'workout-history': 'History',
-    'workout-measurements': 'Measurements',
+    'workout-start': 'Workouts',
     'measurement-add': 'Add Measurement',
     'profile': 'Profile',
     'settings': 'Settings',
@@ -267,7 +252,7 @@ const changeDate = (dir) => {
       setActiveTab('dashboard');
     } else {
       setActiveSection(id);
-      setActiveTab(id === 'workouts' ? 'workout-start' : 'food-log');
+      setActiveTab('food-log');
     }
     setSidePanel(false);
   };
@@ -280,8 +265,11 @@ const changeDate = (dir) => {
       return;
     }
     if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-log'); return; }
-    if (tabId === 'workouts') { setActiveSection('workouts'); setActiveTab('workout-start'); return; }
-    if (tabId === 'workout-start') { if (activeTab === 'workout-start') setWorkoutsResetKey(k => k + 1); else setActiveTab('workout-start'); return; }
+    if (tabId === 'workout-start') {
+      if (activeTab === 'workout-start' && activeSection === 'main') { setWorkoutsResetKey(k => k + 1); }
+      else { setActiveSection('main'); setActiveTab('workout-start'); }
+      return;
+    }
     if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
     setActiveTab(tabId);
   };
@@ -349,7 +337,7 @@ const changeDate = (dir) => {
 
       {/* Collapsed Workout Bar */}
       {activeWorkout && !workoutExpanded && (
-        <div onClick={() => { setActiveSection('workouts'); setActiveTab('workout-start'); setWorkoutExpanded(true); }}
+        <div onClick={() => { setActiveSection('main'); setActiveTab('workout-start'); setWorkoutExpanded(true); }}
           style={{
             position: 'fixed', bottom: '82px', left: '50%', transform: 'translateX(-50%)',
             width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,

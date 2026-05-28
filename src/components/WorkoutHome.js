@@ -80,10 +80,7 @@ function WorkoutHome({
     return `${Math.floor(m / 60)}h ${m % 60}m`;
   };
 
-  const fmtVolume = (lbs) => {
-    if (lbs >= 1000) return `${(lbs / 1000).toFixed(1)}k`;
-    return String(Math.round(lbs));
-  };
+  const fmtVolume = (lbs) => Math.round(lbs).toLocaleString();
 
   const workoutProps = {
     activeWorkout,
@@ -112,7 +109,7 @@ function WorkoutHome({
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
             {stats.map(({ value, label }) => (
-              <div key={label}>
+              <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1 }}>
                   {value}
                 </div>
