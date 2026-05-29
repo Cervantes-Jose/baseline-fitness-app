@@ -412,8 +412,8 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <MacroRow label="Protein" consumed={protein} goal={proteinGoal} color="#22C55E" />
-          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
           <MacroRow label="Fats" consumed={fats} goal={fatsGoal} color="#3B82F6" />
+          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
         </div>
       </div>
     </div>

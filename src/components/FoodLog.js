@@ -433,8 +433,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   }}>
                     <div style={{
                       width: 10, height: 10, borderRadius: '50%',
-                      border: '2px solid var(--accent)',
-                      background: 'var(--card)',
+                      border: '2px solid #3B82F6',
+                      background: hourFoods.length > 0 ? '#3B82F6' : 'var(--card)',
                     }} />
                   </div>
 
@@ -459,6 +459,22 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     </div>
                     {hourFoods.length > 0 && (
                       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {(() => {
+                          const ht = hourFoods.reduce((a, f) => ({
+                            calories: a.calories + Number(f.calories || 0),
+                            protein: a.protein + Number(f.protein || 0),
+                            carbs: a.carbs + Number(f.carbs || 0),
+                            fats: a.fats + Number(f.fats || 0),
+                          }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+                          return (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, fontWeight: 700, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                              <span style={{ color: '#3B82F6' }}>Calories: {ht.calories}</span>
+                              <span style={{ color: '#22C55E' }}>P: {ht.protein}g</span>
+                              <span style={{ color: '#3B82F6' }}>F: {ht.fats}g</span>
+                              <span style={{ color: '#EAB308' }}>C: {ht.carbs}g</span>
+                            </div>
+                          );
+                        })()}
                         {hourFoods.map(f => (
                           <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div>

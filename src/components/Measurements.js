@@ -50,11 +50,13 @@ function TrendChart({ entries }) {
 
 const DEFAULT_MEASUREMENT_NAMES = [
   'Weight', 'Body Fat', 'Neck', 'Chest', 'Left Bicep', 'Right Bicep',
-  'Stomach', 'Hips', 'Glutes', 'Left Thigh', 'Right Thigh',
+  'Stomach', 'Hips', 'Left Thigh', 'Right Thigh',
 ];
 
 function getDefaultUnit(name, metricSystem) {
-  if (name === 'Weight' || name === 'Body Fat') return metricSystem === 'metric' ? 'kg' : 'lbs';
+  const lower = (name || '').toLowerCase();
+  if (lower === 'body fat') return '%';
+  if (lower === 'weight') return metricSystem === 'metric' ? 'kg' : 'lbs';
   return metricSystem === 'metric' ? 'cm' : 'in';
 }
 
@@ -307,12 +309,13 @@ function Measurements({ metricSystem = 'imperial' }) {
       {menuOpen && measurements.find(m => m.id === menuOpen) && (() => {
         const m = measurements.find(m => m.id === menuOpen);
         const isDefault = defaultIds.has(m.id);
-        const options = [
+        // Default (hardcoded) measurements can only be duplicated — not renamed or deleted.
+        const options = isDefault ? [
+          { label: 'Duplicate', action: () => duplicateMeasurement(m) },
+        ] : [
           { label: 'Rename', action: () => { setRenamingMeasurement(m); setRenameValue(m.name); setMenuOpen(null); } },
-          ...(!isDefault ? [
-            { label: 'Duplicate', action: () => duplicateMeasurement(m) },
-            { label: 'Delete', action: () => deleteMeasurement(m), danger: true },
-          ] : []),
+          { label: 'Duplicate', action: () => duplicateMeasurement(m) },
+          { label: 'Delete', action: () => deleteMeasurement(m), danger: true },
         ];
         return (
           <div style={{
@@ -393,6 +396,7 @@ function Measurements({ metricSystem = 'imperial' }) {
             className="input" style={{ width: '100%' }} />
           <div style={{ display: 'flex', gap: '8px' }}>
             <input value={newValue} onChange={e => setNewValue(e.target.value)}
+              inputMode="decimal"
               placeholder="Value" className="input" style={{ flex: 2 }} />
             <input value={newUnit} onChange={e => setNewUnit(e.target.value)}
               placeholder="Unit (lbs, in...)" className="input" style={{ flex: 2 }} />
