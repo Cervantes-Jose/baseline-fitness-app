@@ -14,37 +14,15 @@ const MAIN_TABS = [
   { id: 'profile', label: 'Profile', icon: '○' },
 ];
 
-const FOOD_TABS = [
-  { id: 'food-log', label: 'Add Food', icon: '+' },
-  { id: 'food-recipes', label: 'Recipes', icon: '≡' },
-  { id: 'food-nutrients', label: 'Nutrients', icon: '◑' },
-  { id: 'food-goals', label: 'Goals', icon: '◎' },
-  { id: 'profile', label: 'Profile', icon: '○' },
-];
-
-const SECTIONS = [
-  { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'food', label: 'Calories', icon: '◑' },
-];
-
 // ─── HELPERS ────────────────────────────────────────────────
-
-function getTabsForSection(section) {
-  if (section === 'food') return FOOD_TABS;
-  return MAIN_TABS;
-}
 
 function getHeaderTitle(activeTab) {
   const titles = {
     'dashboard': 'Fitness Tracker',
-    'food': 'Calories',
-    'food-dashboard': 'Calories',
-    'food-recipes': 'Recipes',
     'food-log': 'Food Log',
-    'food-nutrients': 'Nutrients',
-    'food-goals': 'Goals',
     'workout-start': 'Workouts',
     'profile': 'Profile',
+    'profile-goals': 'Goals',
     'settings': 'Settings',
   };
   return titles[activeTab] || 'Fitness Tracker';
@@ -52,27 +30,25 @@ function getHeaderTitle(activeTab) {
 
 // ─── SCREENS ────────────────────────────────────────────────
 
-function ComingSoon({ label }) {
-  return (
-    <div className="content">
-      <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🚧</div>
-        <p style={{ fontWeight: '600', marginBottom: '8px' }}>{label}</p>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Coming soon.</p>
-      </div>
-    </div>
-  );
-}
-
-function Profile({ onOpenSettings }) {
+function Profile({ onOpenSettings, onOpenGoals }) {
   return (
     <div className="content">
       <div className="card">
         <p className="section-title">General</p>
-        <button onClick={onOpenSettings} style={{
+        <button onClick={onOpenGoals} style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           width: '100%', padding: '14px 0', background: 'none', border: 'none',
           borderTop: '1px solid var(--border)', cursor: 'pointer', marginTop: '8px',
+        }}>
+          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Goals</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button onClick={onOpenSettings} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '14px 0', background: 'none', border: 'none',
+          borderTop: '1px solid var(--border)', cursor: 'pointer',
         }}>
           <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Settings</span>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -163,8 +139,6 @@ function formatTime(seconds) {
 // ─── APP ────────────────────────────────────────────────────
 function App() {
 const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
-const [activeSection, setActiveSection] = useState(() => localStorage.getItem('activeSection') || 'main');
-const [sidePanel, setSidePanel] = useState(false);
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
@@ -235,7 +209,6 @@ const changeDate = (dir) => {
   useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('metricSystem', metricSystem); }, [metricSystem]);
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
-  useEffect(() => { localStorage.setItem('activeSection', activeSection); }, [activeSection]);
   useEffect(() => {
     if (activeWorkout) localStorage.setItem('activeWorkout', JSON.stringify(activeWorkout));
     else localStorage.removeItem('activeWorkout');
@@ -243,41 +216,22 @@ const changeDate = (dir) => {
   useEffect(() => { localStorage.setItem('workoutSeconds', workoutSeconds); }, [workoutSeconds]);
 
 
-  const openSection = (id) => {
-    if (id === 'dashboard') {
-      setActiveSection('main');
-      setActiveTab('dashboard');
-    } else {
-      setActiveSection(id);
-      setActiveTab('food-log');
-    }
-    setSidePanel(false);
-  };
-
-  const currentTabs = getTabsForSection(activeSection);
+  const currentTabs = MAIN_TABS;
 
   const handleTabClick = (tabId) => {
-    if (tabId === 'profile') {
-      setActiveTab('profile');
-      return;
-    }
-    if (tabId === 'food') { setActiveSection('food'); setActiveTab('food-log'); return; }
     if (tabId === 'workout-start') {
-      if (activeTab === 'workout-start' && activeSection === 'main') { setWorkoutsResetKey(k => k + 1); }
-      else { setActiveSection('main'); setActiveTab('workout-start'); }
+      if (activeTab === 'workout-start') { setWorkoutsResetKey(k => k + 1); }
+      else { setActiveTab('workout-start'); }
       return;
     }
-    if (tabId === 'dashboard') { setActiveSection('main'); setActiveTab('dashboard'); return; }
     setActiveTab(tabId);
   };
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onMenuOpen={() => setSidePanel(true)} />;
+      case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} /></div>;
-      case 'food-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
-      case 'food-recipes': return <ComingSoon label="Recipes" />;
-      case 'food-nutrients': return <ComingSoon label="Nutrients" />;
+      case 'profile-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'workout-start':
       case 'workout-exercises':
       case 'workout-measurements':
@@ -295,9 +249,9 @@ const changeDate = (dir) => {
           resetKey={workoutsResetKey}
           metricSystem={metricSystem}
         />;
-      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} />;
+      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
-      default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onMenuOpen={() => setSidePanel(true)} />;
+      default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
 
@@ -306,11 +260,7 @@ const changeDate = (dir) => {
       {/* Header — hidden on dashboard (Dashboard renders its own) */}
       {activeTab !== 'dashboard' && (
         <div className="header">
-          <button className="header-btn" onClick={() => setSidePanel(true)}>
-            <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
-              <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
+          <div style={{ width: 32 }} />
           <span className="header-title">{getHeaderTitle(activeTab)}</span>
           <div style={{ width: 32 }} />
         </div>
@@ -333,7 +283,7 @@ const changeDate = (dir) => {
 
       {/* Collapsed Workout Bar */}
       {activeWorkout && !workoutExpanded && (
-        <div onClick={() => { setActiveSection('main'); setActiveTab('workout-start'); setWorkoutExpanded(true); }}
+        <div onClick={() => { setActiveTab('workout-start'); setWorkoutExpanded(true); }}
           style={{
             position: 'fixed', bottom: '82px', left: '50%', transform: 'translateX(-50%)',
             width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,
@@ -361,30 +311,13 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && activeTab === 'profile') ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'settings')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>
           </button>
         ))}
       </div>
-
-      {/* Side Panel */}
-      {sidePanel && (
-        <>
-          <div className="overlay" onClick={() => setSidePanel(false)} />
-          <div className="side-panel">
-            <p style={{ padding: '0 24px 16px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Sections</p>
-            {SECTIONS.map(s => (
-              <button key={s.id} className={`side-panel-item ${activeSection === s.id || (s.id === 'dashboard' && activeSection === 'main') ? 'active' : ''}`}
-                onClick={() => openSection(s.id)}>
-                <span className="side-panel-icon">{s.icon}</span>
-                <span className="side-panel-label">{s.label}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }

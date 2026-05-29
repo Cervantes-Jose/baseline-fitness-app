@@ -186,7 +186,7 @@ function MacroRow({ label, consumed, goal, color, iconColor }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────
-function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal, onMenuOpen }) {
+function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal }) {
   const [calories, setCalories] = useState(0);
   const [protein, setProtein] = useState(0);
   const [carbs, setCarbs] = useState(0);
@@ -310,13 +310,6 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
     <div style={{ paddingBottom: 8 }}>
       {/* Header */}
       <div style={{ padding: '20px 20px 8px' }}>
-        <div style={{ marginBottom: 10 }}>
-          <button onClick={onMenuOpen} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 4, display: 'flex', alignItems: 'center' }}>
-            <svg width="24" height="24" viewBox="0 0 20 20" fill="none">
-              <path d="M2 5h16M2 10h16M2 15h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
         <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
           {greeting}
         </div>
