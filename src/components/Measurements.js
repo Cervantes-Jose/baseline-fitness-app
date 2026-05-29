@@ -308,11 +308,8 @@ function Measurements({ metricSystem = 'imperial' }) {
       {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />}
       {menuOpen && measurements.find(m => m.id === menuOpen) && (() => {
         const m = measurements.find(m => m.id === menuOpen);
-        const isDefault = defaultIds.has(m.id);
-        // Default (hardcoded) measurements can only be duplicated — not renamed or deleted.
-        const options = isDefault ? [
-          { label: 'Duplicate', action: () => duplicateMeasurement(m) },
-        ] : [
+        // Only custom measurements expose this menu (default measurements have no ··· button).
+        const options = [
           { label: 'Rename', action: () => { setRenamingMeasurement(m); setRenameValue(m.name); setMenuOpen(null); } },
           { label: 'Duplicate', action: () => duplicateMeasurement(m) },
           { label: 'Delete', action: () => deleteMeasurement(m), danger: true },
@@ -360,14 +357,16 @@ function Measurements({ metricSystem = 'imperial' }) {
                   {last.value}{last.unit && ` ${last.unit}`}
                 </div>
               )}
-              <button onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                setMenuOpen(menuOpen === m.id ? null : m.id);
-              }}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '4px 8px', letterSpacing: '2px', flexShrink: 0 }}>
-                ···
-              </button>
+              {!isDefault && (
+                <button onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                  setMenuOpen(menuOpen === m.id ? null : m.id);
+                }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '4px 8px', letterSpacing: '2px', flexShrink: 0 }}>
+                  ···
+                </button>
+              )}
             </div>
           </div>
         );
