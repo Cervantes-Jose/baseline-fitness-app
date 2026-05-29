@@ -412,7 +412,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (routineError) { console.error(routineError); setLoading(false); return; }
 
     const { data: exerciseData, error: exerciseError } = await supabase
-      .from('exercises').select('*').order('created_at', { ascending: true });
+      .from('exercises').select('*').order('position', { ascending: true });
     if (exerciseError) { console.error(exerciseError); setLoading(false); return; }
 
     const { data: sessionExData } = await supabase
@@ -563,7 +563,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (routineError) { console.error(routineError); return; }
     if (routine.exercises.length > 0) {
       const { data: newExercises, error: exError } = await supabase.from('exercises')
-        .insert(routine.exercises.map(ex => ({ routine_id: newRoutine.id, name: ex.name }))).select();
+        .insert(routine.exercises.map((ex, idx) => ({ routine_id: newRoutine.id, name: ex.name, position: idx }))).select();
       if (exError) { console.error(exError); return; }
       setRoutines([...routines, { ...newRoutine, exercises: newExercises.map(e => ({ ...e, lastSession: null })) }]);
     } else {
@@ -590,7 +590,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     useSensor(TouchSensor, { activationConstraint: { delay: 600, tolerance: 8 } })
   );
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (active.id !== over?.id) {
       const oldIndex = activeRoutine.exercises.findIndex(e => e.id === active.id);
@@ -598,6 +598,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       const reordered = arrayMove(activeRoutine.exercises, oldIndex, newIndex);
       setActiveRoutine(prev => ({ ...prev, exercises: reordered }));
       setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: reordered } : r));
+      const updates = reordered.map((ex, index) =>
+        supabase.from('exercises').update({ position: index }).eq('id', ex.id)
+      );
+      await Promise.all(updates);
     }
   };
 
@@ -728,7 +732,8 @@ const updateSet = (exId, setIdx, field, value) => {
 
   const addPickerExercises = async () => {
     if (selectedPickerExercises.size === 0 || !activeRoutine) return;
-    const inserts = [...selectedPickerExercises].map(name => ({ routine_id: activeRoutine.id, name }));
+    const basePosition = activeRoutine.exercises.length;
+    const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx }));
     const { data, error } = await supabase.from('exercises').insert(inserts).select();
     if (error) { console.error(error); return; }
     const newExs = data.map(ex => ({ ...ex, lastSession: null }));
