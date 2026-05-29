@@ -288,7 +288,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
   const [activeRoutine, setActiveRoutine] = useState(activeWorkout?.routine || null);
-  const [newExerciseName, setNewExerciseName] = useState('');
   const [sessionLog, setSessionLog] = useState(activeWorkout?.sessionLog || {});
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -297,7 +296,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [renamingRoutine, setRenamingRoutine] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
   const deletedExerciseIdsRef = useRef([]);
   const [checkedSets, setCheckedSets] = useState({});
@@ -527,19 +525,6 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
   };
 
-  const addExerciseDuringWorkout = async () => {
-    if (!newExerciseName.trim() || !activeRoutine) return;
-    const { data, error } = await supabase.from('exercises')
-      .insert([{ routine_id: activeRoutine.id, name: newExerciseName.trim() }]).select().single();
-    if (error) { console.error(error); return; }
-    const newEx = { ...data, lastSession: null };
-    setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, newEx] }));
-    setSessionLog(prev => ({ ...prev, [newEx.id]: [{ sets: '', reps: '', weight: '' }] }));
-    setExpandedExId(newEx.id);
-    setNewExerciseName('');
-    setShowAddExerciseModal(false);
-  };
-
   const openRoutine = (routine) => {
     const prefilled = {};
     routine.exercises.forEach(ex => {
@@ -627,7 +612,6 @@ const updateSet = (exId, setIdx, field, value) => {
 
   const confirmFinishWorkout = async () => {
     const currentLog = sessionLogRef.current;
-    console.log('sessionLog at finish:', JSON.stringify(currentLog));
 
     const { data: session, error: sessionError } = await supabase
       .from('workout_sessions')
@@ -709,6 +693,13 @@ const updateSet = (exId, setIdx, field, value) => {
     const newExs = data.map(ex => ({ ...ex, lastSession: null }));
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, ...newExs] } : r));
     setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, ...newExs] }));
+    // Seed default empty sets so the new exercises are immediately loggable
+    setSessionLog(prev => {
+      const next = { ...prev };
+      newExs.forEach(ex => { next[ex.id] = [{ sets: '', reps: '', weight: '' }]; });
+      return next;
+    });
+    if (newExs.length > 0) setExpandedExId(newExs[0].id);
     closeExercisePicker();
   };
 
@@ -775,7 +766,7 @@ const updateSet = (exId, setIdx, field, value) => {
 
         {/* Add Exercise button */}
         <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
-          <button onClick={() => setShowAddExerciseModal(true)} style={{
+          <button onClick={openExercisePicker} style={{
             display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--accent-light)',
             border: '1px solid var(--border)', borderRadius: '14px', padding: '10px 14px',
             cursor: 'pointer', width: '100%', textAlign: 'left'
@@ -848,23 +839,6 @@ const updateSet = (exId, setIdx, field, value) => {
           </button>
         </div>
 
-        {showAddExerciseModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
-            onClick={() => setShowAddExerciseModal(false)}>
-            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
-              onClick={e => e.stopPropagation()}>
-              <p style={{ fontWeight: '600', marginBottom: '16px', fontSize: '16px', color: 'var(--text-primary)' }}>Add Exercise</p>
-              <input value={newExerciseName} onChange={e => setNewExerciseName(e.target.value)}
-                placeholder="e.g. Bench Press" className="input" style={{ marginBottom: '16px' }}
-                onKeyDown={e => e.key === 'Enter' && addExerciseDuringWorkout()} autoFocus />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setShowAddExerciseModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-                <button onClick={addExerciseDuringWorkout} className="btn-primary" style={{ flex: 1 }}>Add</button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {showShortWorkoutModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
             onClick={() => setShowShortWorkoutModal(false)}>
@@ -893,6 +867,111 @@ const updateSet = (exId, setIdx, field, value) => {
       </div>
     );
   }
+
+  // Exercise picker bottom sheet — shared by the exercises view and the active-workout logging modal
+  const exercisePickerSheet = showExercisePicker && (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
+      transform: pickerOpen ? `translateY(${pickerDragY}px)` : 'translateY(100%)',
+      transition: pickerDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Drag handle — full 60px touch area */}
+      <div
+        onPointerDown={onPickerPointerDown}
+        onPointerMove={onPickerPointerMove}
+        onPointerUp={onPickerPointerUp}
+        style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}
+      >
+        <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
+      </div>
+      {/* Search bar */}
+      <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
+        <input
+          ref={pickerSearchInputRef}
+          value={exercisePickerSearch}
+          onChange={e => setExercisePickerSearch(e.target.value)}
+          placeholder="Search exercises..."
+          className="input"
+          style={{ width: '100%' }}
+        />
+      </div>
+      {/* Scrollable exercise list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', paddingBottom: '100px' }}>
+        {pickerSearchResults ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {pickerSearchResults.length === 0
+              ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>No exercises found</p>
+              : pickerSearchResults.map(({ name, category }) => {
+                  const isSelected = selectedPickerExercises.has(name);
+                  const isCustom = pickerCustomExercises.some(e => e.category === category && e.name === name);
+                  return (
+                    <div key={`${category}::${name}`} onClick={() => togglePickerExercise(name)}
+                      style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'var(--card)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                      <div style={{
+                        width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                        border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                        background: isSelected ? 'var(--accent)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px',
+                      }}>
+                        {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{name}</span>
+                          {isCustom && <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '1px' }}>{category}</div>
+                      </div>
+                    </div>
+                  );
+                })
+            }
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {CATEGORIES.map(cat => {
+              const exercises = pickerGetExercises(cat);
+              const isExpanded = expandedPickerCategories.has(cat);
+              return (
+                <PickerCategorySection
+                  key={cat}
+                  cat={cat}
+                  exercises={exercises}
+                  isExpanded={isExpanded}
+                  onToggle={() => setExpandedPickerCategories(prev => {
+                    const next = new Set(prev);
+                    next.has(cat) ? next.delete(cat) : next.add(cat);
+                    return next;
+                  })}
+                  selectedExercises={selectedPickerExercises}
+                  onToggleExercise={togglePickerExercise}
+                  pickerCustomExercises={pickerCustomExercises}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {/* Add button */}
+      <div style={{ padding: '12px 16px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+        <button
+          onClick={addPickerExercises}
+          disabled={selectedPickerExercises.size === 0}
+          style={{
+            width: '100%', padding: '18px',
+            background: selectedPickerExercises.size > 0 ? 'var(--accent)' : 'var(--border)',
+            color: selectedPickerExercises.size > 0 ? 'white' : 'var(--text-muted)',
+            border: 'none', borderRadius: '16px', fontSize: '17px', cursor: selectedPickerExercises.size > 0 ? 'pointer' : 'default',
+            fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+            transition: 'background 0.2s ease, color 0.2s ease',
+          }}
+        >
+          {selectedPickerExercises.size === 0 ? 'Select exercises' : `Add ${selectedPickerExercises.size} Exercise${selectedPickerExercises.size > 1 ? 's' : ''}`}
+        </button>
+      </div>
+    </div>
+  );
 
   if (view === 'routines' || view === 'logging') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1057,6 +1136,7 @@ const updateSet = (exId, setIdx, field, value) => {
         </div>
       )}
       {loggingModal}
+      {exercisePickerSheet}
     </div>
   );
 
@@ -1122,109 +1202,7 @@ const updateSet = (exId, setIdx, field, value) => {
         Start Workout
       </button>
     )}
-    {showExercisePicker && (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
-        transform: pickerOpen ? `translateY(${pickerDragY}px)` : 'translateY(100%)',
-        transition: pickerDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-        display: 'flex', flexDirection: 'column',
-      }}>
-        {/* Drag handle — full 60px touch area */}
-        <div
-          onPointerDown={onPickerPointerDown}
-          onPointerMove={onPickerPointerMove}
-          onPointerUp={onPickerPointerUp}
-          style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}
-        >
-          <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
-        </div>
-        {/* Search bar */}
-        <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
-          <input
-            ref={pickerSearchInputRef}
-            value={exercisePickerSearch}
-            onChange={e => setExercisePickerSearch(e.target.value)}
-            placeholder="Search exercises..."
-            className="input"
-            style={{ width: '100%' }}
-          />
-        </div>
-        {/* Scrollable exercise list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', paddingBottom: '100px' }}>
-          {pickerSearchResults ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {pickerSearchResults.length === 0
-                ? <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>No exercises found</p>
-                : pickerSearchResults.map(({ name, category }) => {
-                    const isSelected = selectedPickerExercises.has(name);
-                    const isCustom = pickerCustomExercises.some(e => e.category === category && e.name === name);
-                    return (
-                      <div key={`${category}::${name}`} onClick={() => togglePickerExercise(name)}
-                        style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'var(--card)', border: '1px solid var(--border)', cursor: 'pointer' }}>
-                        <div style={{
-                          width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                          border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                          background: isSelected ? 'var(--accent)' : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px',
-                        }}>
-                          {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '15px', color: 'var(--text-primary)' }}>{name}</span>
-                            {isCustom && <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '1px' }}>{category}</div>
-                        </div>
-                      </div>
-                    );
-                  })
-              }
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {CATEGORIES.map(cat => {
-                const exercises = pickerGetExercises(cat);
-                const isExpanded = expandedPickerCategories.has(cat);
-                return (
-                  <PickerCategorySection
-                    key={cat}
-                    cat={cat}
-                    exercises={exercises}
-                    isExpanded={isExpanded}
-                    onToggle={() => setExpandedPickerCategories(prev => {
-                      const next = new Set(prev);
-                      next.has(cat) ? next.delete(cat) : next.add(cat);
-                      return next;
-                    })}
-                    selectedExercises={selectedPickerExercises}
-                    onToggleExercise={togglePickerExercise}
-                    pickerCustomExercises={pickerCustomExercises}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {/* Add button */}
-        <div style={{ padding: '12px 16px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
-          <button
-            onClick={addPickerExercises}
-            disabled={selectedPickerExercises.size === 0}
-            style={{
-              width: '100%', padding: '18px',
-              background: selectedPickerExercises.size > 0 ? 'var(--accent)' : 'var(--border)',
-              color: selectedPickerExercises.size > 0 ? 'white' : 'var(--text-muted)',
-              border: 'none', borderRadius: '16px', fontSize: '17px', cursor: selectedPickerExercises.size > 0 ? 'pointer' : 'default',
-              fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              transition: 'background 0.2s ease, color 0.2s ease',
-            }}
-          >
-            {selectedPickerExercises.size === 0 ? 'Select exercises' : `Add ${selectedPickerExercises.size} Exercise${selectedPickerExercises.size > 1 ? 's' : ''}`}
-          </button>
-        </div>
-      </div>
-    )}
+    {exercisePickerSheet}
     </>
   );
 

@@ -197,7 +197,7 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
   const today = new Date().toLocaleDateString();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [today]);
 
   const loadData = async () => {
     // Today's food
@@ -234,22 +234,29 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
       setStreak(count);
     }
 
-    // Workouts this week (Sunday–Saturday)
+    // Workouts this week (Monday–Sunday)
     const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setDate(now.getDate() + mondayOffset);
     weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
+
+    // Build the set of this week's dates in the SAME format sessions are stored (toLocaleDateString)
+    const weekDateStrs = new Set();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      weekDateStrs.add(d.toLocaleDateString());
+    }
 
     const { data: weekData } = await supabase
       .from('workout_sessions')
-      .select('id')
-      .gte('date', weekStart.toISOString().split('T')[0])
-      .lte('date', weekEnd.toISOString().split('T')[0]);
+      .select('date');
 
-    if (weekData) setWeekWorkouts(weekData.length);
+    if (weekData) {
+      setWeekWorkouts(weekData.filter(s => weekDateStrs.has(s.date)).length);
+    }
   };
 
   const hour = new Date().getHours();
