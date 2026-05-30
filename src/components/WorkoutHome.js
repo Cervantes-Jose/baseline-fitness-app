@@ -28,6 +28,7 @@ function WorkoutHome({
 }) {
   const [tab, setTab] = useState(APP_TAB_MAP[appActiveTab] || 'Routines');
   const [weekStats, setWeekStats] = useState({ workouts: 0, volume: 0, duration: 0 });
+  const [prevWeekStats, setPrevWeekStats] = useState(null);
 
   useEffect(() => {
     const mapped = APP_TAB_MAP[appActiveTab];
@@ -38,8 +39,9 @@ function WorkoutHome({
     if (workoutExpanded) setTab('Routines');
   }, [workoutExpanded]);
 
+  // Reload when a workout finishes (activeWorkout flips back to null), as well as on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadWeekStats(); }, []);
+  useEffect(() => { loadWeekStats(); }, [activeWorkout]);
 
   const loadWeekStats = async () => {
     const today = new Date();
@@ -47,31 +49,45 @@ function WorkoutHome({
     const monday = new Date(today);
     monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
     monday.setHours(0, 0, 0, 0);
+    const prevMonday = new Date(monday);
+    prevMonday.setDate(monday.getDate() - 7);
 
+    // Pull both this week and last week in one query, then split by date
     const { data: sessions } = await supabase
       .from('workout_sessions')
-      .select('id, duration')
-      .gte('created_at', monday.toISOString());
+      .select('id, duration, created_at')
+      .gte('created_at', prevMonday.toISOString());
 
-    if (!sessions || sessions.length === 0) return;
+    if (!sessions) return;
 
-    const { data: sessionEx } = await supabase
-      .from('session_exercises')
-      .select('sets')
-      .in('session_id', sessions.map(s => s.id));
+    const allIds = sessions.map(s => s.id);
+    const { data: sessionEx } = allIds.length
+      ? await supabase.from('session_exercises').select('sets, session_id').in('session_id', allIds)
+      : { data: [] };
 
-    const volume = (sessionEx || []).reduce((total, e) => {
-      const sets = Array.isArray(e.sets) ? e.sets
-        : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []);
-      return total + sets.reduce((sum, s) =>
-        sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
-    }, 0);
+    const volumeFor = (ids) => (sessionEx || [])
+      .filter(e => ids.has(e.session_id))
+      .reduce((total, e) => {
+        const sets = Array.isArray(e.sets) ? e.sets
+          : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []);
+        return total + sets.reduce((sum, s) =>
+          sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
+      }, 0);
 
-    setWeekStats({
-      workouts: sessions.length,
-      duration: sessions.reduce((sum, s) => sum + (Number(s.duration) || 0), 0),
-      volume,
-    });
+    const statsFor = (sess) => {
+      const ids = new Set(sess.map(s => s.id));
+      return {
+        workouts: sess.length,
+        duration: sess.reduce((sum, s) => sum + (Number(s.duration) || 0), 0),
+        volume: volumeFor(ids),
+      };
+    };
+
+    const currentSessions = sessions.filter(s => new Date(s.created_at) >= monday);
+    const prevSessions = sessions.filter(s => new Date(s.created_at) < monday);
+
+    setWeekStats(statsFor(currentSessions));
+    setPrevWeekStats(prevSessions.length > 0 ? statsFor(prevSessions) : null);
   };
 
   const fmtDuration = (secs) => {
@@ -81,6 +97,17 @@ function WorkoutHome({
   };
 
   const fmtVolume = (lbs) => Math.round(lbs).toLocaleString();
+
+  // Build the "+X from last week" comparison line for a stat. Returns null when
+  // there's no previous-week data to compare against.
+  const deltaInfo = (diff, fmt) => {
+    if (diff === 0) return { text: 'Same as last week', color: 'var(--text-muted)' };
+    const positive = diff > 0;
+    return {
+      text: `${positive ? '+' : '-'}${fmt(Math.abs(diff))} from last week`,
+      color: positive ? '#22C55E' : '#EF4444',
+    };
+  };
 
   const workoutProps = {
     activeWorkout,
@@ -94,9 +121,21 @@ function WorkoutHome({
   };
 
   const stats = [
-    { value: String(weekStats.workouts), label: 'Workouts' },
-    { value: weekStats.duration > 0 ? fmtDuration(weekStats.duration) : '0m', label: 'Duration' },
-    { value: weekStats.volume > 0 ? `${fmtVolume(weekStats.volume)} lbs` : '0', label: 'Volume' },
+    {
+      value: String(weekStats.workouts),
+      label: 'Workouts',
+      delta: prevWeekStats ? deltaInfo(weekStats.workouts - prevWeekStats.workouts, n => String(n)) : null,
+    },
+    {
+      value: weekStats.duration > 0 ? fmtDuration(weekStats.duration) : '0m',
+      label: 'Duration',
+      delta: prevWeekStats ? deltaInfo(Math.round(weekStats.duration / 60) - Math.round(prevWeekStats.duration / 60), n => `${n}m`) : null,
+    },
+    {
+      value: weekStats.volume > 0 ? `${fmtVolume(weekStats.volume)} lbs` : '0',
+      label: 'Volume',
+      delta: prevWeekStats ? deltaInfo(weekStats.volume - prevWeekStats.volume, n => `${fmtVolume(n)} lbs`) : null,
+    },
   ];
 
   return (
@@ -108,7 +147,7 @@ function WorkoutHome({
             This Week
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-            {stats.map(({ value, label }) => (
+            {stats.map(({ value, label, delta }) => (
               <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1 }}>
                   {value}
@@ -116,6 +155,11 @@ function WorkoutHome({
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '500', marginTop: '3px' }}>
                   {label}
                 </div>
+                {delta && (
+                  <div style={{ fontSize: '11px', fontWeight: 500, color: delta.color, marginTop: '2px', lineHeight: 1.2 }}>
+                    {delta.text}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -140,7 +184,7 @@ function WorkoutHome({
               background: tab === t ? 'var(--accent)' : undefined,
               color: tab === t ? '#fff' : 'var(--text-primary)',
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: 500,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               flexShrink: 0,

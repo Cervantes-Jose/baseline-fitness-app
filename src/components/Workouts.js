@@ -1026,39 +1026,29 @@ const updateSet = (exId, setIdx, field, value) => {
 
   if (view === 'routines' || view === 'logging') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <button onClick={() => setShowCreateModal(true)} style={{
-        display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
-        border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', cursor: 'pointer',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', width: '100%', textAlign: 'left'
-      }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ color: 'white', fontSize: '24px', lineHeight: 1 }}>+</span>
-        </div>
-        <div>
-          <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>Create New Routine</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>e.g. Push, Pull, Legs</div>
-        </div>
-      </button>
-
-      {routines.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
-          <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {routineEditMode && selectedRoutines.size > 0 && (
-              <button onClick={deleteSelectedRoutines}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
+        <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {routineEditMode && selectedRoutines.size > 0 && (
+            <button onClick={deleteSelectedRoutines}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {routines.length > 0 && (
             <button onClick={() => { setRoutineEditMode(e => !e); setSelectedRoutines(new Set()); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
               {routineEditMode ? 'Done' : 'Edit'}
             </button>
-          </div>
+          )}
+          <button onClick={() => setShowCreateModal(true)} aria-label="New routine"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            +
+          </button>
         </div>
-      )}
+      </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRoutineDragEnd}>
         <SortableContext items={routines.map(r => r.id)} strategy={verticalListSortingStrategy}>
@@ -1105,7 +1095,9 @@ const updateSet = (exId, setIdx, field, value) => {
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
                 </span>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  {lastPerformed[r.id] ? `Last performed ${daysAgoText(lastPerformed[r.id])}` : 'Never performed'}
+                  {lastPerformed[r.id] ? (
+                    <>Last performed <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{daysAgoText(lastPerformed[r.id])}</span></>
+                  ) : 'Never performed'}
                 </div>
               </>
             )}

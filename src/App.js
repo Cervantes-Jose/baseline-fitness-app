@@ -260,9 +260,7 @@ const changeDate = (dir) => {
       {/* Header — hidden on dashboard (Dashboard renders its own) */}
       {activeTab !== 'dashboard' && (
         <div className="header">
-          <div style={{ width: 32 }} />
           <span className="header-title">{getHeaderTitle(activeTab)}</span>
-          <div style={{ width: 32 }} />
         </div>
       )}
 
