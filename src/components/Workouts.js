@@ -1163,7 +1163,7 @@ const updateSet = (exId, setIdx, field, value) => {
       })()}
 
       {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '20vh', zIndex: 500 }}
           onClick={() => setShowCreateModal(false)}>
           <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
             onClick={e => e.stopPropagation()}>
@@ -1189,47 +1189,37 @@ const updateSet = (exId, setIdx, field, value) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <button onClick={() => { setView('routines'); setExerciseEditMode(false); setSelectedExercises(new Set()); }}
-            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
             ← Back
           </button>
           {activeRoutine?.name && (
             <>
-              <span style={{ color: 'var(--border)', fontSize: '15px', flexShrink: 0 }}>|</span>
-              <span style={{ fontWeight: '600', fontSize: '15px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeRoutine.name}</span>
+              <span style={{ color: 'var(--border)', fontSize: '17px', flexShrink: 0 }}>|</span>
+              <span style={{ fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeRoutine.name}</span>
             </>
           )}
         </div>
-        {activeRoutine?.exercises?.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {exerciseEditMode && selectedExercises.size > 0 && (
-              <button onClick={deleteSelectedExercises}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {exerciseEditMode && selectedExercises.size > 0 && (
+            <button onClick={deleteSelectedExercises}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {activeRoutine?.exercises?.length > 0 && (
             <button onClick={() => { setExerciseEditMode(e => !e); setSelectedExercises(new Set()); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
               {exerciseEditMode ? 'Done' : 'Edit'}
             </button>
-          </div>
-        )}
+          )}
+          <button onClick={openExercisePicker} aria-label="Add exercise"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            +
+          </button>
+        </div>
       </div>
-
-      <button onClick={openExercisePicker} style={{
-        display: 'flex', alignItems: 'center', gap: '16px', background: 'var(--accent-light)',
-        border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', cursor: 'pointer',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', width: '100%', textAlign: 'left', marginBottom: '4px'
-      }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ color: 'white', fontSize: '24px', lineHeight: 1 }}>+</span>
-        </div>
-        <div>
-          <div style={{ fontWeight: '600', fontSize: '16px', color: 'var(--text-primary)' }}>Add Exercise</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>e.g. Bench Press, Squat</div>
-        </div>
-      </button>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>

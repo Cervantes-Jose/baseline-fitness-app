@@ -1,5 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+
+// Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
+// `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
+function useChartDraw(ref, dep) {
+  const [drawn, setDrawn] = useState(false);
+  useLayoutEffect(() => {
+    setDrawn(false);
+    const el = ref.current;
+    let len = 0;
+    if (el) {
+      try { len = el.getTotalLength(); } catch { len = 0; }
+      if (len) {
+        el.style.transition = 'none';
+        el.style.strokeDasharray = String(len);
+        el.style.strokeDashoffset = String(len);
+        el.getBoundingClientRect();
+      }
+    }
+    const raf = requestAnimationFrame(() => {
+      if (el && len) {
+        el.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
+        el.style.strokeDashoffset = '0';
+      }
+      setDrawn(true);
+    });
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dep]);
+  return drawn;
+}
 
 // ─── CIRCLE PROGRESS ────────────────────────────────────────
 function CircleRing({ value, goal, size = 110, strokeWidth = 10, color, trackColor, children }) {
@@ -24,6 +54,8 @@ function CircleRing({ value, goal, size = 110, strokeWidth = 10, color, trackCol
 
 // ─── MINI LINE CHART (SVG) ───────────────────────────────────
 function LineChart({ data, color, height = 80 }) {
+  const lineRef = useRef(null);
+  const drawn = useChartDraw(lineRef, data ? data.map(d => `${d.date}:${d.value}`).join('|') : '');
   if (!data || data.length < 2) return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No data yet</span>
@@ -60,10 +92,10 @@ function LineChart({ data, color, height = 80 }) {
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={fillPath} fill={`url(#grad-${color.replace('#', '')})`} />
-        <path d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={fillPath} fill={`url(#grad-${color.replace('#', '')})`} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.7s ease' }} />
+        <path ref={lineRef} d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {pts.map(([x, y], i) => i === pts.length - 1 && (
-          <circle key={i} cx={x} cy={y} r={3} fill={color} />
+          <circle key={i} cx={x} cy={y} r={3} fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease 0.5s' }} />
         ))}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>

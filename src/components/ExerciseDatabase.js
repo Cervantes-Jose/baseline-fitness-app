@@ -156,6 +156,10 @@ function ExerciseDatabase() {
     });
   };
 
+  // Collapse the search bar (and clear its text) once focus leaves the input —
+  // i.e. when the keyboard is dismissed by tapping away.
+  const closeSearch = () => { setSearch(''); setSearchOpen(false); };
+
   const searchResults = search.trim()
     ? CATEGORIES.flatMap(cat =>
         getExercises(cat)
@@ -210,35 +214,18 @@ function ExerciseDatabase() {
 
       {/* Top bar */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '16px 16px 12px' }}>
-        {/* Animated button/search container */}
-        <div style={{ flex: 1, position: 'relative', height: '80px' }}>
-          {/* Add Custom Exercise button */}
-          <button
-            onClick={() => setShowCreateModal(true)}
-            style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', gap: '16px',
-              background: 'var(--accent-light)', border: '1px solid var(--border)',
-              borderRadius: '16px', padding: '16px', cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.08)', textAlign: 'left', overflow: 'hidden',
-              opacity: searchOpen ? 0 : 1,
-              transform: searchOpen ? 'translateX(-20px)' : 'translateX(0)',
-              transition: 'opacity 0.25s ease, transform 0.25s ease',
-              pointerEvents: searchOpen ? 'none' : 'auto',
-            }}
-          >
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Add Custom Exercise</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>e.g. Bicep Curl, Cable Row</div>
-            </div>
-          </button>
-
-          {/* Search input */}
+        {/* "Exercises" label — crossfades out as the search bar slides in */}
+        <div style={{ flex: 1, position: 'relative', height: '44px' }}>
+          <p style={{
+            position: 'absolute', inset: 0, margin: 0,
+            display: 'flex', alignItems: 'center',
+            fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)',
+            opacity: searchOpen ? 0 : 1,
+            transition: 'opacity 0.25s ease',
+            pointerEvents: 'none',
+          }}>
+            Exercises
+          </p>
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', alignItems: 'center',
@@ -253,6 +240,7 @@ function ExerciseDatabase() {
               name="exercise-search"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onBlur={() => setTimeout(closeSearch, 150)}
               placeholder="Search exercises..."
               className="input"
               style={{ width: '100%', boxSizing: 'border-box' }}
@@ -260,19 +248,29 @@ function ExerciseDatabase() {
           </div>
         </div>
 
-        {/* Magnifying glass */}
-        <button
-          onClick={() => {
-            if (searchOpen) { setSearch(''); }
-            setSearchOpen(prev => !prev);
-          }}
-          style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--accent-light)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--accent)' }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2.2"/>
-            <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
-          </svg>
-        </button>
+        {/* Glass + plus — bare accent icons, matching the Routines tab */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={() => {
+              if (searchOpen) { searchInputRef.current?.blur(); closeSearch(); }
+              else setSearchOpen(true);
+            }}
+            aria-label="Search exercises"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2.2"/>
+              <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            aria-label="Add custom exercise"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* Success message */}
@@ -304,7 +302,7 @@ function ExerciseDatabase() {
         </div>
       ) : (
         /* Category sections */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 16px 16px' }}>
           {CATEGORIES.map(cat => {
             const exercises = getExercises(cat);
             const isExpanded = expanded.has(cat);
