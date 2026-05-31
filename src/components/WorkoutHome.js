@@ -98,8 +98,10 @@ function WorkoutHome({
 
   const fmtVolume = (lbs) => Math.round(lbs).toLocaleString();
 
-  // Build the "+X from last week" comparison line for a stat. Returns null when
-  // there's no previous-week data to compare against.
+  // Build the "+X from last week" comparison line for a stat. When there's no
+  // previous-week data yet (e.g. new users), we fall back to "+0 from last week"
+  // so the line still shows and signals that it will populate over time.
+  const zeroDelta = { text: '+0 from last week', color: 'var(--accent)' };
   const deltaInfo = (diff, fmt) => {
     if (diff === 0) return { text: 'Same as last week', color: 'var(--text-muted)' };
     const positive = diff > 0;
@@ -124,17 +126,17 @@ function WorkoutHome({
     {
       value: String(weekStats.workouts),
       label: 'Workouts',
-      delta: prevWeekStats ? deltaInfo(weekStats.workouts - prevWeekStats.workouts, n => String(n)) : null,
+      delta: prevWeekStats ? deltaInfo(weekStats.workouts - prevWeekStats.workouts, n => String(n)) : zeroDelta,
     },
     {
       value: weekStats.duration > 0 ? fmtDuration(weekStats.duration) : '0m',
       label: 'Duration',
-      delta: prevWeekStats ? deltaInfo(Math.round(weekStats.duration / 60) - Math.round(prevWeekStats.duration / 60), n => `${n}m`) : null,
+      delta: prevWeekStats ? deltaInfo(Math.round(weekStats.duration / 60) - Math.round(prevWeekStats.duration / 60), n => `${n}m`) : zeroDelta,
     },
     {
       value: weekStats.volume > 0 ? `${fmtVolume(weekStats.volume)} lbs` : '0',
       label: 'Volume',
-      delta: prevWeekStats ? deltaInfo(weekStats.volume - prevWeekStats.volume, n => `${fmtVolume(n)} lbs`) : null,
+      delta: prevWeekStats ? deltaInfo(weekStats.volume - prevWeekStats.volume, n => `${fmtVolume(n)} lbs`) : zeroDelta,
     },
   ];
 
@@ -147,8 +149,11 @@ function WorkoutHome({
             This Week
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-            {stats.map(({ value, label, delta }) => (
-              <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            {stats.map(({ value, label, delta }, i) => (
+              <div key={label} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                {i > 0 && (
+                  <div style={{ position: 'absolute', left: '-4px', top: '-20%', bottom: '10%', width: '1px', background: 'var(--border)', opacity: 0.6 }} />
+                )}
                 <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1 }}>
                   {value}
                 </div>

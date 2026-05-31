@@ -266,9 +266,9 @@ function ExerciseDatabase() {
           <button
             onClick={() => setShowCreateModal(true)}
             aria-label="Add custom exercise"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            +
+            + Add Exercise
           </button>
         </div>
       </div>

@@ -18,6 +18,18 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 
+// Palette for the routine accent bar (matches the Measurements color set).
+const CHART_COLORS = ['#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#EF4444', '#06B6D4', '#EC4899'];
+
+// Pick a stable, random-looking color per routine by hashing its id so it
+// doesn't flicker between renders the way Math.random() would.
+const routineColor = (id) => {
+  const str = String(id);
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return CHART_COLORS[hash % CHART_COLORS.length];
+};
+
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
@@ -258,7 +270,7 @@ function SortableRoutineWrapper({ id, children }) {
       {...attributes}
     >
       <div style={{
-        borderRadius: '16px',
+        borderRadius: '12px',
         transform: isDragging ? 'scale(1.02)' : 'scale(1)',
         boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.12)' : undefined,
         transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease',
@@ -1044,8 +1056,8 @@ const updateSet = (exId, setIdx, field, value) => {
             </button>
           )}
           <button onClick={() => setShowCreateModal(true)} aria-label="New routine"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            +
+            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            + Add Routine
           </button>
         </div>
       </div>
@@ -1056,8 +1068,9 @@ const updateSet = (exId, setIdx, field, value) => {
         <SortableRoutineWrapper key={r.id} id={r.id}>
         {(listeners) => (
         <div style={{
-          background: 'var(--card)', borderRadius: '16px', padding: '18px',
+          background: 'var(--bg)', borderRadius: '12px', padding: '18px',
           boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
+          borderLeft: `3px solid ${routineColor(r.id)}`,
           display: 'flex', alignItems: 'center', gap: '12px'
         }}>
           {routineEditMode && (
@@ -1215,8 +1228,8 @@ const updateSet = (exId, setIdx, field, value) => {
             </button>
           )}
           <button onClick={openExercisePicker} aria-label="Add exercise"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '24px', fontWeight: '600', lineHeight: 1, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            +
+            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            + Add Exercise
           </button>
         </div>
       </div>
