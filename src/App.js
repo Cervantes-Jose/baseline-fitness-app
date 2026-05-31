@@ -182,11 +182,30 @@ const changeDate = (dir) => {
 
  useEffect(() => {
     if (!activeWorkout) return;
-    const interval = setInterval(() => {
-      setWorkoutSeconds(Math.floor((Date.now() - activeWorkout.startTime) / 1000));
-    }, 1000);
+    if (activeWorkout.paused) {
+      setWorkoutSeconds(activeWorkout.pausedAccum || 0);
+      return;
+    }
+    const resumedAt = activeWorkout.resumedAt || activeWorkout.startTime;
+    const accum = activeWorkout.pausedAccum || 0;
+    const tick = () => setWorkoutSeconds(accum + Math.floor((Date.now() - resumedAt) / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [activeWorkout]);
+
+  // Pause/resume the active workout. On pause we bank the elapsed seconds into
+  // pausedAccum; on resume the clock restarts from resumedAt. This freezes the
+  // displayed time while paused and survives a reload (activeWorkout is persisted).
+  const togglePause = () => {
+    setActiveWorkout(prev => {
+      if (!prev) return prev;
+      if (prev.paused) return { ...prev, paused: false, resumedAt: Date.now() };
+      const resumedAt = prev.resumedAt || prev.startTime;
+      const accum = (prev.pausedAccum || 0) + Math.floor((Date.now() - resumedAt) / 1000);
+      return { ...prev, paused: true, pausedAccum: accum };
+    });
+  };
 
   useEffect(() => {
     const handler = () => setUpdateAvailable(true);
@@ -248,6 +267,8 @@ const changeDate = (dir) => {
           showToast={showToast}
           resetKey={workoutsResetKey}
           metricSystem={metricSystem}
+          workoutPaused={activeWorkout?.paused || false}
+          onTogglePause={togglePause}
         />;
       case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;

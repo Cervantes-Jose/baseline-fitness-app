@@ -30,10 +30,11 @@ const routineColor = (id) => {
   return CHART_COLORS[hash % CHART_COLORS.length];
 };
 
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+function formatHMS(seconds) {
+  const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+  const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+  return `${h}:${m}:${s}`;
 }
 
 function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet }) {
@@ -49,17 +50,18 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
   }, [expanded, sessionLog]);
 
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
+  const prevSets = ex.lastSession?.sets || [];
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes}>
       <div style={{
-        background: 'var(--card)', borderRadius: '16px',
-        boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+        background: 'var(--bg)', borderRadius: '12px',
+        boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 2px 6px rgba(0,0,0,0.05)',
         border: '1px solid var(--border)', overflow: 'hidden',
         transform: isDragging ? 'scale(1.02)' : 'scale(1)',
         transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '18px 16px', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '14px 16px', gap: '12px' }}>
           {exerciseEditMode && (
             <button onClick={onToggleSelect}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
@@ -107,15 +109,17 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
             WebkitBackfaceVisibility: 'hidden',
           }}>
             <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '32px 54px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
                 <div></div>
               </div>
               {sets.map((set, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '32px 54px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
                   <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
                   <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
                     inputMode="decimal"
                     placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
@@ -131,8 +135,8 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
                 </div>
               ))}
               <button onClick={() => addSet(ex.id)}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                + Add Set
+                style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                Add Set
               </button>
             </div>
           </div>
@@ -155,6 +159,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   }, [isExpanded, sessionLog, checkedSets]);
 
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
+  const prevSets = ex.lastSession?.sets || [];
   const doneCount = checkedSets.filter(Boolean).length;
 
   const submitRename = () => {
@@ -201,15 +206,17 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
       </div>
       <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 54px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
             <div /><div />
           </div>
           {sets.map((set, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: checkedSets[idx] ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '28px 54px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: checkedSets[idx] ? 0.45 : 1, transition: 'opacity 0.2s' }}>
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
               <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
                 inputMode="decimal"
                 placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
@@ -234,8 +241,8 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
             </div>
           ))}
           <button onClick={() => addSet(ex.id)}
-            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            + Add Set
+            style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            Add Set
           </button>
         </div>
       </div>
@@ -292,8 +299,8 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
       <div onClick={onToggle} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '18px', cursor: 'pointer',
-        background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+        background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
@@ -311,7 +318,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
       }}>
         <div ref={contentRef} style={{
           display: 'flex', flexDirection: 'column', gap: '6px',
-          padding: '8px 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+          padding: '8px 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
         }}>
           {exercises.map(name => {
             const isSelected = selectedExercises.has(name);
@@ -342,7 +349,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0 }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {} }) {
   const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
@@ -822,45 +829,38 @@ const updateSet = (exId, setIdx, field, value) => {
           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
         </div>
 
-        {/* Add Exercise button */}
-        <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
-          <button onClick={openExercisePicker} style={{
-            display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--accent-light)',
-            border: '1px solid var(--border)', borderRadius: '14px', padding: '10px 14px',
-            cursor: 'pointer', width: '100%', textAlign: 'left'
-          }}>
-            <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ color: 'white', fontSize: '20px', lineHeight: 1 }}>+</span>
+        {/* Combined stats tile */}
+        <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px' }}>
+            {/* Workout time */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Workout Time</div>
+              <div style={{ fontSize: '30px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                {formatHMS(workoutSeconds)}
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Elapsed</div>
             </div>
-            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--accent)' }}>Add Exercise</span>
-          </button>
-        </div>
 
-        {/* Stats grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '0 16px 12px', flexShrink: 0 }}>
-          {/* Left column: timer + volume stacked */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Duration</div>
-              <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px' }}>
-                {formatTime(workoutSeconds)}
-              </div>
-            </div>
-            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+            {/* Divider */}
+            <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+
+            {/* Volume */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
               <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</div>
-              <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)', letterSpacing: '-0.5px' }}>
-                {totalVolume.toLocaleString()} <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>LB</span>
+              <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--accent)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                {totalVolume.toLocaleString()}
               </div>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{metricSystem === 'metric' ? 'Kg' : 'Lbs'}</div>
             </div>
-          </div>
-          {/* Right column: exercise progress spanning full height */}
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Exercises</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1 }}>
-              {completedExCount}<span style={{ fontSize: '20px', color: 'var(--text-muted)' }}>/{activeRoutine.exercises.length}</span>
-            </div>
-            <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+
+            {/* Exercise progress */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
+              <div style={{ flex: 1, height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${progress}%`, height: '100%', background: 'var(--accent)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                {completedExCount}/{activeRoutine.exercises.length} exercises
+              </div>
             </div>
           </div>
         </div>
@@ -895,9 +895,13 @@ const updateSet = (exId, setIdx, field, value) => {
           ))}
         </div>
 
-        {/* Finish button */}
-        <div style={{ padding: '12px 16px 28px', flexShrink: 0, borderTop: '1px solid var(--border)' }}>
-          <button onClick={finishWorkout} className="btn-primary" style={{ width: '100%', padding: '18px', fontSize: '17px', fontWeight: '700' }}>
+        {/* Pause / Finish buttons */}
+        <div style={{ padding: '12px 16px 28px', flexShrink: 0, borderTop: '1px solid var(--border)', display: 'flex', gap: '10px' }}>
+          <button onClick={onTogglePause}
+            style={{ flex: 1, padding: '18px', fontSize: '17px', fontWeight: '700', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer' }}>
+            {workoutPaused ? 'Resume Workout' : 'Pause Workout'}
+          </button>
+          <button onClick={finishWorkout} className="btn-primary" style={{ flex: 1, padding: '18px', fontSize: '17px', fontWeight: '700' }}>
             Finish Workout
           </button>
         </div>
@@ -992,7 +996,7 @@ const updateSet = (exId, setIdx, field, value) => {
             }
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {CATEGORIES.map(cat => {
               const exercises = pickerGetExercises(cat);
               const isExpanded = expandedPickerCategories.has(cat);
@@ -1037,7 +1041,7 @@ const updateSet = (exId, setIdx, field, value) => {
   );
 
   if (view === 'routines' || view === 'logging') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1069,7 +1073,7 @@ const updateSet = (exId, setIdx, field, value) => {
         {(listeners) => (
         <div style={{
           background: 'var(--bg)', borderRadius: '12px', padding: '18px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: '1px solid var(--border)',
           borderLeft: `3px solid ${routineColor(r.id)}`,
           display: 'flex', alignItems: 'center', gap: '12px'
         }}>
@@ -1198,7 +1202,7 @@ const updateSet = (exId, setIdx, field, value) => {
 
   if (view === 'exercises') return (
     <>
-    <div style={{ padding: '16px', paddingBottom: '80px', display: 'flex', flexDirection: 'column', gap: '10px', WebkitOverflowScrolling: 'touch' }}>
+    <div style={{ padding: '16px', paddingBottom: '80px', display: 'flex', flexDirection: 'column', gap: '8px', WebkitOverflowScrolling: 'touch' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <button onClick={() => { setView('routines'); setExerciseEditMode(false); setSelectedExercises(new Set()); }}

@@ -72,8 +72,8 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '18px', cursor: 'pointer',
           background: 'var(--card)', border: '1px solid var(--border)',
-          borderRadius: '16px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+          borderRadius: '12px',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -99,7 +99,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
         <div ref={contentRef} style={{
           display: 'flex', flexDirection: 'column', gap: '6px',
           padding: '8px 16px 16px',
-          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px',
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
         }}>
           {children}
         </div>
@@ -302,7 +302,7 @@ function ExerciseDatabase() {
         </div>
       ) : (
         /* Category sections */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 16px 16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 16px 16px' }}>
           {CATEGORIES.map(cat => {
             const exercises = getExercises(cat);
             const isExpanded = expanded.has(cat);

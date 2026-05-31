@@ -24,6 +24,8 @@ function WorkoutHome({
   showToast,
   resetKey,
   metricSystem,
+  workoutPaused,
+  onTogglePause,
   appActiveTab,
 }) {
   const [tab, setTab] = useState(APP_TAB_MAP[appActiveTab] || 'Routines');
@@ -120,6 +122,9 @@ function WorkoutHome({
     onWorkoutStart,
     onExpand,
     showToast,
+    metricSystem,
+    workoutPaused,
+    onTogglePause,
   };
 
   const stats = [
