@@ -140,6 +140,185 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
   );
 }
 
+// ─── SERVING / MACRO HELPERS ─────────────────────────────────
+// Macros on every food object are stored per "base" grams: USDA search results
+// use food.servingSize; recent/custom foods have no servingSize so default to 100g.
+const UNIT_TO_GRAMS = { g: 1, oz: 28.35, ml: 1, cup: 240, tbsp: 15 };
+const SERVING_UNITS = ['g', 'oz', 'ml', 'cup', 'tbsp', 'serving'];
+
+const baseGramsOf = (food) => (Number(food?.servingSize) > 0 ? Number(food.servingSize) : 100);
+
+const servingToGrams = (amount, unit, baseGrams) => {
+  const a = Number(amount) || 0;
+  if (unit === 'serving') return a * baseGrams;   // 1 serving = the food's base serving size
+  return a * (UNIT_TO_GRAMS[unit] ?? 1);
+};
+
+const scaleOf = (food, serving, unit) => {
+  const base = baseGramsOf(food);
+  return base > 0 ? servingToGrams(serving, unit, base) / base : 1;
+};
+
+const computeMacros = (food, serving, unit) => {
+  const s = scaleOf(food, serving, unit);
+  return {
+    calories: Math.round((Number(food?.calories) || 0) * s),
+    protein: Math.round((Number(food?.protein) || 0) * s),
+    carbs: Math.round((Number(food?.carbs) || 0) * s),
+    fats: Math.round((Number(food?.fats) || 0) * s),
+  };
+};
+
+// A food's preferred serving (set via the detail screen); falls back to the USDA
+// serving size, else 100g.
+const defaultServingOf = (food) => ({
+  serving: food?.savedServing != null ? food.savedServing
+    : (Number(food?.servingSize) > 0 ? Number(food.servingSize) : 100),
+  unit: food?.savedUnit || food?.servingSizeUnit || 'g',
+});
+
+// Micronutrients: tolerant parse of common USDA foodNutrients shapes. Values are
+// per base serving, so we scale them by the current serving scale. May need
+// tuning to match the food-search edge function's exact output shape.
+const MACRO_NAME_RE = /protein|carbohydrate|total lipid|\bfat\b|fatty|energy|calorie/i;
+const DV_REFERENCE = {
+  Fiber: 28, Sugars: 50, Sodium: 2300, Cholesterol: 300, Potassium: 4700,
+  Calcium: 1300, Iron: 18, 'Vitamin C': 90, 'Vitamin D': 20, 'Vitamin A': 900,
+};
+const cleanNutrientName = (name) => String(name).split(',')[0].trim();
+const parseMicros = (food, scale) => {
+  const arr = food?.foodNutrients || food?.nutrients || [];
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map(n => ({
+      name: cleanNutrientName(n.nutrientName || n.name || n.nutrient?.name || ''),
+      raw: n.value ?? n.amount ?? n.nutrient?.amount,
+      unit: String(n.unitName || n.unit || n.nutrient?.unitName || '').toLowerCase(),
+    }))
+    .filter(n => n.name && n.raw != null && !MACRO_NAME_RE.test(n.name))
+    .map(n => {
+      const value = Number(n.raw) * scale;
+      const ref = DV_REFERENCE[n.name];
+      return {
+        name: n.name,
+        value: Math.round(value * 10) / 10,
+        unit: n.unit,
+        dv: ref ? Math.round((value / ref) * 100) : null,
+      };
+    });
+};
+
+// ─── FOOD DETAIL VIEW ────────────────────────────────────────
+function FoodDetailView({ food, serving, unit, onServing, onUnit, onBack, onAdd }) {
+  const [showAllMicros, setShowAllMicros] = useState(false);
+
+  const macros = computeMacros(food, serving, unit);
+  const scale = scaleOf(food, serving, unit);
+  const pCal = macros.protein * 4;
+  const cCal = macros.carbs * 4;
+  const fCal = macros.fats * 9;
+  const totalMacroCal = pCal + cCal + fCal || 1;
+
+  const micros = parseMicros(food, scale);
+  const shownMicros = showAllMicros ? micros : micros.slice(0, 6);
+
+  const cardStyle = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', padding: '16px', marginBottom: '12px' };
+  const macroCells = [
+    { label: 'Calories', value: macros.calories, unit: 'kcal', color: '#3B82F6' },
+    { label: 'Protein', value: macros.protein, unit: 'g', color: '#22C55E' },
+    { label: 'Fat', value: macros.fats, unit: 'g', color: '#3B82F6' },
+    { label: 'Carbs', value: macros.carbs, unit: 'g', color: '#EAB308' },
+  ];
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>← Back</button>
+
+        <div style={{ margin: '8px 0 16px' }}>
+          <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{food.name}</div>
+          {food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
+        </div>
+
+        {/* Serving size + macros */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Serving Size</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              <input type="number" inputMode="decimal" value={serving} onChange={e => onServing(e.target.value)}
+                style={{ width: '64px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', textAlign: 'center', outline: 'none' }} />
+              <select value={unit} onChange={e => onUnit(e.target.value)}
+                style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', cursor: 'pointer', outline: 'none' }}>
+                {SERVING_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {macroCells.map(m => (
+              <div key={m.label} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: m.color }}>{m.label}</div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px', lineHeight: 1.1 }}>{m.value}</div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{m.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Macronutrients */}
+        <div style={cardStyle}>
+          <p className="section-title" style={{ marginBottom: '12px' }}>Macronutrients</p>
+          {[
+            { label: 'Protein', grams: macros.protein, cal: pCal, color: '#22C55E' },
+            { label: 'Carbohydrates', grams: macros.carbs, cal: cCal, color: '#EAB308' },
+            { label: 'Fat', grams: macros.fats, cal: fCal, color: '#3B82F6' },
+          ].map(m => (
+            <div key={m.label} style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{m.label}</span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>{m.grams}g</span>
+              </div>
+              <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min((m.cal / totalMacroCal) * 100, 100)}%`, height: '100%', background: m.color, borderRadius: '4px' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Micronutrients */}
+        {micros.length > 0 && (
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <p className="section-title" style={{ margin: 0 }}>Micronutrients</p>
+              {micros.length > 6 && (
+                <button onClick={() => setShowAllMicros(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '13px', fontWeight: '600', padding: 0 }}>
+                  {showAllMicros ? 'Show Less' : 'View All'}
+                </button>
+              )}
+            </div>
+            {shownMicros.map((m, i) => (
+              <div key={m.name + i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < shownMicros.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{m.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>{m.value}{m.unit}</span>
+                  {m.dv != null && <span style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '34px', textAlign: 'right' }}>{m.dv}%</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sticky Add Food */}
+      <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
+        <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>Add Food</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── FOOD LOG ────────────────────────────────────────────────
 function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60 }) {
   const currentHour = new Date().getHours();
@@ -156,8 +335,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const addFoodDragStart = useRef(null);
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFoods, setSelectedFoods] = useState({});
   const [recentFoodList, setRecentFoodList] = useState([]);
+
+  // Foods confirmed for logging (via the left checkbox or the detail screen).
+  // Keyed by food name → { food, serving, unit, adjustedMacros }.
+  const [checkedFoods, setCheckedFoods] = useState({});
+  const [detailFood, setDetailFood] = useState(null);   // food being viewed on the detail screen
+  const [detailServing, setDetailServing] = useState('100');
+  const [detailUnit, setDetailUnit] = useState('g');
 
   // Custom foods (user-defined). Pinned at the top of the Add Food list.
   const [customFoods, setCustomFoods] = useState([]);
@@ -287,7 +472,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const deleteCustomFood = async (food) => {
     setCustomMenuOpen(null);
     setCustomFoods(prev => prev.filter(f => f.id !== food.id));
-    setSelectedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
+    setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
     await supabase.from('custom_foods').delete().eq('id', food.id);
   };
 
@@ -338,7 +523,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setTimeout(() => {               // unmount + reset after the slide-out finishes
       setShowAddFoodScreen(false);
       setSearchQuery('');
-      setSelectedFoods({});
+      setCheckedFoods({});
+      setDetailFood(null);
       setSearchResults(null);
       setSearchError(null);
     }, 350);
@@ -360,37 +546,62 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     else setAddFoodDragY(0);
   };
 
-  const toggleFood = (food) => {
-    setSelectedFoods(prev => {
-      const key = food.name;
+  // Instant check from a recent/custom row — adds the food at its saved serving.
+  const toggleChecked = (food) => {
+    setCheckedFoods(prev => {
       const next = { ...prev };
-      if (next[key]) { delete next[key]; }
-      else { next[key] = { ...food, _serving: food.servingSize ?? null }; }
+      if (next[food.name]) { delete next[food.name]; return next; }
+      const { serving, unit } = defaultServingOf(food);
+      next[food.name] = { food, serving, unit, adjustedMacros: computeMacros(food, serving, unit) };
       return next;
     });
   };
 
-  const updateServing = (foodName, value) => {
-    setSelectedFoods(prev => ({ ...prev, [foodName]: { ...prev[foodName], _serving: value } }));
+  const openDetail = (food) => {
+    const { serving, unit } = defaultServingOf(food);
+    setDetailServing(String(serving));
+    setDetailUnit(unit);
+    setDetailFood(food);
   };
 
-  const handleAddSelected = async () => {
-    const foodsToAdd = Object.values(selectedFoods);
-    if (foodsToAdd.length === 0) return;
-    const inserts = foodsToAdd.map(f => {
-      const base = f.servingSize;
-      const current = Number(f._serving);
-      const ratio = (base && current > 0) ? current / base : 1;
-      return {
-        name: f.name,
-        calories: Math.round(Number(f.calories) * ratio),
-        protein: Math.round(Number(f.protein) * ratio),
-        carbs: Math.round(Number(f.carbs) * ratio),
-        fats: Math.round(Number(f.fats) * ratio),
-        hour: addFoodHour,
-        date: dateStr,
-      };
-    });
+  // Confirm serving from the detail screen: save the preferred serving back to the
+  // source list and add the food (with adjusted macros) to checkedFoods.
+  const confirmDetail = () => {
+    const food = detailFood;
+    if (!food) return;
+    const serving = Number(detailServing) || 0;
+    const unit = detailUnit;
+    const macros = computeMacros(food, serving, unit);
+    // We store savedServing/savedUnit rather than overwriting servingSize/servingSizeUnit
+    // so the per-serving macro basis used for scaling stays intact. (To persist across
+    // sessions, add savedServing/savedUnit columns to custom_foods and update here.)
+    if (food.isCustom) {
+      setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
+    } else {
+      setRecentFoodList(prev => {
+        if (prev.some(f => f.name === food.name)) {
+          return prev.map(f => (f.name === food.name ? { ...f, savedServing: serving, savedUnit: unit } : f));
+        }
+        // New USDA result: add to recents so next time it appears with the saved serving.
+        return [{ ...food, savedServing: serving, savedUnit: unit }, ...prev];
+      });
+    }
+    setCheckedFoods(prev => ({ ...prev, [food.name]: { food, serving, unit, adjustedMacros: macros } }));
+    setDetailFood(null);
+  };
+
+  const handleAddChecked = async () => {
+    const items = Object.values(checkedFoods);
+    if (items.length === 0) return;
+    const inserts = items.map(({ food, adjustedMacros }) => ({
+      name: food.name,
+      calories: adjustedMacros.calories,
+      protein: adjustedMacros.protein,
+      carbs: adjustedMacros.carbs,
+      fats: adjustedMacros.fats,
+      hour: addFoodHour,
+      date: dateStr,
+    }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
     if (error) { console.error(error); return; }
     const newFoods = { ...foods };
@@ -420,7 +631,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     ? `Today, ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  const selectedCount = Object.keys(selectedFoods).length;
+  const checkedCount = Object.keys(checkedFoods).length;
   const isSearchActive = searchQuery.trim().length > 0;
   // Custom foods are pinned at the top, so exclude their names from the recent/search list below to avoid duplicates.
   const customNames = new Set(customFoods.map(f => f.name));
@@ -636,6 +847,18 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
 
+          {detailFood ? (
+            <FoodDetailView
+              food={detailFood}
+              serving={detailServing}
+              unit={detailUnit}
+              onServing={setDetailServing}
+              onUnit={setDetailUnit}
+              onBack={() => setDetailFood(null)}
+              onAdd={confirmDetail}
+            />
+          ) : (
+          <>
           <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px 12px', gap: '10px', background: 'var(--bg)' }}>
             <span style={{ flex: 1, fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)' }}>Add Food</span>
             <button onClick={openCreateCustom} aria-label="Add custom food"
@@ -689,27 +912,32 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
 
             {displayedCustomFoods.map(food => {
-              const isSelected = !!selectedFoods[food.name];
+              const checked = !!checkedFoods[food.name];
+              const ds = defaultServingOf(food);
+              const dm = computeMacros(food, ds.serving, ds.unit);
               return (
-                <div key={'custom-' + food.id} onClick={() => toggleFood(food)} style={{
-                  display: 'flex', alignItems: 'center', gap: '14px',
+                <div key={'custom-' + food.id} onClick={() => openDetail(food)} style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
                   padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                 }}>
-                  <div style={{
-                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                    border: isSelected ? 'none' : '2px solid var(--border)',
-                    background: isSelected ? 'var(--accent)' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
-                  }}>
-                    {isSelected && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
-                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
+                    <div style={{
+                      width: '22px', height: '22px', borderRadius: '50%',
+                      border: checked ? 'none' : '2px solid var(--border)',
+                      background: checked ? 'var(--accent)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+                    }}>
+                      {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                    </div>
+                  </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
                       <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {Math.round(food.calories)} cal · {Math.round(food.protein)}g P · {Math.round(food.carbs)}g C · {Math.round(food.fats)}g F
+                      {dm.calories} cal · {dm.protein}g P · {dm.carbs}g C · {dm.fats}g F
                     </div>
                   </div>
                   <button onClick={(e) => {
@@ -718,7 +946,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     setCustomMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
                     setCustomMenuOpen(customMenuOpen === food.id ? null : food.id);
                   }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', padding: '4px 8px', letterSpacing: '2px', lineHeight: 1, flexShrink: 0 }}>···</button>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', padding: '4px 6px', letterSpacing: '2px', lineHeight: 1, flexShrink: 0 }}>···</button>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </div>
               );
             })}
@@ -738,74 +969,57 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             )}
 
             {displayedFoods.map(food => {
-              const isSelected = !!selectedFoods[food.name];
-              const sel = selectedFoods[food.name];
-              const currentServing = sel ? Number(sel._serving) : 0;
-              const base = food.servingSize;
-              const ratio = (base && currentServing > 0) ? currentServing / base : 1;
+              // Recent rows get an instant-check circle; live USDA search results don't.
+              const showCheckbox = !(isSearchActive && !searchError);
+              const checked = !!checkedFoods[food.name];
+              const ds = defaultServingOf(food);
+              const dm = computeMacros(food, ds.serving, ds.unit);
               return (
-                <div key={food.name + (food.brandOwner || '')}>
-                  <div onClick={() => toggleFood(food)} style={{
-                    display: 'flex', alignItems: 'center', gap: '14px',
-                    padding: '12px 0', borderBottom: isSelected && base ? 'none' : '1px solid var(--border)',
-                    cursor: 'pointer',
-                  }}>
-                    <div style={{
-                      width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                      border: isSelected ? 'none' : '2px solid var(--border)',
-                      background: isSelected ? 'var(--accent)' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'background 0.15s',
-                    }}>
-                      {isSelected && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</div>
-                      {food.brandOwner && (
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
-                      )}
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {Math.round(food.calories * ratio)} cal · {Math.round(food.protein * ratio)}g P · {Math.round(food.carbs * ratio)}g C · {Math.round(food.fats * ratio)}g F
+                <div key={food.name + (food.brandOwner || '')} onClick={() => openDetail(food)} style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                }}>
+                  {showCheckbox && (
+                    <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
+                      <div style={{
+                        width: '22px', height: '22px', borderRadius: '50%',
+                        border: checked ? 'none' : '2px solid var(--border)',
+                        background: checked ? 'var(--accent)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+                      }}>
+                        {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                       </div>
+                    </button>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</div>
+                    {food.brandOwner && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
+                    )}
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {dm.calories} cal · {dm.protein}g P · {dm.carbs}g C · {dm.fats}g F
                     </div>
                   </div>
-
-                  {isSelected && base != null && (
-                    <div onClick={e => e.stopPropagation()} style={{
-                      display: 'flex', alignItems: 'center', gap: '10px',
-                      padding: '8px 0 12px', paddingLeft: '36px',
-                      borderBottom: '1px solid var(--border)',
-                    }}>
-                      <input
-                        type="number" inputMode="decimal"
-                        value={sel._serving ?? ''}
-                        onChange={e => updateServing(food.name, e.target.value)}
-                        style={{
-                          width: '72px', padding: '6px 10px', borderRadius: '8px',
-                          border: '1.5px solid var(--accent)', background: 'var(--bg)',
-                          color: 'var(--text-primary)', fontSize: '14px', outline: 'none',
-                        }}
-                      />
-                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{food.servingSizeUnit || 'g'}</span>
-                      {currentServing > 0 && (
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>= {Math.round(food.calories * ratio)} cal</span>
-                      )}
-                    </div>
-                  )}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </div>
               );
             })}
           </div>
 
-          {selectedCount > 0 && (
+          {checkedCount > 0 && (
             <div style={{
               padding: '12px 20px 32px', borderTop: '1px solid var(--border)',
               background: 'var(--bg)', animation: 'slideUpBar 0.2s ease forwards',
             }}>
-              <button onClick={handleAddSelected} className="btn-primary">
-                Add {selectedCount} Food{selectedCount !== 1 ? 's' : ''}
+              <button onClick={handleAddChecked} className="btn-primary">
+                Add {checkedCount} Food{checkedCount !== 1 ? 's' : ''}
               </button>
             </div>
+          )}
+          </>
           )}
 
           {/* Custom food ··· menu */}
