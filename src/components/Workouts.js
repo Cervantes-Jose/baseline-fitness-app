@@ -55,7 +55,7 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes}>
       <div style={{
-        background: 'var(--bg)', borderRadius: '12px',
+        background: 'var(--card)', borderRadius: '12px',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 2px 6px rgba(0,0,0,0.05)',
         border: '1px solid var(--border)', overflow: 'hidden',
         transform: isDragging ? 'scale(1.02)' : 'scale(1)',
@@ -149,38 +149,52 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
 function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise, onRenameExercise }) {
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
-  const [renaming, setRenaming] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [nameDraft, setNameDraft] = useState(ex.name);
 
   useEffect(() => {
     if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
-  }, [isExpanded, sessionLog, checkedSets]);
+  }, [isExpanded, sessionLog, checkedSets, editMode]);
+
+  // Collapsing the card (e.g. opening another exercise) also exits edit mode.
+  useEffect(() => { if (!isExpanded) setEditMode(false); }, [isExpanded]);
 
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
   const prevSets = ex.lastSession?.sets || [];
   const doneCount = checkedSets.filter(Boolean).length;
+  const SET_GRID = '28px 54px 1fr 1fr 36px';
 
-  const submitRename = () => {
+  // Entering edit mode makes the name editable and reveals the delete-exercise
+  // and per-set trash icons; force the card open so the sets are visible.
+  const enterEdit = () => {
+    setNameDraft(ex.name);
+    setEditMode(true);
+    if (!isExpanded) onToggleExpand();
+  };
+  // Leaving edit mode commits any rename.
+  const exitEdit = () => {
     const trimmed = nameDraft.trim();
     if (trimmed && trimmed !== ex.name) onRenameExercise(trimmed);
-    setRenaming(false);
+    setEditMode(false);
   };
 
   return (
-    <>
-    <div style={{ background: 'var(--card)', borderRadius: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0 }}>
-      <div onClick={renaming ? undefined : onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: renaming ? 'default' : 'pointer' }}>
-        <div style={{ flex: 1, minWidth: 0 }} onClick={renaming ? (e => e.stopPropagation()) : undefined}>
-          {renaming ? (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} autoFocus
-                className="input" style={{ flex: 1, padding: '8px 10px', fontSize: '15px' }}
-                onClick={e => e.stopPropagation()}
-                onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenaming(false); setNameDraft(ex.name); } }} />
-              <button onClick={(e) => { e.stopPropagation(); submitRename(); }} className="btn-secondary" style={{ padding: '8px 14px', flexShrink: 0 }}>Save</button>
-            </div>
+    <div style={{ background: 'var(--card)', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0 }}>
+      <div onClick={editMode ? undefined : onToggleExpand} style={{ display: 'flex', alignItems: 'center', padding: '16px', gap: '12px', cursor: editMode ? 'default' : 'pointer' }}>
+        {editMode && (
+          <button onClick={(e) => { e.stopPropagation(); onDeleteExercise(); }} aria-label="Delete exercise"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }} onClick={editMode ? (e => e.stopPropagation()) : undefined}>
+          {editMode ? (
+            <input value={nameDraft} onChange={e => setNameDraft(e.target.value)}
+              className="input" style={{ width: '100%', padding: '8px 10px', fontSize: '15px' }}
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => { if (e.key === 'Enter') exitEdit(); }} />
           ) : (
             <>
               <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</div>
@@ -188,16 +202,13 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
             </>
           )}
         </div>
-        {!renaming && (onRenameExercise || onDeleteExercise) && (
-          <button onClick={(e) => {
-            e.stopPropagation();
-            const rect = e.currentTarget.getBoundingClientRect();
-            setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-            setMenuOpen(o => !o);
-          }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', padding: '4px 8px', letterSpacing: '2px', lineHeight: 1, flexShrink: 0 }}>···</button>
+        {(onRenameExercise || onDeleteExercise) && (
+          <button onClick={(e) => { e.stopPropagation(); editMode ? exitEdit() : enterEdit(); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px', flexShrink: 0 }}>
+            {editMode ? 'Done' : 'Edit'}
+          </button>
         )}
-        {!renaming && (
+        {!editMode && (
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
             style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease', color: 'var(--accent)', flexShrink: 0 }}>
             <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -206,15 +217,15 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
       </div>
       <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 54px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Reps</div>
-            <div /><div />
+            <div />
           </div>
           {sets.map((set, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '28px 54px 1fr 1fr 32px 36px', gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: checkedSets[idx] ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: (!editMode && checkedSets[idx]) ? 0.45 : 1, transition: 'opacity 0.2s' }}>
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
               <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
@@ -223,21 +234,24 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
               <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
                 inputMode="numeric" pattern="[0-9]*"
                 placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
-              <button onClick={() => deleteSet(ex.id, idx)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <button onClick={() => toggleCheck(idx)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {checkedSets[idx]
-                  ? <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </div>
-                  : <div style={{ width: '26px', height: '26px', borderRadius: '50%', border: '2px solid var(--border)' }} />
-                }
-              </button>
+              {editMode ? (
+                <button onClick={() => deleteSet(ex.id, idx)} aria-label="Delete set"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              ) : (
+                <button onClick={() => toggleCheck(idx)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {checkedSets[idx]
+                    ? <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                    : <div style={{ width: '26px', height: '26px', borderRadius: '50%', border: '2px solid var(--border)' }} />
+                  }
+                </button>
+              )}
             </div>
           ))}
           <button onClick={() => addSet(ex.id)}
@@ -247,23 +261,6 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
         </div>
       </div>
     </div>
-    {menuOpen && (
-      <>
-        <div onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} style={{ position: 'fixed', inset: 0, zIndex: 360 }} />
-        <div style={{
-          position: 'fixed', top: menuPos.top, right: menuPos.right,
-          background: 'var(--card)', border: '1px solid var(--border)',
-          borderRadius: '12px', overflow: 'hidden',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 361, minWidth: '140px',
-        }}>
-          <button onClick={(e) => { e.stopPropagation(); setNameDraft(ex.name); setRenaming(true); setMenuOpen(false); }}
-            style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Rename</button>
-          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDeleteExercise(); }}
-            style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#ff4444' }}>Delete</button>
-        </div>
-      </>
-    )}
-    </>
   );
 }
 
@@ -831,26 +828,27 @@ const updateSet = (exId, setIdx, field, value) => {
 
         {/* Combined stats tile */}
         <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px' }}>
-            {/* Workout time */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Workout Time</div>
-              <div style={{ fontSize: '30px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                {formatHMS(workoutSeconds)}
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', padding: '18px' }}>
+            {/* Workout time + Volume side by side */}
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Workout Time</div>
+                <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                  {formatHMS(workoutSeconds)}
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Elapsed</div>
               </div>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Elapsed</div>
-            </div>
 
-            {/* Divider */}
-            <div style={{ borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+              {/* Vertical divider */}
+              <div style={{ width: '1px', alignSelf: 'stretch', background: 'var(--border)', margin: '0 12px' }} />
 
-            {/* Volume */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</div>
-              <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--accent)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                {totalVolume.toLocaleString()}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume</div>
+                <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--accent)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                  {totalVolume.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{metricSystem === 'metric' ? 'Kg' : 'Lbs'}</div>
               </div>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{metricSystem === 'metric' ? 'Kg' : 'Lbs'}</div>
             </div>
 
             {/* Exercise progress */}
@@ -866,7 +864,7 @@ const updateSet = (exId, setIdx, field, value) => {
         </div>
 
         {/* Exercise cards */}
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeRoutine.exercises.map(ex => (
             <LoggingExerciseCard
               key={ex.id}
@@ -1072,7 +1070,7 @@ const updateSet = (exId, setIdx, field, value) => {
         <SortableRoutineWrapper key={r.id} id={r.id}>
         {(listeners) => (
         <div style={{
-          background: 'var(--bg)', borderRadius: '12px', padding: '18px',
+          background: 'var(--card)', borderRadius: '12px', padding: '18px',
           boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: '1px solid var(--border)',
           borderLeft: `3px solid ${routineColor(r.id)}`,
           display: 'flex', alignItems: 'center', gap: '12px'
@@ -1291,7 +1289,7 @@ const updateSet = (exId, setIdx, field, value) => {
     const isAllSelected = history.length > 0 && history.every(s => selectedSessions.has(s.id));
 
     return (
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1392,7 +1390,7 @@ const updateSet = (exId, setIdx, field, value) => {
 
         {/* List view */}
         {!calendarView && history.map(session => (
-          <div key={session.id} className="card" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div key={session.id} className="card-flat" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             {editMode && (
               <button onClick={() => setSelectedSessions(prev => {
                 const next = new Set(prev);

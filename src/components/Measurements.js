@@ -429,7 +429,7 @@ function Measurements({ metricSystem = 'imperial' }) {
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
   if (view === 'list') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Measurements</p>
         <button onClick={() => setShowModal(true)} aria-label="New measurement"
@@ -530,7 +530,7 @@ function Measurements({ metricSystem = 'imperial' }) {
           <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
         );
         return (
-          <div key={m.id} className="card">
+          <div key={m.id} className="card-flat">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ flex: 1, minWidth: 0, paddingRight: '28px', cursor: 'pointer' }} onClick={() => openMeasurement(m)}>
                 {hasEntries ? (
@@ -647,7 +647,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     };
 
     return (
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button onClick={() => setView('list')}
           style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
           ← Back
@@ -655,7 +655,7 @@ function Measurements({ metricSystem = 'imperial' }) {
         <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeMeasurement.name}</h2>
 
         {/* TREND */}
-        <div className="card">
+        <div className="card-flat">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={sectionLabel}>Trend</p>
             <div style={{ position: 'relative' }}>
@@ -707,7 +707,7 @@ function Measurements({ metricSystem = 'imperial' }) {
         </div>
 
         {/* LOG NEW ENTRY */}
-        <div className="card">
+        <div className="card-flat">
           <p style={sectionLabel}>Log New Entry</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
             <button onClick={() => setShowCalendar(true)}
@@ -733,7 +733,7 @@ function Measurements({ metricSystem = 'imperial' }) {
 
         {/* HISTORY */}
         {allEntries.length > 0 && (
-          <div className="card">
+          <div className="card-flat">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
               <p style={sectionLabel}>History</p>
               <button onClick={() => setShowAllHistory(true)}

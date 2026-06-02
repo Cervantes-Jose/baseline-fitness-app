@@ -149,7 +149,7 @@ function WorkoutHome({
     <div style={{ paddingBottom: 20 }}>
       {/* Weekly stats card */}
       <div style={{ padding: '16px 20px 0' }}>
-        <div className="card" style={{ padding: '16px 20px' }}>
+        <div className="card-flat" style={{ padding: '16px 20px' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '12px' }}>
             This Week
           </p>

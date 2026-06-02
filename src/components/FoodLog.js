@@ -1,3 +1,8 @@
+// Requires custom_foods table in Supabase:
+// create table custom_foods (id uuid default uuid_generate_v4() primary key, name text, calories numeric, protein numeric, carbs numeric, fats numeric, created_at timestamp default now());
+// grant select, insert, update, delete on public.custom_foods to anon, authenticated, service_role;
+// alter table public.custom_foods enable row level security;
+// create policy "Allow all for now" on public.custom_foods for all using (true) with check (true);
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -28,7 +33,7 @@ const PLACEHOLDER_FOODS = [
   { name: 'Protein Shake',   calories: 150, protein: 25, carbs: 8,  fats: 3  },
 ];
 
-const FILTER_TABS = ['Favorites', 'Recipes', 'Recents', 'Quick Add', 'Meals', 'History'];
+const FILTER_TABS = ['Add Food', 'Favorites', 'Meals', 'Nutrition'];
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ─── CALENDAR MODAL ─────────────────────────────────────────
@@ -141,15 +146,26 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const [date, setDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('Recents');
+  const [activeFilter, setActiveFilter] = useState('Add Food');
   const [foods, setFoods] = useState({});
   const [loading, setLoading] = useState(true);
 
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);   // drives the slide-up / drag transform
+  const [addFoodDragY, setAddFoodDragY] = useState(0);
+  const addFoodDragStart = useRef(null);
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFoods, setSelectedFoods] = useState({});
   const [recentFoodList, setRecentFoodList] = useState([]);
+
+  // Custom foods (user-defined). Pinned at the top of the Add Food list.
+  const [customFoods, setCustomFoods] = useState([]);
+  const [customModalMode, setCustomModalMode] = useState(null);   // 'create' | 'rename' | null
+  const [customForm, setCustomForm] = useState({ name: '', calories: '', protein: '', carbs: '', fats: '' });
+  const [editingCustomId, setEditingCustomId] = useState(null);
+  const [customMenuOpen, setCustomMenuOpen] = useState(null);     // id of food whose ··· menu is open
+  const [customMenuPos, setCustomMenuPos] = useState({ top: 0, right: 0 });
 
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -163,7 +179,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => { loadFoods(); }, [date]);
 
   useEffect(() => {
-    if (showAddFoodScreen) loadRecentFoods();
+    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
 
@@ -223,6 +239,58 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setRecentFoodList(recent);
   };
 
+  const loadCustomFoods = async () => {
+    const { data } = await supabase
+      .from('custom_foods')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setCustomFoods(data.map(f => ({ ...f, isCustom: true })));
+  };
+
+  const openCreateCustom = () => {
+    setCustomForm({ name: '', calories: '', protein: '', carbs: '', fats: '' });
+    setEditingCustomId(null);
+    setCustomModalMode('create');
+  };
+
+  const openRenameCustom = (food) => {
+    setCustomForm({ name: food.name, calories: food.calories, protein: food.protein, carbs: food.carbs, fats: food.fats });
+    setEditingCustomId(food.id);
+    setCustomMenuOpen(null);
+    setCustomModalMode('rename');
+  };
+
+  const closeCustomModal = () => { setCustomModalMode(null); setEditingCustomId(null); };
+
+  const saveCustomFood = async () => {
+    const name = customForm.name.trim();
+    if (!name) return;
+    if (customModalMode === 'rename' && editingCustomId) {
+      const { error } = await supabase.from('custom_foods').update({ name }).eq('id', editingCustomId);
+      if (error) { console.error(error); return; }
+      setCustomFoods(prev => prev.map(f => (f.id === editingCustomId ? { ...f, name } : f)));
+    } else {
+      const payload = {
+        name,
+        calories: Number(customForm.calories) || 0,
+        protein: Number(customForm.protein) || 0,
+        carbs: Number(customForm.carbs) || 0,
+        fats: Number(customForm.fats) || 0,
+      };
+      const { data, error } = await supabase.from('custom_foods').insert([payload]).select().single();
+      if (error) { console.error(error); return; }
+      setCustomFoods(prev => [{ ...data, isCustom: true }, ...prev]);
+    }
+    closeCustomModal();
+  };
+
+  const deleteCustomFood = async (food) => {
+    setCustomMenuOpen(null);
+    setCustomFoods(prev => prev.filter(f => f.id !== food.id));
+    setSelectedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
+    await supabase.from('custom_foods').delete().eq('id', food.id);
+  };
+
   const searchFoods = async (query) => {
     setSearchLoading(true);
     setSearchError(null);
@@ -254,14 +322,42 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     );
   };
 
-  const openAddFood = (hour) => { setAddFoodHour(hour); setShowAddFoodScreen(true); };
+  const openAddFood = (hour) => { setAddFoodHour(hour); setAddFoodDragY(0); setShowAddFoodScreen(true); };
+
+  // Slide the sheet up once it has mounted (next frame), so the transform animates.
+  useEffect(() => {
+    if (showAddFoodScreen) {
+      const id = requestAnimationFrame(() => setAddFoodOpen(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [showAddFoodScreen]);
 
   const closeAddFood = () => {
-    setShowAddFoodScreen(false);
-    setSearchQuery('');
-    setSelectedFoods({});
-    setSearchResults(null);
-    setSearchError(null);
+    setAddFoodOpen(false);           // slide down
+    setAddFoodDragY(0);
+    setTimeout(() => {               // unmount + reset after the slide-out finishes
+      setShowAddFoodScreen(false);
+      setSearchQuery('');
+      setSelectedFoods({});
+      setSearchResults(null);
+      setSearchError(null);
+    }, 350);
+  };
+
+  const onAddFoodPointerDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    addFoodDragStart.current = e.clientY;
+  };
+  const onAddFoodPointerMove = (e) => {
+    if (addFoodDragStart.current === null) return;
+    setAddFoodDragY(Math.max(0, e.clientY - addFoodDragStart.current));
+  };
+  const onAddFoodPointerUp = (e) => {
+    if (addFoodDragStart.current === null) return;
+    const dy = Math.max(0, e.clientY - addFoodDragStart.current);
+    addFoodDragStart.current = null;
+    if (dy > 80) closeAddFood();
+    else setAddFoodDragY(0);
   };
 
   const toggleFood = (food) => {
@@ -326,7 +422,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const selectedCount = Object.keys(selectedFoods).length;
   const isSearchActive = searchQuery.trim().length > 0;
-  const displayedFoods = isSearchActive && !searchError ? (searchResults || []) : recentFoodList;
+  // Custom foods are pinned at the top, so exclude their names from the recent/search list below to avoid duplicates.
+  const customNames = new Set(customFoods.map(f => f.name));
+  const displayedFoods = (isSearchActive && !searchError ? (searchResults || []) : recentFoodList).filter(f => !customNames.has(f.name));
+  const displayedCustomFoods = isSearchActive
+    ? customFoods.filter(f => f.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : customFoods;
   const listLabel = isSearchActive ? 'Results' : 'Recent';
 
   // Break out of the .content wrapper's 20px padding
@@ -392,14 +493,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <button key={tab}
               className={isActive ? '' : 'fl-tab-inactive'}
               onClick={() => {
-                if (tab === 'Recents') setActiveFilter(tab);
+                if (tab === 'Add Food') setActiveFilter(tab);
                 else showToast('Coming soon', null, null);
               }} style={{
                 flexShrink: 0, padding: '7px 16px', borderRadius: 20,
                 border: 'none',
                 background: isActive ? 'var(--accent)' : undefined,
                 color: isActive ? '#fff' : 'var(--text-primary)',
-                fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                fontWeight: 500, fontSize: 13, cursor: 'pointer',
               }}>{tab}</button>
           );
         })}
@@ -449,6 +550,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     flex: 1, background: isNow ? 'var(--accent-light)' : 'var(--card)',
                     borderRadius: 12,
                     border: isNow ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
                     padding: '14px 16px',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -517,38 +619,52 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         <div style={{
           position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
           display: 'flex', flexDirection: 'column',
-          animation: 'slideUpFull 0.3s cubic-bezier(0.4,0,0.2,1) forwards',
+          transform: addFoodOpen ? `translateY(${addFoodDragY}px)` : 'translateY(100%)',
+          transition: addFoodDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}>
           <style>{`
-            @keyframes slideUpFull { from { transform: translateY(100%); } to { transform: translateY(0); } }
             @keyframes slideUpBar  { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
             @keyframes spin        { to { transform: rotate(360deg); } }
           `}</style>
 
-          <div style={{ display: 'flex', alignItems: 'center', padding: '20px 20px 12px', gap: '12px', background: 'var(--bg)' }}>
-            <button onClick={closeAddFood} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-secondary)', fontSize: '22px', lineHeight: 1,
-              padding: '4px', borderRadius: '8px', display: 'flex', alignItems: 'center',
-            }}>←</button>
-            <span style={{ flex: 1, textAlign: 'center', fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)' }}>Add Food</span>
+          {/* Drag handle — drag down to dismiss */}
+          <div
+            onPointerDown={onAddFoodPointerDown}
+            onPointerMove={onAddFoodPointerMove}
+            onPointerUp={onAddFoodPointerUp}
+            style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px 12px', gap: '10px', background: 'var(--bg)' }}>
+            <span style={{ flex: 1, fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)' }}>Add Food</span>
+            <button onClick={openCreateCustom} aria-label="Add custom food"
+              style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              + Add Custom Food
+            </button>
             <div style={{
               background: 'var(--accent-light)', color: 'var(--accent)',
-              padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600',
+              padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', flexShrink: 0,
             }}>
               {HOURS[addFoodHour].label}
             </div>
           </div>
 
           <div style={{ padding: '0 20px 12px', position: 'relative' }}>
+            <div style={{ position: 'absolute', left: '32px', top: 0, bottom: '12px', display: 'flex', alignItems: 'center', pointerEvents: 'none', color: 'var(--text-muted)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </div>
             <input
-              placeholder="Search foods..."
+              placeholder="Search for a food"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="input"
-              style={{ paddingRight: '48px' }}
+              style={{ paddingLeft: '44px', paddingRight: '48px' }}
             />
-            <div style={{ position: 'absolute', right: '32px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+            <div style={{ position: 'absolute', right: '32px', top: 0, bottom: '12px', display: 'flex', alignItems: 'center' }}>
               {searchLoading ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 0.8s linear infinite' }}>
                   <circle cx="12" cy="12" r="10" stroke="var(--border)" strokeWidth="3" />
@@ -571,25 +687,41 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-            {!isSearchActive && (
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                {[{ label: 'Favorites', icon: '★' }, { label: 'Recipes', icon: '📖' }].map(({ label, icon }) => (
-                  <button key={label} onClick={() => showToast('Coming Soon', null, null)} style={{
-                    flex: 1, background: 'var(--accent-light)', border: '1px solid var(--border)',
-                    borderRadius: '16px', padding: '16px 12px', cursor: 'pointer', textAlign: 'left',
+
+            {displayedCustomFoods.map(food => {
+              const isSelected = !!selectedFoods[food.name];
+              return (
+                <div key={'custom-' + food.id} onClick={() => toggleFood(food)} style={{
+                  display: 'flex', alignItems: 'center', gap: '14px',
+                  padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                }}>
+                  <div style={{
+                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                    border: isSelected ? 'none' : '2px solid var(--border)',
+                    background: isSelected ? 'var(--accent)' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
                   }}>
-                    <div style={{ fontSize: '20px', marginBottom: '6px' }}>{icon}</div>
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{label}</div>
-                    <div style={{
-                      marginTop: '6px', display: 'inline-block',
-                      background: 'var(--border)', color: 'var(--text-muted)',
-                      fontSize: '10px', fontWeight: '600', padding: '2px 6px',
-                      borderRadius: '6px', letterSpacing: '0.3px',
-                    }}>Coming Soon</div>
-                  </button>
-                ))}
-              </div>
-            )}
+                    {isSelected && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {Math.round(food.calories)} cal · {Math.round(food.protein)}g P · {Math.round(food.carbs)}g C · {Math.round(food.fats)}g F
+                    </div>
+                  </div>
+                  <button onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setCustomMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                    setCustomMenuOpen(customMenuOpen === food.id ? null : food.id);
+                  }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', padding: '4px 8px', letterSpacing: '2px', lineHeight: 1, flexShrink: 0 }}>···</button>
+                </div>
+              );
+            })}
 
             {searchError && (
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
@@ -598,7 +730,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             )}
 
             {(!isSearchActive || searchError || (searchResults && searchResults.length > 0)) && (
-              <p className="section-title" style={{ marginBottom: '4px' }}>{searchError ? 'Recent' : listLabel}</p>
+              <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>{searchError ? 'Recent' : listLabel}</p>
             )}
 
             {isSearchActive && !searchLoading && !searchError && searchResults && searchResults.length === 0 && (
@@ -673,6 +805,50 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               <button onClick={handleAddSelected} className="btn-primary">
                 Add {selectedCount} Food{selectedCount !== 1 ? 's' : ''}
               </button>
+            </div>
+          )}
+
+          {/* Custom food ··· menu */}
+          {customMenuOpen && <div onClick={() => setCustomMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 440 }} />}
+          {customMenuOpen && (() => {
+            const food = customFoods.find(f => f.id === customMenuOpen);
+            if (!food) return null;
+            return (
+              <div style={{
+                position: 'fixed', top: customMenuPos.top, right: customMenuPos.right,
+                background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
+                overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 441, minWidth: '140px',
+              }}>
+                <button onClick={() => openRenameCustom(food)}
+                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Rename</button>
+                <button onClick={() => deleteCustomFood(food)}
+                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#ff4444' }}>Delete</button>
+              </div>
+            );
+          })()}
+
+          {/* Create / rename custom food modal */}
+          {customModalMode && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '14vh 16px 16px', zIndex: 460 }}
+              onClick={closeCustomModal}>
+              <div className="card" style={{ width: '100%', maxWidth: '360px', padding: '24px' }} onClick={e => e.stopPropagation()}>
+                <p className="section-title" style={{ marginBottom: '16px' }}>{customModalMode === 'rename' ? 'Rename Custom Food' : 'New Custom Food'}</p>
+                <input autoFocus value={customForm.name} onChange={e => setCustomForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Food name" className="input" style={{ width: '100%', marginBottom: customModalMode === 'create' ? '12px' : '16px' }}
+                  onKeyDown={e => { if (e.key === 'Enter') saveCustomFood(); }} />
+                {customModalMode === 'create' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                    <input value={customForm.calories} onChange={e => setCustomForm(f => ({ ...f, calories: e.target.value }))} inputMode="numeric" placeholder="Calories" className="input" />
+                    <input value={customForm.protein} onChange={e => setCustomForm(f => ({ ...f, protein: e.target.value }))} inputMode="numeric" placeholder="Protein (g)" className="input" />
+                    <input value={customForm.carbs} onChange={e => setCustomForm(f => ({ ...f, carbs: e.target.value }))} inputMode="numeric" placeholder="Carbs (g)" className="input" />
+                    <input value={customForm.fats} onChange={e => setCustomForm(f => ({ ...f, fats: e.target.value }))} inputMode="numeric" placeholder="Fats (g)" className="input" />
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={closeCustomModal} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                  <button onClick={saveCustomFood} className="btn-primary" style={{ flex: 1 }}>{customModalMode === 'rename' ? 'Save' : 'Create'}</button>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -220,6 +220,17 @@ border-bottom: none;
   box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
 }
 
+/* Flat tile variant — matches the squared-off Routines/Exercises tiles
+   (tighter corners + subtle single-layer shadow). Used across the Workout
+   section so every tile shares one look. Same shadow in light and dark. */
+.card-flat {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
 /* Dashboard Tiles */
 .tile-grid {
   display: grid;
