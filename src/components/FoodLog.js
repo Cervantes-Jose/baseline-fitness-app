@@ -4,6 +4,7 @@
 // alter table public.custom_foods enable row level security;
 // create policy "Allow all for now" on public.custom_foods for all using (true) with check (true);
 // Remembered serving (added later): alter table public.custom_foods add column saved_serving numeric, add column saved_unit text;
+// Editable micronutrients (added later): alter table public.custom_foods add column micros jsonb;
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -186,6 +187,21 @@ const DV_REFERENCE = {
   Fiber: 28, Sugars: 50, Sodium: 2300, Cholesterol: 300, Potassium: 4700,
   Calcium: 1300, Iron: 18, 'Vitamin C': 90, 'Vitamin D': 20, 'Vitamin A': 900,
 };
+// Editable micronutrient rows for custom foods. Keys match DV_REFERENCE so %DV could
+// be derived later; values stored as a `micros` jsonb object on the custom_foods row.
+const CUSTOM_MICRO_FIELDS = [
+  { key: 'Fiber', label: 'Fiber', unit: 'g' },
+  { key: 'Sugars', label: 'Sugar', unit: 'g' },
+  { key: 'Sodium', label: 'Sodium', unit: 'mg' },
+  { key: 'Cholesterol', label: 'Cholesterol', unit: 'mg' },
+  { key: 'Potassium', label: 'Potassium', unit: 'mg' },
+  { key: 'Calcium', label: 'Calcium', unit: 'mg' },
+  { key: 'Iron', label: 'Iron', unit: 'mg' },
+  { key: 'Vitamin A', label: 'Vitamin A', unit: 'mcg' },
+  { key: 'Vitamin C', label: 'Vitamin C', unit: 'mg' },
+  { key: 'Vitamin D', label: 'Vitamin D', unit: 'mcg' },
+];
+
 const cleanNutrientName = (name) => String(name).split(',')[0].trim();
 const parseMicros = (food, scale) => {
   const arr = food?.foodNutrients || food?.nutrients || [];
@@ -210,56 +226,94 @@ const parseMicros = (food, scale) => {
 };
 
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
 
+  const isCustom = !!edit;          // a custom food (has editable definition data)
+  const editable = isCustom && editing;   // fields are currently shown as inputs
   const count = Number(servings) || 0;
-  const macros = computeMacros(food, serving, unit, count);
+
+  // Custom foods define macros per serving (held in `edit`, which mirrors the saved
+  // values in read mode). When editing, the tiles show that per-serving definition; in
+  // read mode they scale by number of servings like any other food detail.
+  const perServing = isCustom
+    ? { calories: Number(edit.calories) || 0, protein: Number(edit.protein) || 0, carbs: Number(edit.carbs) || 0, fats: Number(edit.fats) || 0 }
+    : null;
+  const macros = editable
+    ? perServing
+    : isCustom
+      ? {
+          calories: Math.round(perServing.calories * count),
+          protein: Math.round(perServing.protein * count),
+          carbs: Math.round(perServing.carbs * count),
+          fats: Math.round(perServing.fats * count),
+        }
+      : computeMacros(food, serving, unit, count);
   const scale = scaleOf(food, serving, unit) * count;
-  const pCal = macros.protein * 4;
-  const cCal = macros.carbs * 4;
-  const fCal = macros.fats * 9;
-  const totalMacroCal = pCal + cCal + fCal || 1;
 
   const micros = parseMicros(food, scale);
   const shownMicros = showAllMicros ? micros : micros.slice(0, 6);
 
-  const cardStyle = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', padding: '16px', marginBottom: '12px' };
   const macroCells = [
-    { label: 'Calories', value: macros.calories, unit: 'kcal', color: '#3B82F6' },
-    { label: 'Protein', value: macros.protein, unit: 'g', color: '#22C55E' },
-    { label: 'Fat', value: macros.fats, unit: 'g', color: '#3B82F6' },
-    { label: 'Carbs', value: macros.carbs, unit: 'g', color: '#EAB308' },
+    { label: 'Calories', key: 'calories', value: macros.calories, unit: 'kcal', color: '#3B82F6' },
+    { label: 'Protein', key: 'protein', value: macros.protein, unit: 'g', color: '#22C55E' },
+    { label: 'Fat', key: 'fats', value: macros.fats, unit: 'g', color: '#3B82F6' },
+    { label: 'Carbs', key: 'carbs', value: macros.carbs, unit: 'g', color: '#EAB308' },
   ];
+
+  // Custom food, read mode: show stored micros (scaled by number of servings), hiding zeros.
+  const customMicrosShown = isCustom && !editable
+    ? CUSTOM_MICRO_FIELDS
+        .map(m => ({ ...m, value: Math.round((Number(edit.micros[m.key]) || 0) * count * 10) / 10 }))
+        .filter(m => m.value > 0)
+    : [];
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>← Back</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>← Back</button>
+          {isCustom && !editing && (
+            <button onClick={onStartEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0' }}>Edit</button>
+          )}
+        </div>
 
         <div style={{ margin: '8px 0 16px' }}>
-          <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{food.name}</div>
-          {food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
+          {editable ? (
+            <input value={edit.name} placeholder="Custom Food" onChange={e => onEditField('name', e.target.value)}
+              style={{ width: '100%', fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2, border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }} />
+          ) : (
+            <>
+              <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{isCustom ? edit.name : food.name}</div>
+              {!isCustom && food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
+            </>
+          )}
         </div>
 
         {/* Macros */}
-        <div style={cardStyle}>
+        <div className="card-flat" style={{ marginBottom: '12px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             {macroCells.map(m => (
               <div key={m.label} style={{ flex: 1, textAlign: 'center' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: m.color }}>{m.label}</div>
-                <div style={{ marginTop: '4px', lineHeight: 1.1 }}>
-                  <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{m.value}</span>
-                  <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '2px' }}>{m.unit}</span>
-                </div>
+                {editable ? (
+                  <div style={{ marginTop: '4px', display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2px' }}>
+                    <input type="number" inputMode="decimal" value={edit[m.key]} placeholder="0" onChange={e => onEditField(m.key, e.target.value)}
+                      style={{ width: '46px', padding: '4px 2px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '16px', fontWeight: '700', textAlign: 'center', outline: 'none' }} />
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)' }}>{m.unit}</span>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '4px', lineHeight: 1.1 }}>
+                    <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{m.value}</span>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '2px' }}>{m.unit}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Serving Size</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               <input type="number" inputMode="decimal" value={serving} onChange={e => onServing(e.target.value)}
@@ -289,38 +343,43 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Number of servings</span>
             <input type="number" inputMode="decimal" value={servings} onChange={e => onServings(e.target.value)}
               style={{ width: '64px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', textAlign: 'center', outline: 'none' }} />
           </div>
         </div>
 
-        {/* Macronutrients */}
-        <div style={cardStyle}>
-          <p className="section-title" style={{ marginBottom: '12px' }}>Macronutrients</p>
-          {[
-            { label: 'Protein', grams: macros.protein, cal: pCal, color: '#22C55E' },
-            { label: 'Carbohydrates', grams: macros.carbs, cal: cCal, color: '#EAB308' },
-            { label: 'Fat', grams: macros.fats, cal: fCal, color: '#3B82F6' },
-          ].map(m => (
-            <div key={m.label} style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{m.label}</span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>{m.grams}g</span>
+        {/* Micronutrients — editable inputs while editing a custom food; static rows for a
+            saved custom food (read mode); parsed values for USDA/recent foods. */}
+        {editable ? (
+          <div className="card-flat" style={{ marginBottom: '12px' }}>
+            <p className="section-title" style={{ marginBottom: '8px' }}>Micronutrients</p>
+            {CUSTOM_MICRO_FIELDS.map((m, i) => (
+              <div key={m.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < CUSTOM_MICRO_FIELDS.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{m.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input type="number" inputMode="decimal" value={edit.micros[m.key]} placeholder="0" onChange={e => onEditMicro(m.key, e.target.value)}
+                    style={{ width: '64px', padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '13px', fontWeight: '600', textAlign: 'right', outline: 'none' }} />
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '26px' }}>{m.unit}</span>
+                </div>
               </div>
-              <div style={{ height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${Math.min((m.cal / totalMacroCal) * 100, 100)}%`, height: '100%', background: m.color, borderRadius: '4px' }} />
-              </div>
+            ))}
+          </div>
+        ) : isCustom ? (
+          customMicrosShown.length > 0 && (
+            <div className="card-flat" style={{ marginBottom: '12px' }}>
+              <p className="section-title" style={{ marginBottom: '8px' }}>Micronutrients</p>
+              {customMicrosShown.map((m, i) => (
+                <div key={m.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: i < customMicrosShown.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{m.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>{m.value}{m.unit}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-
-        {/* Micronutrients */}
-        {micros.length > 0 && (
-          <div style={cardStyle}>
+          )
+        ) : micros.length > 0 && (
+          <div className="card-flat" style={{ marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <p className="section-title" style={{ margin: 0 }}>Micronutrients</p>
               {micros.length > 6 && (
@@ -342,9 +401,9 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
         )}
       </div>
 
-      {/* Sticky Add Food */}
+      {/* Sticky action */}
       <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
-        <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>Add Food</button>
+        <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>{editable ? 'Save Food' : 'Add Food'}</button>
       </div>
     </div>
   );
@@ -368,6 +427,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [searchQuery, setSearchQuery] = useState('');
   const [recentFoodList, setRecentFoodList] = useState([]);
 
+  // Barcode scanner (ZXing camera) + Open Food Facts lookup.
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanning, setScanning] = useState(false);   // looking up a found barcode
+  const codeReaderRef = useRef(null);
+  const videoRef = useRef(null);
+
   // Foods confirmed for logging (via the left checkbox or the detail screen).
   // Keyed by food name → { food, serving, unit, adjustedMacros }.
   const [checkedFoods, setCheckedFoods] = useState({});
@@ -378,9 +443,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // Custom foods (user-defined). Pinned at the top of the Add Food list.
   const [customFoods, setCustomFoods] = useState([]);
-  const [customModalMode, setCustomModalMode] = useState(null);   // 'create' | 'rename' | null
-  const [customForm, setCustomForm] = useState({ name: '', calories: '', protein: '', carbs: '', fats: '' });
-  const [editingCustomId, setEditingCustomId] = useState(null);
+  // Custom-food detail data. null = not viewing a custom food. Shape:
+  // { id|null, name, calories, protein, carbs, fats, micros: { [key]: string } }
+  const [customEdit, setCustomEdit] = useState(null);
+  const [customEditing, setCustomEditing] = useState(false);  // fields shown as editable inputs
   const [customMenuOpen, setCustomMenuOpen] = useState(null);     // id of food whose ··· menu is open
   const [customMenuPos, setCustomMenuPos] = useState({ top: 0, right: 0 });
 
@@ -466,44 +532,93 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       isCustom: true,
       savedServing: f.saved_serving ?? undefined,
       savedUnit: f.saved_unit ?? undefined,
+      micros: f.micros || undefined,
     })));
   };
 
-  const openCreateCustom = () => {
-    setCustomForm({ name: '', calories: '', protein: '', carbs: '', fats: '' });
-    setEditingCustomId(null);
-    setCustomModalMode('create');
-  };
-
-  const openRenameCustom = (food) => {
-    setCustomForm({ name: food.name, calories: food.calories, protein: food.protein, carbs: food.carbs, fats: food.fats });
-    setEditingCustomId(food.id);
-    setCustomMenuOpen(null);
-    setCustomModalMode('rename');
-  };
-
-  const closeCustomModal = () => { setCustomModalMode(null); setEditingCustomId(null); };
-
-  const saveCustomFood = async () => {
-    const name = customForm.name.trim();
-    if (!name) return;
-    if (customModalMode === 'rename' && editingCustomId) {
-      const { error } = await supabase.from('custom_foods').update({ name }).eq('id', editingCustomId);
-      if (error) { console.error(error); return; }
-      setCustomFoods(prev => prev.map(f => (f.id === editingCustomId ? { ...f, name } : f)));
-    } else {
-      const payload = {
-        name,
-        calories: Number(customForm.calories) || 0,
-        protein: Number(customForm.protein) || 0,
-        carbs: Number(customForm.carbs) || 0,
-        fats: Number(customForm.fats) || 0,
-      };
-      const { data, error } = await supabase.from('custom_foods').insert([payload]).select().single();
-      if (error) { console.error(error); return; }
-      setCustomFoods(prev => [{ ...data, isCustom: true }, ...prev]);
+  // Open the detail page for a custom food. Pass null to create a new one (starts editable);
+  // existing foods open read-only unless startEditing is true (··· Edit / top-right Edit).
+  const openCustomDetail = (food, startEditing = false) => {
+    const existing = food && food.id != null;
+    const microStrings = CUSTOM_MICRO_FIELDS.reduce((o, m) => { o[m.key] = '0'; return o; }, {});
+    if (existing && food.micros) {
+      for (const [k, v] of Object.entries(food.micros)) microStrings[k] = String(v);
     }
-    closeCustomModal();
+    setCustomEdit({
+      id: existing ? food.id : null,
+      name: existing ? (food.name || '') : 'Custom Food',
+      calories: existing ? String(food.calories ?? '') : '',
+      protein: existing ? String(food.protein ?? '') : '',
+      carbs: existing ? String(food.carbs ?? '') : '',
+      fats: existing ? String(food.fats ?? '') : '',
+      micros: microStrings,
+    });
+    const { serving, unit } = defaultServingOf(food || {});
+    setDetailServing(String(serving));
+    setDetailUnit(unit);
+    setDetailServings('1');
+    setCustomEditing(!existing || startEditing);   // new foods start editable
+    setDetailFood(existing ? food : { name: 'Custom Food', isCustom: true });
+  };
+
+  const editCustomField = (key, val) => setCustomEdit(e => ({ ...e, [key]: val }));
+  const editCustomMicro = (key, val) => setCustomEdit(e => ({ ...e, micros: { ...e.micros, [key]: val } }));
+
+  // Save the edited custom food to the library (insert or update) and stage it into the
+  // log. Custom-food macros are stored per serving; the logged amount = macros × servings.
+  const saveCustomDetail = async () => {
+    const e = customEdit;
+    if (!e) return;
+    const name = (e.name || '').trim() || 'Custom Food';
+    const macros = {
+      calories: Number(e.calories) || 0,
+      protein: Number(e.protein) || 0,
+      carbs: Number(e.carbs) || 0,
+      fats: Number(e.fats) || 0,
+    };
+    const micros = {};
+    CUSTOM_MICRO_FIELDS.forEach(m => { micros[m.key] = Number(e.micros[m.key]) || 0; });
+    const serving = Number(detailServing) || 0;
+    const unit = detailUnit;
+    const servings = Number(detailServings) || 0;
+    const payload = { name, ...macros, micros, saved_serving: serving, saved_unit: unit };
+
+    const { data: row, error } = e.id
+      ? await supabase.from('custom_foods').update(payload).eq('id', e.id).select().single()
+      : await supabase.from('custom_foods').insert([payload]).select().single();
+    if (error) { console.error('Failed to save custom food:', error); return; }
+
+    const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
+    setCustomFoods(prev => e.id ? prev.map(f => (f.id === e.id ? food : f)) : [food, ...prev]);
+
+    const adjusted = {
+      calories: Math.round(macros.calories * servings),
+      protein: Math.round(macros.protein * servings),
+      carbs: Math.round(macros.carbs * servings),
+      fats: Math.round(macros.fats * servings),
+    };
+    setCheckedFoods(prev => ({ ...prev, [name]: { food, serving, unit, adjustedMacros: adjusted } }));
+    setCustomEdit(null);
+    setCustomEditing(false);
+    setDetailFood(null);
+  };
+
+  // Read mode: stage an already-saved custom food into the log (× number of servings).
+  const addCustomToLog = () => {
+    const e = customEdit;
+    if (!e) return;
+    const name = (e.name || '').trim() || 'Custom Food';
+    const servings = Number(detailServings) || 0;
+    const adjusted = {
+      calories: Math.round((Number(e.calories) || 0) * servings),
+      protein: Math.round((Number(e.protein) || 0) * servings),
+      carbs: Math.round((Number(e.carbs) || 0) * servings),
+      fats: Math.round((Number(e.fats) || 0) * servings),
+    };
+    setCheckedFoods(prev => ({ ...prev, [name]: { food: detailFood, serving: Number(detailServing) || 0, unit: detailUnit, adjustedMacros: adjusted } }));
+    setCustomEdit(null);
+    setCustomEditing(false);
+    setDetailFood(null);
   };
 
   const deleteCustomFood = async (food) => {
@@ -554,7 +669,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     }
   }, [showAddFoodScreen]);
 
+  // Release the camera if the component unmounts mid-scan.
+  useEffect(() => () => { if (codeReaderRef.current) codeReaderRef.current.reset(); }, []);
+
   const closeAddFood = () => {
+    stopScanner();                   // ensure camera is released if the sheet closes
     setAddFoodOpen(false);           // slide down
     setAddFoodDragY(0);
     setTimeout(() => {               // unmount + reset after the slide-out finishes
@@ -565,6 +684,87 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setSearchResults(null);
       setSearchError(null);
     }, 350);
+  };
+
+  // ─── Barcode scanner ───────────────────────────────────────
+  const startScanner = async () => {
+    setShowScanner(true);
+    try {
+      // Loaded on demand so ZXing stays out of the initial bundle.
+      const { BrowserMultiFormatReader } = await import('@zxing/library');
+      codeReaderRef.current = new BrowserMultiFormatReader();
+      const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
+      // Prefer the back/rear camera on mobile.
+      const selectedDevice = videoInputDevices.find(d =>
+        d.label.toLowerCase().includes('back') ||
+        d.label.toLowerCase().includes('rear') ||
+        d.label.toLowerCase().includes('environment')
+      ) || videoInputDevices[videoInputDevices.length - 1];
+
+      await codeReaderRef.current.decodeFromVideoDevice(
+        selectedDevice?.deviceId,
+        videoRef.current,
+        (result) => {
+          if (result) {
+            stopScanner();
+            handleBarcodeResult(result.getText());
+          }
+        }
+      );
+    } catch (err) {
+      console.error('Camera error:', err);
+      setShowScanner(false);
+      showToast('Camera not available', null, null);
+    }
+  };
+
+  const stopScanner = () => {
+    if (codeReaderRef.current) {
+      codeReaderRef.current.reset();
+      codeReaderRef.current = null;
+    }
+    setShowScanner(false);
+  };
+
+  const handleBarcodeResult = async (barcode) => {
+    setScanning(true);
+    try {
+      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const data = await response.json();
+
+      if (data.status !== 1 || !data.product) {
+        showToast('Product not found', null, null);
+        setScanning(false);
+        return;
+      }
+
+      const p = data.product;
+      const nutriments = p.nutriments || {};
+      const food = {
+        name: p.product_name || p.product_name_en || 'Unknown Product',
+        brandOwner: p.brands || null,
+        servingSize: p.serving_quantity || 100,
+        servingSizeUnit: p.serving_quantity_unit || 'g',
+        calories: nutriments['energy-kcal_serving'] || nutriments['energy-kcal_100g'] || 0,
+        protein: nutriments['proteins_serving'] || nutriments['proteins_100g'] || 0,
+        carbs: nutriments['carbohydrates_serving'] || nutriments['carbohydrates_100g'] || 0,
+        fats: nutriments['fat_serving'] || nutriments['fat_100g'] || 0,
+        nutrients: [
+          { name: 'Fiber', value: nutriments['fiber_serving'] || nutriments['fiber_100g'] || 0, unit: 'g' },
+          { name: 'Sugar', value: nutriments['sugars_serving'] || nutriments['sugars_100g'] || 0, unit: 'g' },
+          { name: 'Sodium', value: nutriments['sodium_serving'] || nutriments['sodium_100g'] || 0, unit: 'mg' },
+          { name: 'Cholesterol', value: nutriments['cholesterol_serving'] || nutriments['cholesterol_100g'] || 0, unit: 'mg' },
+        ].filter(n => n.value > 0),
+        fromBarcode: true,
+      };
+
+      setScanning(false);
+      openDetail(food);
+    } catch (err) {
+      console.error('Barcode lookup error:', err);
+      showToast('Could not look up product', null, null);
+      setScanning(false);
+    }
   };
 
   const onAddFoodPointerDown = (e) => {
@@ -599,6 +799,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setDetailServing(String(serving));
     setDetailUnit(unit);
     setDetailServings('1');
+    setCustomEdit(null);
+    setCustomEditing(false);
     setDetailFood(food);
   };
 
@@ -899,14 +1101,19 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               onServing={setDetailServing}
               onUnit={setDetailUnit}
               onServings={setDetailServings}
-              onBack={() => setDetailFood(null)}
-              onAdd={confirmDetail}
+              edit={customEdit}
+              editing={customEditing}
+              onStartEdit={() => setCustomEditing(true)}
+              onEditField={editCustomField}
+              onEditMicro={editCustomMicro}
+              onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); }}
+              onAdd={customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail)}
             />
           ) : (
           <>
           <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px 12px', gap: '10px', background: 'var(--bg)' }}>
             <span style={{ flex: 1, fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)' }}>Add Food</span>
-            <button onClick={openCreateCustom} aria-label="Add custom food"
+            <button onClick={() => openCustomDetail(null)} aria-label="Add custom food"
               style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               + Add Custom Food
             </button>
@@ -939,7 +1146,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               ) : (
-                <button onClick={() => showToast('Coming Soon', null, null)}
+                <button onClick={startScanner} aria-label="Scan barcode"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="2"  y="4" width="2" height="16"/>
@@ -958,10 +1165,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
             {displayedCustomFoods.map(food => {
               const checked = !!checkedFoods[food.name];
-              const ds = defaultServingOf(food);
-              const dm = computeMacros(food, ds.serving, ds.unit);
               return (
-                <div key={'custom-' + food.id} onClick={() => openDetail(food)} style={{
+                <div key={'custom-' + food.id} onClick={() => openCustomDetail(food, false)} style={{
                   display: 'flex', alignItems: 'center', gap: '12px',
                   padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                 }}>
@@ -982,7 +1187,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                       <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {dm.calories} cal · {dm.protein}g P · {dm.carbs}g C · {dm.fats}g F
+                      {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
                     </div>
                   </div>
                   <button onClick={(e) => {
@@ -1078,38 +1283,35 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                 background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
                 overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 441, minWidth: '140px',
               }}>
-                <button onClick={() => openRenameCustom(food)}
-                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Rename</button>
+                <button onClick={() => { setCustomMenuOpen(null); openCustomDetail(food, true); }}
+                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Edit</button>
                 <button onClick={() => deleteCustomFood(food)}
                   style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#ff4444' }}>Delete</button>
               </div>
             );
           })()}
+        </div>
+      )}
 
-          {/* Create / rename custom food modal */}
-          {customModalMode && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '14vh 16px 16px', zIndex: 460 }}
-              onClick={closeCustomModal}>
-              <div className="card" style={{ width: '100%', maxWidth: '360px', padding: '24px' }} onClick={e => e.stopPropagation()}>
-                <p className="section-title" style={{ marginBottom: '16px' }}>{customModalMode === 'rename' ? 'Rename Custom Food' : 'New Custom Food'}</p>
-                <input autoFocus value={customForm.name} onChange={e => setCustomForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Food name" className="input" style={{ width: '100%', marginBottom: customModalMode === 'create' ? '12px' : '16px' }}
-                  onKeyDown={e => { if (e.key === 'Enter') saveCustomFood(); }} />
-                {customModalMode === 'create' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-                    <input value={customForm.calories} onChange={e => setCustomForm(f => ({ ...f, calories: e.target.value }))} inputMode="numeric" placeholder="Calories" className="input" />
-                    <input value={customForm.protein} onChange={e => setCustomForm(f => ({ ...f, protein: e.target.value }))} inputMode="numeric" placeholder="Protein (g)" className="input" />
-                    <input value={customForm.carbs} onChange={e => setCustomForm(f => ({ ...f, carbs: e.target.value }))} inputMode="numeric" placeholder="Carbs (g)" className="input" />
-                    <input value={customForm.fats} onChange={e => setCustomForm(f => ({ ...f, fats: e.target.value }))} inputMode="numeric" placeholder="Fats (g)" className="input" />
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button onClick={closeCustomModal} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-                  <button onClick={saveCustomFood} className="btn-primary" style={{ flex: 1 }}>{customModalMode === 'rename' ? 'Save' : 'Create'}</button>
-                </div>
-              </div>
-            </div>
-          )}
+      {/* Barcode camera scanner — full-screen, above the Add Food sheet */}
+      {showScanner && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'black', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={stopScanner} aria-label="Close scanner" style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 28, cursor: 'pointer', zIndex: 2 }}>×</button>
+          <video ref={videoRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          {/* Viewfinder overlay */}
+          <div style={{ position: 'relative', zIndex: 1, width: 260, height: 260, border: '2px solid white', borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, height: 2, background: 'var(--accent)', animation: 'scanLine 2s linear infinite' }} />
+          </div>
+          <p style={{ color: 'white', marginTop: 24, fontSize: 14, zIndex: 1 }}>
+            {scanning ? 'Looking up product...' : 'Scanning for barcode...'}
+          </p>
+          <style>{`
+            @keyframes scanLine {
+              0% { top: 0; }
+              50% { top: calc(100% - 2px); }
+              100% { top: 0; }
+            }
+          `}</style>
         </div>
       )}
     </div>
