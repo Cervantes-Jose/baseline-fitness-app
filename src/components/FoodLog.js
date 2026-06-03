@@ -430,6 +430,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Barcode scanner (ZXing camera) + Open Food Facts lookup.
   const [showScanner, setShowScanner] = useState(false);
   const [scanning, setScanning] = useState(false);   // looking up a found barcode
+  const [scannerError, setScannerError] = useState('');   // on-screen camera error (mobile debug)
   const codeReaderRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -688,6 +689,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // ─── Barcode scanner ───────────────────────────────────────
   const startScanner = async () => {
+    setScannerError('');
     setShowScanner(true);
     try {
       // Loaded on demand so ZXing stays out of the initial bundle.
@@ -712,8 +714,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         }
       );
     } catch (err) {
-      console.error('Camera error:', err);
-      setShowScanner(false);
+      console.error('Camera error full:', err);
+      setScannerError(err.message || err.toString() || 'Unknown error');
+      // Keep the overlay open so the on-screen error is visible (close via the × button).
       showToast('Camera not available', null, null);
     }
   };
@@ -723,6 +726,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       codeReaderRef.current.reset();
       codeReaderRef.current = null;
     }
+    setScannerError('');
     setShowScanner(false);
   };
 
@@ -1305,6 +1309,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           <p style={{ color: 'white', marginTop: 24, fontSize: 14, zIndex: 1 }}>
             {scanning ? 'Looking up product...' : 'Scanning for barcode...'}
           </p>
+          {scannerError ? (
+            <p style={{ color: '#EF4444', marginTop: 8, fontSize: 12, zIndex: 1, textAlign: 'center', padding: '0 20px' }}>
+              Error: {scannerError}
+            </p>
+          ) : null}
           <style>{`
             @keyframes scanLine {
               0% { top: 0; }
