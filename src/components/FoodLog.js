@@ -5,6 +5,12 @@
 // create policy "Allow all for now" on public.custom_foods for all using (true) with check (true);
 // Remembered serving (added later): alter table public.custom_foods add column saved_serving numeric, add column saved_unit text;
 // Editable micronutrients (added later): alter table public.custom_foods add column micros jsonb;
+//
+// Favorites table:
+// create table public.favorite_foods (id uuid default gen_random_uuid() primary key, name text not null, is_custom boolean default false, food jsonb not null, created_at timestamptz default now());
+// grant select, insert, update, delete on public.favorite_foods to anon, authenticated, service_role;
+// alter table public.favorite_foods enable row level security;
+// create policy "Allow all for now" on public.favorite_foods for all using (true) with check (true);
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -226,7 +232,7 @@ const parseMicros = (food, scale) => {
 };
 
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
 
@@ -283,10 +289,18 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>← Back</button>
-          {isCustom && !editing && (
-            <button onClick={onStartEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0' }}>Edit</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>← Back</button>
+          {!editable && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              {isCustom && (
+                <button onClick={onStartEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0' }}>Edit</button>
+              )}
+              <button onClick={onToggleFavorite}
+                style={{ background: favorited ? 'var(--accent-light)' : 'var(--accent)', border: 'none', cursor: 'pointer', color: favorited ? 'var(--accent)' : '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {favorited ? '★ Remove from Favorites' : '☆ Add to Favorites'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -438,6 +452,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [searchQuery, setSearchQuery] = useState('');
   const [recentFoodList, setRecentFoodList] = useState([]);
 
+  // Favorited foods (snapshot of each food, keyed by name). Persisted in favorite_foods.
+  const [favorites, setFavorites] = useState([]);
+
   // Barcode scanner (ZXing camera) + Open Food Facts lookup.
   const [showScanner, setShowScanner] = useState(false);
   const [scanning, setScanning] = useState(false);   // looking up a found barcode
@@ -473,8 +490,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFoods(); }, [date]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadFavorites(); }, []);
+
   useEffect(() => {
-    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); }
+    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
 
@@ -512,9 +532,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const loadRecentFoods = async () => {
+    // Only foods logged in the last 7 days count as "recent".
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('food_entries')
       .select('name, calories, protein, carbs, fats')
+      .gte('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
       .limit(200);
     const seen = new Set();
@@ -546,6 +569,37 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       savedUnit: f.saved_unit ?? undefined,
       micros: f.micros || undefined,
     })));
+  };
+
+  // ─── Favorites ─────────────────────────────────────────────
+  const loadFavorites = async () => {
+    const { data } = await supabase
+      .from('favorite_foods')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setFavorites(data.map(r => ({ id: r.id, name: r.name, isCustom: r.is_custom, food: r.food })));
+  };
+
+  const isFavorite = (name) => favorites.some(f => f.name === name);
+
+  // Persist a favorite (snapshot of the food). No-op if already favorited.
+  const addFavorite = async (food) => {
+    if (!food?.name || isFavorite(food.name)) return;
+    const payload = { name: food.name, is_custom: !!food.isCustom, food };
+    const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
+    if (error) { console.error('Failed to add favorite:', error); return; }
+    setFavorites(prev => [{ id: data.id, name: data.name, isCustom: data.is_custom, food: data.food }, ...prev]);
+  };
+
+  const removeFavorite = async (name) => {
+    setFavorites(prev => prev.filter(f => f.name !== name));
+    const { error } = await supabase.from('favorite_foods').delete().eq('name', name);
+    if (error) console.error('Failed to remove favorite:', error);
+  };
+
+  const toggleFavorite = (food) => {
+    if (isFavorite(food.name)) removeFavorite(food.name);
+    else addFavorite(food);
   };
 
   // Open the detail page for a custom food. Pass null to create a new one (starts editable);
@@ -603,6 +657,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
     setCustomFoods(prev => e.id ? prev.map(f => (f.id === e.id ? food : f)) : [food, ...prev]);
 
+    // New custom foods are automatically favorited; edits refresh the favorite snapshot.
+    if (!e.id) {
+      addFavorite(food);
+    } else if (isFavorite(name)) {
+      setFavorites(prev => prev.map(f => (f.name === name ? { ...f, food } : f)));
+      supabase.from('favorite_foods').update({ food }).eq('name', name)
+        .then(({ error }) => { if (error) console.error('Failed to update favorite:', error); });
+    }
+
     const adjusted = {
       calories: Math.round(macros.calories * servings),
       protein: Math.round(macros.protein * servings),
@@ -637,6 +700,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCustomMenuOpen(null);
     setCustomFoods(prev => prev.filter(f => f.id !== food.id));
     setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
+    if (isFavorite(food.name)) removeFavorite(food.name);
     await supabase.from('custom_foods').delete().eq('id', food.id);
   };
 
@@ -672,6 +736,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const openAddFood = (hour) => { setAddFoodHour(hour); setAddFoodDragY(0); setShowAddFoodScreen(true); };
+
+  // From the Favorites tab: open the Add Food sheet straight into this food's detail.
+  const openFavoriteDetail = (fav) => {
+    setAddFoodHour(currentHour);
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+    if (fav.isCustom) openCustomDetail(fav.food, false);
+    else openDetail(fav.food);
+  };
 
   // Slide the sheet up once it has mounted (next frame), so the transform animates.
   useEffect(() => {
@@ -966,7 +1039,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <button key={tab}
               className={isActive ? '' : 'fl-tab-inactive'}
               onClick={() => {
-                if (tab === 'Add Food') setActiveFilter(tab);
+                if (tab === 'Add Food' || tab === 'Favorites') setActiveFilter(tab);
                 else showToast('Coming soon', null, null);
               }} style={{
                 flexShrink: 0, padding: '7px 16px', borderRadius: 20,
@@ -980,8 +1053,36 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         <div style={{ minWidth: 4, flexShrink: 0 }} />
       </div>
 
-      {/* ─── HOUR TIMELINE ──────────────────────────────────── */}
-      {loading ? (
+      {/* ─── FAVORITES LIST ─────────────────────────────────── */}
+      {activeFilter === 'Favorites' ? (
+        <div style={{ padding: '8px 20px 40px' }}>
+          {favorites.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: '40px 20px' }}>
+              No favorites yet. Tap a food and choose “Add to Favorites” to see it here.
+            </p>
+          ) : favorites.map(fav => {
+            const f = fav.food || {};
+            return (
+              <div key={fav.id} onClick={() => openFavoriteDetail(fav)} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{fav.name}</span>
+                    {fav.isCustom && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: 8 }}>Custom</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {Math.round(Number(f.calories) || 0)} cal · {Math.round(Number(f.protein) || 0)}g P · {Math.round(Number(f.carbs) || 0)}g C · {Math.round(Number(f.fats) || 0)}g F
+                  </div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); removeFavorite(fav.name); }} aria-label="Remove favorite"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 18, padding: '2px 6px', lineHeight: 1, flexShrink: 0 }}>★</button>
+              </div>
+            );
+          })}
+        </div>
+      ) : loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Loading...</p>
       ) : (
         <div style={{ position: 'relative', paddingBottom: 40 }}>
@@ -1123,6 +1224,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               onStartEdit={() => setCustomEditing(true)}
               onEditField={editCustomField}
               onEditMicro={editCustomMicro}
+              favorited={isFavorite(detailFood.name)}
+              onToggleFavorite={() => toggleFavorite(detailFood)}
               onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); }}
               onAdd={customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail)}
             />
