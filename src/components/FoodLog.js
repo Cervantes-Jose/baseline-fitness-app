@@ -231,8 +231,34 @@ const parseMicros = (food, scale) => {
     });
 };
 
+// Build the serving/unit/snapshot stored on a logged food_entries row so it can be
+// reopened in the detail screen and re-scaled. Normalized to grams so custom + USDA foods
+// behave uniformly: snapshot.servingSize === stored serving ⇒ scaleOf === 1 ⇒ the stored
+// (already-adjusted) macros reproduce exactly, and changing the serving scales them.
+const buildLoggedFields = (food, serving, unit, servings, macros) => {
+  const count = Number(servings) || 0;
+  const grams = Math.round(servingToGrams(serving, unit, baseGramsOf(food)) * count) || 0;
+  let nutrients;
+  if (food.isCustom && food.micros) {
+    nutrients = CUSTOM_MICRO_FIELDS
+      .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * count * 10) / 10, unit: m.unit }))
+      .filter(n => n.value > 0);
+  } else {
+    nutrients = parseMicros(food, scaleOf(food, serving, unit) * count).map(n => ({ name: n.name, value: n.value, unit: n.unit }));
+  }
+  const snapshot = {
+    name: food.name,
+    brandOwner: food.brandOwner || null,
+    calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats,
+    servingSize: grams || 1,
+    servingSizeUnit: 'g',
+    nutrients,
+  };
+  return { serving: grams, unit: 'g', food: snapshot };
+};
+
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hourLabel, entryMode, entryDirty }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
 
@@ -310,7 +336,10 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
               style={{ width: '100%', fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2, border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }} />
           ) : (
             <>
-              <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{isCustom ? edit.name : food.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{isCustom ? edit.name : food.name}</div>
+                {hourLabel && <span style={{ flexShrink: 0, background: 'var(--accent-light)', color: 'var(--accent)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>{hourLabel}</span>}
+              </div>
               {!isCustom && food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
             </>
           )}
@@ -426,10 +455,18 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
         )}
       </div>
 
-      {/* Sticky action */}
-      <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
-        <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>{editable ? 'Save Food' : 'Add Food'}</button>
-      </div>
+      {/* Sticky action — when editing a logged entry, stay blank until something changes. */}
+      {entryMode ? (
+        entryDirty && (
+          <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
+            <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>Save</button>
+          </div>
+        )
+      ) : (
+        <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
+          <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>{editable ? 'Save Food' : 'Add Food'}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -449,6 +486,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [addFoodDragY, setAddFoodDragY] = useState(0);
   const addFoodDragStart = useRef(null);
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
+  const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in Add Food
   const [searchQuery, setSearchQuery] = useState('');
   const [recentFoodList, setRecentFoodList] = useState([]);
 
@@ -469,6 +507,16 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [detailServing, setDetailServing] = useState('100');
   const [detailUnit, setDetailUnit] = useState('g');
   const [detailServings, setDetailServings] = useState('1');
+  // When set, the detail screen is editing an existing logged entry (tap a food in the
+  // timeline). Holds the row id + original serving/unit/servings to detect changes.
+  const [editingEntry, setEditingEntry] = useState(null);
+
+  // Long-press multi-select on the timeline: trash + checkbox per food, with a Delete/Copy bar.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedEntries, setSelectedEntries] = useState([]);   // full entry objects
+  const [copyMode, setCopyMode] = useState(false);              // picking a destination hour
+  const longPressTimer = useRef(null);
+  const longPressFired = useRef(false);
 
   // Custom foods (user-defined). Pinned at the top of the Add Food list.
   const [customFoods, setCustomFoods] = useState([]);
@@ -672,7 +720,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       carbs: Math.round(macros.carbs * servings),
       fats: Math.round(macros.fats * servings),
     };
-    setCheckedFoods(prev => ({ ...prev, [name]: { food, serving, unit, adjustedMacros: adjusted } }));
+    setCheckedFoods(prev => ({ ...prev, [name]: { food, serving, unit, servings, adjustedMacros: adjusted } }));
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(null);
@@ -690,7 +738,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       carbs: Math.round((Number(e.carbs) || 0) * servings),
       fats: Math.round((Number(e.fats) || 0) * servings),
     };
-    setCheckedFoods(prev => ({ ...prev, [name]: { food: detailFood, serving: Number(detailServing) || 0, unit: detailUnit, adjustedMacros: adjusted } }));
+    setCheckedFoods(prev => ({ ...prev, [name]: { food: detailFood, serving: Number(detailServing) || 0, unit: detailUnit, servings, adjustedMacros: adjusted } }));
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(null);
@@ -735,6 +783,58 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     );
   };
 
+  // ─── Long-press multi-select ───────────────────────────────
+  const startLongPress = (entry) => {
+    longPressFired.current = false;
+    clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      setSelectMode(true);
+      setSelectedEntries(prev => prev.some(e => e.id === entry.id) ? prev : [...prev, entry]);
+    }, 450);
+  };
+  const cancelLongPress = () => clearTimeout(longPressTimer.current);
+
+  const toggleSelectEntry = (entry) => {
+    setSelectedEntries(prev => prev.some(e => e.id === entry.id) ? prev.filter(e => e.id !== entry.id) : [...prev, entry]);
+  };
+
+  const onFoodTap = (entry) => {
+    if (longPressFired.current) { longPressFired.current = false; return; }  // ignore click after long-press
+    if (copyMode) copyToHour(entry.hour);
+    else if (selectMode) toggleSelectEntry(entry);
+    else openLoggedFood(entry);
+  };
+
+  const exitSelectMode = () => { setSelectMode(false); setSelectedEntries([]); setCopyMode(false); };
+
+  const bulkDeleteSelected = async () => {
+    const ids = selectedEntries.map(e => e.id);
+    if (ids.length === 0) return;
+    setFoods(prev => {
+      const next = {};
+      for (const [h, list] of Object.entries(prev)) next[h] = list.filter(f => !ids.includes(f.id));
+      return next;
+    });
+    exitSelectMode();
+    const { error } = await supabase.from('food_entries').delete().in('id', ids);
+    if (error) { console.error(error); loadFoods(); }
+  };
+
+  // Copy the selected foods to the tapped hour on the currently-shown date.
+  const copyToHour = async (hour) => {
+    const inserts = selectedEntries.map(e => ({
+      name: e.name, calories: e.calories, protein: e.protein, carbs: e.carbs, fats: e.fats,
+      hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null, food: e.food ?? null,
+    }));
+    const count = inserts.length;
+    exitSelectMode();
+    const { error } = await supabase.from('food_entries').insert(inserts);
+    if (error) { console.error(error); return; }
+    loadFoods();
+    showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
+  };
+
   const openAddFood = (hour) => { setAddFoodHour(hour); setAddFoodDragY(0); setShowAddFoodScreen(true); };
 
   // From the Favorites tab: open the Add Food sheet straight into this food's detail.
@@ -744,6 +844,47 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(true);
     if (fav.isCustom) openCustomDetail(fav.food, false);
     else openDetail(fav.food);
+  };
+
+  // Tap a logged food in the timeline → open the detail to re-adjust its serving.
+  const openLoggedFood = (entry) => {
+    // Reconstruct from the stored snapshot; older rows without one fall back to best-effort.
+    const snap = entry.food || {
+      name: entry.name, brandOwner: null,
+      calories: Number(entry.calories) || 0, protein: Number(entry.protein) || 0,
+      carbs: Number(entry.carbs) || 0, fats: Number(entry.fats) || 0,
+      servingSize: 100, servingSizeUnit: 'g', nutrients: [],
+    };
+    const serving = String(entry.serving != null ? entry.serving : (snap.servingSize || 100));
+    const unit = entry.unit || 'g';
+    setAddFoodHour(entry.hour);
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+    setCustomEdit(null);
+    setCustomEditing(false);
+    setDetailServing(serving);
+    setDetailUnit(unit);
+    setDetailServings('1');
+    setEditingEntry({ id: entry.id, hour: entry.hour, origServing: serving, origUnit: unit, origServings: '1' });
+    setDetailFood(snap);
+  };
+
+  // Save changes to a logged entry's serving (recompute macros + refresh the snapshot).
+  const saveLoggedEntry = async () => {
+    const e = editingEntry;
+    if (!e) return;
+    const food = detailFood;
+    const serving = Number(detailServing) || 0;
+    const unit = detailUnit;
+    const servings = Number(detailServings) || 0;
+    const macros = computeMacros(food, serving, unit, servings);
+    const fields = buildLoggedFields(food, serving, unit, servings, macros);
+    const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
+    const { error } = await supabase.from('food_entries').update(update).eq('id', e.id);
+    if (error) { console.error('Failed to update entry:', error); return; }
+    setEditingEntry(null);
+    closeAddFood();
+    loadFoods();
   };
 
   // Slide the sheet up once it has mounted (next frame), so the transform animates.
@@ -766,6 +907,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setSearchQuery('');
       setCheckedFoods({});
       setDetailFood(null);
+      setEditingEntry(null);
       setSearchResults(null);
       setSearchError(null);
     }, 350);
@@ -879,7 +1021,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       const next = { ...prev };
       if (next[food.name]) { delete next[food.name]; return next; }
       const { serving, unit } = defaultServingOf(food);
-      next[food.name] = { food, serving, unit, adjustedMacros: computeMacros(food, serving, unit) };
+      next[food.name] = { food, serving, unit, servings: 1, adjustedMacros: computeMacros(food, serving, unit) };
       return next;
     });
   };
@@ -921,14 +1063,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         return [{ ...food, savedServing: serving, savedUnit: unit }, ...prev];
       });
     }
-    setCheckedFoods(prev => ({ ...prev, [food.name]: { food, serving, unit, adjustedMacros: macros } }));
+    setCheckedFoods(prev => ({ ...prev, [food.name]: { food, serving, unit, servings, adjustedMacros: macros } }));
     setDetailFood(null);
   };
 
   const handleAddChecked = async () => {
     const items = Object.values(checkedFoods);
     if (items.length === 0) return;
-    const inserts = items.map(({ food, adjustedMacros }) => ({
+    const inserts = items.map(({ food, serving, unit, servings, adjustedMacros }) => ({
       name: food.name,
       calories: adjustedMacros.calories,
       protein: adjustedMacros.protein,
@@ -936,6 +1078,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       fats: adjustedMacros.fats,
       hour: addFoodHour,
       date: dateStr,
+      ...buildLoggedFields(food, serving, unit, servings ?? 1, adjustedMacros),
     }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
     if (error) { console.error(error); return; }
@@ -1119,16 +1262,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1, marginTop: 2 }}>{ap}</span>
                   </div>
 
-                  {/* Card */}
-                  <div style={{
+                  {/* Card — also a copy target while in copy mode */}
+                  <div onClick={() => { if (copyMode) copyToHour(h.value); }} style={{
                     flex: 1, background: isNow ? 'var(--accent-light)' : 'var(--card)',
                     borderRadius: 12,
-                    border: isNow ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    border: copyMode ? '1px dashed var(--accent)' : (isNow ? '1px solid var(--accent)' : '1px solid var(--border)'),
                     boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
                     padding: '14px 16px',
+                    cursor: copyMode ? 'pointer' : 'default',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button onClick={() => openAddFood(h.value)} style={{
+                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : openAddFood(h.value); }} style={{
                         background: 'none', border: 'none', cursor: 'pointer',
                         color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0,
                       }}>+ Add Food</button>
@@ -1151,19 +1295,40 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                             </div>
                           );
                         })()}
-                        {hourFoods.map(f => (
-                          <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{f.name}</div>
-                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{f.calories} cal · {f.protein}g P</div>
+                        {hourFoods.map(f => {
+                          const isSel = selectedEntries.some(e => e.id === f.id);
+                          return (
+                            <div key={f.id}
+                              onClick={(e) => { e.stopPropagation(); onFoodTap(f); }}
+                              onPointerDown={() => startLongPress(f)}
+                              onPointerUp={cancelLongPress}
+                              onPointerLeave={cancelLongPress}
+                              onPointerCancel={cancelLongPress}
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+                              {selectMode && (
+                                <div style={{
+                                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                  border: isSel ? 'none' : '2px solid var(--border)', background: isSel ? 'var(--accent)' : 'transparent',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {isSel && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                                </div>
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{f.name}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{f.calories} cal · {f.protein}g P</div>
+                              </div>
+                              {selectMode && (
+                                <button onClick={(e) => { e.stopPropagation(); deleteFood(f.id, h.value); }} aria-label="Delete food"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4444', padding: '2px 4px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                    <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m1 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
                             </div>
-                            <button onClick={() => deleteFood(f.id, h.value)} style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              color: 'var(--text-muted)', fontSize: 18, padding: '2px 4px',
-                              lineHeight: 1, flexShrink: 0,
-                            }}>×</button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1226,8 +1391,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               onEditMicro={editCustomMicro}
               favorited={isFavorite(detailFood.name)}
               onToggleFavorite={() => toggleFavorite(detailFood)}
-              onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); }}
-              onAdd={customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail)}
+              hourLabel={HOURS[addFoodHour].label}
+              entryMode={!!editingEntry}
+              entryDirty={!!editingEntry && (detailServing !== editingEntry.origServing || detailUnit !== editingEntry.origUnit || detailServings !== editingEntry.origServings)}
+              onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); setEditingEntry(null); }}
+              onAdd={editingEntry ? saveLoggedEntry : (customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail))}
             />
           ) : (
           <>
@@ -1237,11 +1405,27 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               + Add Custom Food
             </button>
-            <div style={{
-              background: 'var(--accent-light)', color: 'var(--accent)',
-              padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', flexShrink: 0,
-            }}>
-              {HOURS[addFoodHour].label}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button onClick={() => setHourMenuOpen(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--accent-light)', color: 'var(--accent)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', border: 'none', cursor: 'pointer' }}>
+                {HOURS[addFoodHour].label}
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: hourMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                  <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {hourMenuOpen && (
+                <>
+                  <div onClick={() => setHourMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '110px', maxHeight: '240px', overflowY: 'auto' }}>
+                    {HOURS.map(h => (
+                      <button key={h.value} onClick={() => { setAddFoodHour(h.value); setHourMenuOpen(false); }}
+                        style={{ display: 'block', width: '100%', padding: '8px 14px', background: h.value === addFoodHour ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: h.value === addFoodHour ? 'var(--accent)' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                        {h.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -1305,6 +1489,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
                       <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
+                      {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                       {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
@@ -1363,7 +1548,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     </button>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
+                      {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
+                    </div>
                     {food.brandOwner && (
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
                     )}
@@ -1437,6 +1625,36 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               100% { top: 0; }
             }
           `}</style>
+        </div>
+      )}
+
+      {/* ─── SELECT / COPY BAR ──────────────────────────────── */}
+      {selectMode && (selectedEntries.length > 0 || copyMode) && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 72, zIndex: 350, display: 'flex', justifyContent: 'center', padding: '0 16px', pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: 480, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: '12px 14px' }}>
+            {copyMode && (
+              <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
+                Tap an hour to copy {selectedEntries.length} food{selectedEntries.length !== 1 ? 's' : ''} there — switch the date first to copy to another day.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {copyMode ? (
+                <button onClick={() => setCopyMode(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              ) : (
+                <>
+                  <button onClick={bulkDeleteSelected}
+                    style={{ flex: 1, background: '#ff4444', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                    Delete ({selectedEntries.length})
+                  </button>
+                  <button onClick={() => setCopyMode(true)} className="btn-secondary" style={{ flex: 1 }}>Copy</button>
+                  <button onClick={exitSelectMode}
+                    style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    Cancel
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
