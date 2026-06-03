@@ -269,6 +269,17 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
         .filter(m => m.value > 0)
     : [];
 
+  // Switching units keeps the same real amount: convert the serving number to the new unit.
+  const changeUnit = (newUnit) => {
+    if (newUnit !== unit) {
+      const base = baseGramsOf(food);
+      const grams = servingToGrams(serving, unit, base);
+      const perNew = newUnit === 'serving' ? base : (UNIT_TO_GRAMS[newUnit] ?? 1);
+      if (perNew > 0) onServing(String(Math.round((grams / perNew) * 100) / 100));
+    }
+    onUnit(newUnit);
+  };
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
@@ -331,7 +342,7 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
                     <div onClick={() => setUnitMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
                     <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '90px' }}>
                       {SERVING_UNITS.map(u => (
-                        <button key={u} onClick={() => { onUnit(u); setUnitMenuOpen(false); }}
+                        <button key={u} onClick={() => { changeUnit(u); setUnitMenuOpen(false); }}
                           style={{ display: 'block', width: '100%', padding: '8px 14px', background: u === unit ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: u === unit ? 'var(--accent)' : 'var(--text-primary)' }}>
                           {u}
                         </button>
