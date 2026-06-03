@@ -695,18 +695,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       // Loaded on demand so ZXing stays out of the initial bundle.
       const { BrowserMultiFormatReader } = await import('@zxing/library');
       codeReaderRef.current = new BrowserMultiFormatReader();
-      const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
-      // Prefer the back/rear camera on mobile.
-      const selectedDevice = videoInputDevices.find(d =>
-        d.label.toLowerCase().includes('back') ||
-        d.label.toLowerCase().includes('rear') ||
-        d.label.toLowerCase().includes('environment')
-      ) || videoInputDevices[videoInputDevices.length - 1];
 
-      await codeReaderRef.current.decodeFromVideoDevice(
-        selectedDevice?.deviceId,
+      // Request the back camera directly via constraints (newer ZXing dropped
+      // listVideoInputDevices), so no device enumeration is needed.
+      await codeReaderRef.current.decodeFromConstraints(
+        {
+          audio: false,
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         videoRef.current,
-        (result) => {
+        (result, error) => {
           if (result) {
             stopScanner();
             handleBarcodeResult(result.getText());
