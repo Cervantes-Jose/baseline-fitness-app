@@ -3,6 +3,7 @@
 // grant select, insert, update, delete on public.custom_foods to anon, authenticated, service_role;
 // alter table public.custom_foods enable row level security;
 // create policy "Allow all for now" on public.custom_foods for all using (true) with check (true);
+// Remembered serving (added later): alter table public.custom_foods add column saved_serving numeric, add column saved_unit text;
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -159,8 +160,8 @@ const scaleOf = (food, serving, unit) => {
   return base > 0 ? servingToGrams(serving, unit, base) / base : 1;
 };
 
-const computeMacros = (food, serving, unit) => {
-  const s = scaleOf(food, serving, unit);
+const computeMacros = (food, serving, unit, servings = 1) => {
+  const s = scaleOf(food, serving, unit) * (Number(servings) || 0);
   return {
     calories: Math.round((Number(food?.calories) || 0) * s),
     protein: Math.round((Number(food?.protein) || 0) * s),
@@ -209,11 +210,13 @@ const parseMicros = (food, scale) => {
 };
 
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, onServing, onUnit, onBack, onAdd }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
+  const [unitMenuOpen, setUnitMenuOpen] = useState(false);
 
-  const macros = computeMacros(food, serving, unit);
-  const scale = scaleOf(food, serving, unit);
+  const count = Number(servings) || 0;
+  const macros = computeMacros(food, serving, unit, count);
+  const scale = scaleOf(food, serving, unit) * count;
   const pCal = macros.protein * 4;
   const cCal = macros.carbs * 4;
   const fCal = macros.fats * 9;
@@ -240,30 +243,58 @@ function FoodDetailView({ food, serving, unit, onServing, onUnit, onBack, onAdd 
           {food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
         </div>
 
-        {/* Serving size + macros */}
+        {/* Macros */}
         <div style={cardStyle}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {macroCells.map(m => (
+              <div key={m.label} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: m.color }}>{m.label}</div>
+                <div style={{ marginTop: '4px', lineHeight: 1.1 }}>
+                  <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{m.value}</span>
+                  <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginLeft: '2px' }}>{m.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Serving Size</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               <input type="number" inputMode="decimal" value={serving} onChange={e => onServing(e.target.value)}
                 style={{ width: '64px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', textAlign: 'center', outline: 'none' }} />
-              <select value={unit} onChange={e => onUnit(e.target.value)}
-                style={{ padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', cursor: 'pointer', outline: 'none' }}>
-                {SERVING_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setUnitMenuOpen(o => !o)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                  {unit}
+                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: unitMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                    <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {unitMenuOpen && (
+                  <>
+                    <div onClick={() => setUnitMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
+                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '90px' }}>
+                      {SERVING_UNITS.map(u => (
+                        <button key={u} onClick={() => { onUnit(u); setUnitMenuOpen(false); }}
+                          style={{ display: 'block', width: '100%', padding: '8px 14px', background: u === unit ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: u === unit ? 'var(--accent)' : 'var(--text-primary)' }}>
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
           <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {macroCells.map(m => (
-              <div key={m.label} style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: m.color }}>{m.label}</div>
-                <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '4px', lineHeight: 1.1 }}>{m.value}</div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{m.unit}</div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Number of servings</span>
+            <input type="number" inputMode="decimal" value={servings} onChange={e => onServings(e.target.value)}
+              style={{ width: '64px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', textAlign: 'center', outline: 'none' }} />
           </div>
         </div>
 
@@ -343,6 +374,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [detailFood, setDetailFood] = useState(null);   // food being viewed on the detail screen
   const [detailServing, setDetailServing] = useState('100');
   const [detailUnit, setDetailUnit] = useState('g');
+  const [detailServings, setDetailServings] = useState('1');
 
   // Custom foods (user-defined). Pinned at the top of the Add Food list.
   const [customFoods, setCustomFoods] = useState([]);
@@ -429,7 +461,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       .from('custom_foods')
       .select('*')
       .order('created_at', { ascending: false });
-    if (data) setCustomFoods(data.map(f => ({ ...f, isCustom: true })));
+    if (data) setCustomFoods(data.map(f => ({
+      ...f,
+      isCustom: true,
+      savedServing: f.saved_serving ?? undefined,
+      savedUnit: f.saved_unit ?? undefined,
+    })));
   };
 
   const openCreateCustom = () => {
@@ -561,6 +598,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { serving, unit } = defaultServingOf(food);
     setDetailServing(String(serving));
     setDetailUnit(unit);
+    setDetailServings('1');
     setDetailFood(food);
   };
 
@@ -571,12 +609,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!food) return;
     const serving = Number(detailServing) || 0;
     const unit = detailUnit;
-    const macros = computeMacros(food, serving, unit);
+    const servings = Number(detailServings) || 0;
+    const macros = computeMacros(food, serving, unit, servings);
     // We store savedServing/savedUnit rather than overwriting servingSize/servingSizeUnit
-    // so the per-serving macro basis used for scaling stays intact. (To persist across
-    // sessions, add savedServing/savedUnit columns to custom_foods and update here.)
+    // so the per-serving macro basis used for scaling stays intact. Custom foods persist
+    // these to the row (remembered across sessions). Recent/USDA foods only remember the
+    // serving for the current session — food_entries stores adjusted-total macros with no
+    // per-base reference, so a saved serving can't be re-scaled correctly there.
     if (food.isCustom) {
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
+      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id)
+        .then(({ error }) => { if (error) console.error('Failed to persist serving:', error); });
     } else {
       setRecentFoodList(prev => {
         if (prev.some(f => f.name === food.name)) {
@@ -852,8 +895,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               food={detailFood}
               serving={detailServing}
               unit={detailUnit}
+              servings={detailServings}
               onServing={setDetailServing}
               onUnit={setDetailUnit}
+              onServings={setDetailServings}
               onBack={() => setDetailFood(null)}
               onAdd={confirmDetail}
             />
