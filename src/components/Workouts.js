@@ -37,20 +37,109 @@ function formatHMS(seconds) {
   return `${h}:${m}:${s}`;
 }
 
-function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet }) {
+// Rest timers are stored as seconds; displayed/edited as m:ss.
+function formatRest(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Accepts "1:30" (m:ss) or a bare number of seconds. Returns null if unparseable.
+function parseRest(str) {
+  const t = (str || '').trim();
+  if (!t) return null;
+  if (t.includes(':')) {
+    const [m, s] = t.split(':');
+    const mins = parseInt(m, 10) || 0;
+    const secs = parseInt(s, 10) || 0;
+    return Math.max(0, mins * 60 + secs);
+  }
+  const n = parseInt(t, 10);
+  return isNaN(n) ? null : Math.max(0, n);
+}
+
+const REST_DEFAULT_SECONDS = 90; // new rest timers default to 1:30
+const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
+
+function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, restTimers = [], addRest, changeRest, deleteRest }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
+  // Which rest slot (set index) is being manually edited, and its draft text.
+  const [editingRest, setEditingRest] = useState(null);
+  const [restDraft, setRestDraft] = useState('');
 
   useEffect(() => {
     if (contentRef.current) {
       setContentHeight(contentRef.current.scrollHeight);
     }
-  }, [expanded, sessionLog]);
+  }, [expanded, sessionLog, restTimers, editingRest]);
 
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
   const prevSets = ex.lastSession?.sets || [];
+
+  const stepBtnStyle = {
+    width: '28px', height: '28px', borderRadius: '8px', border: '1px solid var(--border)',
+    background: 'var(--card)', color: 'var(--accent)', cursor: 'pointer', fontSize: '18px',
+    fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0,
+  };
+
+  const commitRest = () => {
+    if (editingRest === null) return;
+    const parsed = parseRest(restDraft);
+    if (parsed !== null) changeRest(ex.id, editingRest, parsed);
+    setEditingRest(null);
+    setRestDraft('');
+  };
+
+  // Rest slot after set `idx`: a divider "Add Rest" button when empty, an editable tile when set.
+  const renderRestSlot = (idx) => {
+    const value = restTimers[idx];
+    if (value === null || value === undefined) {
+      return (
+        <div key={`rest-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+          <button onClick={() => addRest(ex.id, idx)}
+            style={{ background: 'transparent', border: '1px solid var(--accent)', borderRadius: '8px', color: 'var(--accent)', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: '5px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            + Add Rest
+          </button>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+        </div>
+      );
+    }
+    return (
+      <div key={`rest-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
+        {/* Left divider */}
+        <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+        {/* Timer controls (unwrapped) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          <button onClick={() => changeRest(ex.id, idx, value - REST_STEP_SECONDS)} disabled={value <= 0} aria-label="Decrease rest"
+            style={{ ...stepBtnStyle, opacity: value <= 0 ? 0.4 : 1, cursor: value <= 0 ? 'default' : 'pointer' }}>−</button>
+          {editingRest === idx ? (
+            <input value={restDraft} autoFocus onChange={e => setRestDraft(e.target.value)} onBlur={commitRest}
+              onKeyDown={e => { if (e.key === 'Enter') commitRest(); if (e.key === 'Escape') { setEditingRest(null); setRestDraft(''); } }}
+              placeholder="m:ss" inputMode="numeric"
+              className="input" style={{ width: '64px', padding: '6px', textAlign: 'center', fontSize: '15px' }} />
+          ) : (
+            <button onClick={() => { setEditingRest(idx); setRestDraft(formatRest(value)); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', minWidth: '54px', textAlign: 'center', padding: 0 }}>
+              {formatRest(value)}
+            </button>
+          )}
+          <button onClick={() => changeRest(ex.id, idx, value + REST_STEP_SECONDS)} aria-label="Increase rest" style={stepBtnStyle}>+</button>
+        </div>
+        {/* Right side: divider + Delete. flex:1 balances the left divider so the timer tile stays centered */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+          <button onClick={() => deleteRest(ex.id, idx)}
+            style={{ background: 'transparent', border: '1px solid #EF4444', borderRadius: '8px', cursor: 'pointer', color: '#EF4444', fontSize: '12px', fontWeight: '600', padding: '5px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1000 : 1, position: 'relative' }} {...attributes}>
@@ -117,22 +206,25 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
                 <div></div>
               </div>
               {sets.map((set, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '32px 54px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
-                  <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
-                  <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
-                    inputMode="decimal"
-                    placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
-                  <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
-                    inputMode="numeric" pattern="[0-9]*"
-                    placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
-                  <button onClick={() => deleteSet(ex.id, idx)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
+                <React.Fragment key={idx}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '32px 54px 1fr 1fr 36px', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
+                    <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
+                      inputMode="decimal"
+                      placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+                    <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
+                      inputMode="numeric" pattern="[0-9]*"
+                      placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
+                    <button onClick={() => deleteSet(ex.id, idx)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                  {renderRestSlot(idx)}
+                </React.Fragment>
               ))}
               <button onClick={() => addSet(ex.id)}
                 style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -360,6 +452,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [renameValue, setRenameValue] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
+  // Rest timers keyed by exercise id: array where index i = rest (seconds) after set i, or null/undefined for no timer.
+  const [restTimers, setRestTimers] = useState({});
+  const restTimersRef = useRef(restTimers);
   const [checkedSets, setCheckedSets] = useState({});
   const [expandedExId, setExpandedExId] = useState(null);
   const [dragY, setDragY] = useState(0);
@@ -394,6 +489,43 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   useEffect(() => {
     sessionLogRef.current = sessionLog;
   }, [sessionLog]);
+
+  useEffect(() => {
+    restTimersRef.current = restTimers;
+  }, [restTimers]);
+
+  // Persist an exercise's full rest-timer array to its row. The exercises table
+  // GRANT/RLS already cover all columns, so this is a plain column update.
+  const persistRest = async (exId, arr) => {
+    const { error } = await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId);
+    if (error) console.error(error);
+  };
+
+  // Write a new rest-timer array into both state and ref, then persist.
+  const commitRestTimers = (exId, arr) => {
+    const next = { ...restTimersRef.current, [exId]: arr };
+    restTimersRef.current = next;
+    setRestTimers(next);
+    persistRest(exId, arr);
+  };
+
+  const addRest = (exId, slotIdx) => {
+    const arr = [...(restTimersRef.current[exId] || [])];
+    arr[slotIdx] = REST_DEFAULT_SECONDS;
+    commitRestTimers(exId, arr);
+  };
+
+  const changeRest = (exId, slotIdx, seconds) => {
+    const arr = [...(restTimersRef.current[exId] || [])];
+    arr[slotIdx] = Math.max(0, seconds);
+    commitRestTimers(exId, arr);
+  };
+
+  const deleteRest = (exId, slotIdx) => {
+    const arr = [...(restTimersRef.current[exId] || [])];
+    arr[slotIdx] = null;
+    commitRestTimers(exId, arr);
+  };
 
   useEffect(() => {
     if (showExercisePicker) {
@@ -579,7 +711,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (routineError) { console.error(routineError); return; }
     if (routine.exercises.length > 0) {
       const { data: newExercises, error: exError } = await supabase.from('exercises')
-        .insert(routine.exercises.map((ex, idx) => ({ routine_id: newRoutine.id, name: ex.name, position: idx }))).select();
+        .insert(routine.exercises.map((ex, idx) => ({ routine_id: newRoutine.id, name: ex.name, position: idx, rest_timers: ex.rest_timers || [] }))).select();
       if (exError) { console.error(exError); return; }
       setRoutines([...routines, { ...newRoutine, exercises: newExercises.map(e => ({ ...e, lastSession: null })) }]);
     } else {
@@ -589,13 +721,18 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const openRoutine = (routine) => {
     const prefilled = {};
+    const prefilledRest = {};
     routine.exercises.forEach(ex => {
       prefilled[ex.id] = ex.lastSession?.sets?.length > 0
         ? ex.lastSession.sets
         : [{ sets: '', reps: '', weight: '' }];
+      const rt = ex.rest_timers;
+      prefilledRest[ex.id] = Array.isArray(rt) ? rt : (typeof rt === 'string' ? JSON.parse(rt) : []);
     });
     setActiveRoutine(routine);
     setSessionLog(prefilled);
+    setRestTimers(prefilledRest);
+    restTimersRef.current = prefilledRest;
     setExerciseEditMode(false);
     setSelectedExercises(new Set());
     setView('exercises');
@@ -651,6 +788,12 @@ const updateSet = (exId, setIdx, field, value) => {
       sets.splice(setIdx, 1);
       return { ...prev, [exId]: sets };
     });
+    // Keep the rest-timer slots aligned to set indices (slot i = rest after set i).
+    if (restTimersRef.current[exId]) {
+      const arr = [...restTimersRef.current[exId]];
+      arr.splice(setIdx, 1);
+      commitRestTimers(exId, arr);
+    }
   };
 
   const toggleCheck = (exId, setIdx) => {
@@ -1239,7 +1382,7 @@ const updateSet = (exId, setIdx, field, value) => {
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
           {activeRoutine.exercises.map(ex => (
-            <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} />
+            <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
           ))}
         </SortableContext>
       </DndContext>
