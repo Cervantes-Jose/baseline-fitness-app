@@ -155,6 +155,9 @@ const [activeWorkout, setActiveWorkout] = useState(() => {
 const [workoutSeconds, setWorkoutSeconds] = useState(() => Number(localStorage.getItem('workoutSeconds')) || 0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
 const [workoutsResetKey, setWorkoutsResetKey] = useState(0);
+// True while the food timeline is in multi-select/edit mode — the select bar
+// replaces the main bottom tab bar during this time.
+const [foodSelectMode, setFoodSelectMode] = useState(false);
 const [toast, setToast] = useState(null);
 const [updateAvailable, setUpdateAvailable] = useState(false);
 const toastTimerRef = useRef(null);
@@ -249,7 +252,7 @@ const changeDate = (dir) => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
-      case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} /></div>;
+      case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} /></div>;
       case 'profile-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'workout-start':
       case 'workout-exercises':
@@ -326,7 +329,8 @@ const changeDate = (dir) => {
         }} />
       )}
 
-      {/* Bottom Tab Bar */}
+      {/* Bottom Tab Bar — hidden while the food select bar replaces it */}
+      {!foodSelectMode && (
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
@@ -337,6 +341,7 @@ const changeDate = (dir) => {
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

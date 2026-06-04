@@ -41,7 +41,14 @@ const PLACEHOLDER_FOODS = [
   { name: 'Protein Shake',   calories: 150, protein: 25, carbs: 8,  fats: 3  },
 ];
 
-const FILTER_TABS = ['Add Food', 'Favorites', 'Meals', 'Nutrition'];
+const FILTER_TABS = ['Add Food', 'Favorites', 'Custom Foods', 'Meals', 'Nutrition'];
+// Pills shown at the top of the Add Food sheet (when not actively searching).
+const ADD_FOOD_PILLS = [
+  { id: 'recent', label: 'Recent' },
+  { id: 'favorites', label: 'Favorites' },
+  { id: 'meals', label: 'Meals' },
+  { id: 'custom', label: 'Custom Foods' },
+];
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ─── CALENDAR MODAL ─────────────────────────────────────────
@@ -258,9 +265,10 @@ const buildLoggedFields = (food, serving, unit, servings, macros) => {
 };
 
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hourLabel, entryMode, entryDirty }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
+  const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in the detail view
 
   const isCustom = !!edit;          // a custom food (has editable definition data)
   const editable = isCustom && editing;   // fields are currently shown as inputs
@@ -338,7 +346,34 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                 <div style={{ fontWeight: '700', fontSize: '22px', color: 'var(--text-primary)', lineHeight: 1.2 }}>{isCustom ? edit.name : food.name}</div>
-                {hourLabel && <span style={{ flexShrink: 0, background: 'var(--accent-light)', color: 'var(--accent)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>{hourLabel}</span>}
+                {hour != null && (onHourChange ? (
+                  /* Add mode: hour is an editable dropdown picker. */
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <button onClick={() => setHourMenuOpen(o => !o)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--accent-light)', color: 'var(--accent)', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', border: 'none', cursor: 'pointer' }}>
+                      {HOURS[hour].label}
+                      <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: hourMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    {hourMenuOpen && (
+                      <>
+                        <div onClick={() => setHourMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '110px', maxHeight: '240px', overflowY: 'auto' }}>
+                          {HOURS.map(h => (
+                            <button key={h.value} onClick={() => { onHourChange(h.value); setHourMenuOpen(false); }}
+                              style={{ display: 'block', width: '100%', padding: '8px 14px', background: h.value === hour ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: h.value === hour ? 'var(--accent)' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                              {h.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  /* Edit mode: hour shown read-only; use the Move button to change it. */
+                  <span style={{ flexShrink: 0, background: 'var(--accent-light)', color: 'var(--accent)', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>{HOURS[hour].label}</span>
+                ))}
               </div>
               {!isCustom && food.brandOwner && <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>{food.brandOwner}</div>}
             </>
@@ -472,7 +507,7 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
 }
 
 // ─── FOOD LOG ────────────────────────────────────────────────
-function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60 }) {
+function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60, onSelectModeChange = () => {} }) {
   const currentHour = new Date().getHours();
 
   const [date, setDate] = useState(new Date());
@@ -489,6 +524,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in Add Food
   const [searchQuery, setSearchQuery] = useState('');
   const [recentFoodList, setRecentFoodList] = useState([]);
+  // Which list the Add Food sheet shows when not actively searching.
+  const [addFoodTab, setAddFoodTab] = useState('recent');   // 'recent' | 'favorites' | 'meals' | 'custom'
 
   // Favorited foods (snapshot of each food, keyed by name). Persisted in favorite_foods.
   const [favorites, setFavorites] = useState([]);
@@ -515,6 +552,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState([]);   // full entry objects
   const [copyMode, setCopyMode] = useState(false);              // picking a destination hour
+  const [moveMode, setMoveMode] = useState(false);              // select bar: picking a destination hour to move selected foods
   const longPressTimer = useRef(null);
   const longPressFired = useRef(false);
 
@@ -524,8 +562,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // { id|null, name, calories, protein, carbs, fats, micros: { [key]: string } }
   const [customEdit, setCustomEdit] = useState(null);
   const [customEditing, setCustomEditing] = useState(false);  // fields shown as editable inputs
-  const [customMenuOpen, setCustomMenuOpen] = useState(null);     // id of food whose ··· menu is open
-  const [customMenuPos, setCustomMenuPos] = useState({ top: 0, right: 0 });
+  // True when the custom-food editor was opened from the main Custom Foods tab (vs. from
+  // inside the Add Food sheet). On save we return to where it was opened from.
+  const [customFromMain, setCustomFromMain] = useState(false);
+  // Main Custom Foods tab: quick rename/delete mode + in-progress name edits keyed by id.
+  const [customEditMode, setCustomEditMode] = useState(false);
+  const [nameDrafts, setNameDrafts] = useState({});
 
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -535,11 +577,24 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const isToday = date.toDateString() === new Date().toDateString();
   const dateStr = date.toLocaleDateString();
 
+  // Tell App.js when select/edit mode is active (move mode lives inside it) so it can
+  // swap the main tab bar for the select bar (which replaces it at the bottom).
+  // Reset on unmount so the tab bar isn't left hidden if the user navigates away.
+  useEffect(() => {
+    onSelectModeChange(selectMode);
+    return () => onSelectModeChange(false);
+  }, [selectMode, onSelectModeChange]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFoods(); }, [date]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFavorites(); }, []);
+  useEffect(() => { loadFavorites(); loadCustomFoods(); }, []);
+
+  // Leave the Custom Foods quick-edit mode when navigating away from that tab.
+  useEffect(() => {
+    if (activeFilter !== 'Custom Foods' && customEditMode) { setCustomEditMode(false); setNameDrafts({}); }
+  }, [activeFilter, customEditMode]);
 
   useEffect(() => {
     if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); }
@@ -653,6 +708,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Open the detail page for a custom food. Pass null to create a new one (starts editable);
   // existing foods open read-only unless startEditing is true (··· Edit / top-right Edit).
   const openCustomDetail = (food, startEditing = false) => {
+    setCustomFromMain(false);   // opened from within the sheet; openCustomFoodDetail overrides to true
     const existing = food && food.id != null;
     const microStrings = CUSTOM_MICRO_FIELDS.reduce((o, m) => { o[m.key] = '0'; return o; }, {});
     if (existing && food.micros) {
@@ -714,6 +770,16 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         .then(({ error }) => { if (error) console.error('Failed to update favorite:', error); });
     }
 
+    // Opened from the main Custom Foods tab: just save to the library and return to
+    // that screen — don't stage it into the log or stay on the Add Food sheet.
+    if (customFromMain) {
+      setCustomEdit(null);
+      setCustomEditing(false);
+      setDetailFood(null);
+      closeAddFood();
+      return;
+    }
+
     const adjusted = {
       calories: Math.round(macros.calories * servings),
       protein: Math.round(macros.protein * servings),
@@ -745,11 +811,33 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const deleteCustomFood = async (food) => {
-    setCustomMenuOpen(null);
     setCustomFoods(prev => prev.filter(f => f.id !== food.id));
     setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
     if (isFavorite(food.name)) removeFavorite(food.name);
     await supabase.from('custom_foods').delete().eq('id', food.id);
+  };
+
+  // Quick-rename from the Custom Foods edit mode. No-op when the name is unchanged.
+  // Keeps the favorite (which is keyed by name) in sync if this food is favorited.
+  const commitRename = async (food, raw) => {
+    const newName = (raw ?? '').trim() || 'Custom Food';
+    if (newName === food.name) return;
+    setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
+    const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id);
+    if (error) { console.error('Failed to rename custom food:', error); return; }
+    if (isFavorite(food.name)) {
+      const snap = { ...food, name: newName };
+      setFavorites(prev => prev.map(fv => (fv.name === food.name ? { ...fv, name: newName, food: snap } : fv)));
+      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name)
+        .then(({ error }) => { if (error) console.error('Failed to sync favorite name:', error); });
+    }
+  };
+
+  // Leave edit mode, flushing any pending name edits first.
+  const exitCustomEditMode = async () => {
+    await Promise.all(customFoods.map(f => commitRename(f, nameDrafts[f.id] ?? f.name)));
+    setNameDrafts({});
+    setCustomEditMode(false);
   };
 
   const searchFoods = async (query) => {
@@ -802,11 +890,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const onFoodTap = (entry) => {
     if (longPressFired.current) { longPressFired.current = false; return; }  // ignore click after long-press
     if (copyMode) copyToHour(entry.hour);
+    else if (moveMode) moveSelectedToHour(entry.hour);
     else if (selectMode) toggleSelectEntry(entry);
     else openLoggedFood(entry);
   };
 
-  const exitSelectMode = () => { setSelectMode(false); setSelectedEntries([]); setCopyMode(false); };
+  const exitSelectMode = () => { setSelectMode(false); setSelectedEntries([]); setCopyMode(false); setMoveMode(false); };
 
   const bulkDeleteSelected = async () => {
     const ids = selectedEntries.map(e => e.id);
@@ -835,6 +924,18 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
 
+  // Move the selected foods (long-press bar) to the tapped hour on the shown date.
+  const moveSelectedToHour = async (hour) => {
+    const ids = selectedEntries.map(e => e.id);
+    const count = ids.length;
+    exitSelectMode();
+    if (count === 0) return;
+    const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).in('id', ids);
+    if (error) { console.error(error); loadFoods(); return; }
+    loadFoods();
+    showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
+  };
+
   const openAddFood = (hour) => { setAddFoodHour(hour); setAddFoodDragY(0); setShowAddFoodScreen(true); };
 
   // From the Favorites tab: open the Add Food sheet straight into this food's detail.
@@ -844,6 +945,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(true);
     if (fav.isCustom) openCustomDetail(fav.food, false);
     else openDetail(fav.food);
+  };
+
+  // From the main Custom Foods tab: open the Add Food sheet straight into a custom
+  // food's detail (view, or edit when startEditing). Safe to call when the sheet is
+  // already open — setShowAddFoodScreen(true) is a no-op in that case.
+  const openCustomFoodDetail = (food, startEditing = false) => {
+    setAddFoodHour(currentHour);
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+    openCustomDetail(food, startEditing);
+    setCustomFromMain(true);   // override: this open originated on the main Custom Foods tab
   };
 
   // Tap a logged food in the timeline → open the detail to re-adjust its serving.
@@ -910,6 +1022,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setEditingEntry(null);
       setSearchResults(null);
       setSearchError(null);
+      setAddFoodTab('recent');
     }, 350);
   };
 
@@ -1117,7 +1230,112 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const displayedCustomFoods = isSearchActive
     ? customFoods.filter(f => f.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : customFoods;
-  const listLabel = isSearchActive ? 'Results' : 'Recent';
+
+  // ─── Add Food sheet row renderers ───────────────────────────
+  // Extracted so the pill tabs (Recent / Favorites / Meals / Custom) and the
+  // search results can all reuse the same row markup without duplication.
+  const renderCustomRow = (food) => {
+    const checked = !!checkedFoods[food.name];
+    return (
+      <div key={'custom-' + food.id} onClick={() => openCustomDetail(food, false)} style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+      }}>
+        <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
+          <div style={{
+            width: '22px', height: '22px', borderRadius: '50%',
+            border: checked ? 'none' : '2px solid var(--border)',
+            background: checked ? 'var(--accent)' : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+          }}>
+            {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+          </div>
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
+            <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
+            {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
+          </div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    );
+  };
+
+  const renderFoodRow = (food, showCheckbox) => {
+    const checked = !!checkedFoods[food.name];
+    const ds = defaultServingOf(food);
+    const dm = computeMacros(food, ds.serving, ds.unit);
+    return (
+      <div key={food.name + (food.brandOwner || '')} onClick={() => openDetail(food)} style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+      }}>
+        {showCheckbox && (
+          <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
+            <div style={{
+              width: '22px', height: '22px', borderRadius: '50%',
+              border: checked ? 'none' : '2px solid var(--border)',
+              background: checked ? 'var(--accent)' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+            }}>
+              {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+            </div>
+          </button>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
+            {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
+          </div>
+          {food.brandOwner && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
+          )}
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            {dm.calories} cal · {dm.protein}g P · {dm.carbs}g C · {dm.fats}g F
+          </div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    );
+  };
+
+  const renderFavoriteRow = (fav) => {
+    const f = fav.food || {};
+    return (
+      <div key={fav.id} onClick={() => openFavoriteDetail(fav)} style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{fav.name}</span>
+            {fav.isCustom && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: 8 }}>Custom</span>}
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ Favorite</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            {Math.round(Number(f.calories) || 0)} cal · {Math.round(Number(f.protein) || 0)}g P · {Math.round(Number(f.carbs) || 0)}g C · {Math.round(Number(f.fats) || 0)}g F
+          </div>
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); removeFavorite(fav.name); }} aria-label="Remove favorite"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 18, padding: '2px 6px', lineHeight: 1, flexShrink: 0 }}>★</button>
+      </div>
+    );
+  };
+
+  const emptyState = (text) => (
+    <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '40px 20px' }}>{text}</p>
+  );
 
   // Break out of the .content wrapper's 20px padding
   return (
@@ -1182,7 +1400,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <button key={tab}
               className={isActive ? '' : 'fl-tab-inactive'}
               onClick={() => {
-                if (tab === 'Add Food' || tab === 'Favorites') setActiveFilter(tab);
+                if (tab === 'Add Food' || tab === 'Favorites' || tab === 'Custom Foods') setActiveFilter(tab);
                 else showToast('Coming soon', null, null);
               }} style={{
                 flexShrink: 0, padding: '7px 16px', borderRadius: 20,
@@ -1199,31 +1417,61 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       {/* ─── FAVORITES LIST ─────────────────────────────────── */}
       {activeFilter === 'Favorites' ? (
         <div style={{ padding: '8px 20px 40px' }}>
-          {favorites.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, textAlign: 'center', padding: '40px 20px' }}>
-              No favorites yet. Tap a food and choose “Add to Favorites” to see it here.
-            </p>
-          ) : favorites.map(fav => {
-            const f = fav.food || {};
-            return (
-              <div key={fav.id} onClick={() => openFavoriteDetail(fav)} style={{
+          {favorites.length === 0
+            ? emptyState('No favorites yet. Tap a food and choose “Add to Favorites” to see it here.')
+            : favorites.map(renderFavoriteRow)}
+        </div>
+      ) : activeFilter === 'Custom Foods' ? (
+        /* ─── CUSTOM FOODS LIST ──────────────────────────────── */
+        <div style={{ padding: '8px 20px 40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+            {customFoods.length > 0 && (
+              <button onClick={() => (customEditMode ? exitCustomEditMode() : setCustomEditMode(true))}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: '4px 0', flexShrink: 0 }}>
+                {customEditMode ? 'Done' : 'Edit'}
+              </button>
+            )}
+            <button onClick={() => openCustomFoodDetail(null)}
+              style={{ background: 'var(--accent)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              + Add Custom Food
+            </button>
+          </div>
+          {customFoods.length === 0 ? (
+            emptyState('No custom foods yet. Tap “+ Add Custom Food” to create one.')
+          ) : customFoods.map(food => (
+            customEditMode ? (
+              /* Edit mode: inline rename + quick delete. */
+              <div key={'mcustom-' + food.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                <input
+                  value={nameDrafts[food.id] ?? food.name}
+                  onChange={(e) => setNameDrafts(prev => ({ ...prev, [food.id]: e.target.value }))}
+                  onBlur={() => commitRename(food, nameDrafts[food.id] ?? food.name)}
+                  aria-label="Custom food name"
+                  style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }} />
+                <button onClick={() => deleteCustomFood(food)} aria-label="Delete custom food"
+                  style={{ background: 'none', border: 'none', color: '#ff4444', fontSize: 13, fontWeight: 600, padding: '4px 6px', cursor: 'pointer', flexShrink: 0 }}>Delete</button>
+              </div>
+            ) : (
+              <div key={'mcustom-' + food.id} onClick={() => openCustomFoodDetail(food, false)} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{fav.name}</span>
-                    {fav.isCustom && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: 8 }}>Custom</span>}
+                    <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{food.name}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: 8 }}>Custom</span>
+                    {isFavorite(food.name) && <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ Favorite</span>}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {Math.round(Number(f.calories) || 0)} cal · {Math.round(Number(f.protein) || 0)}g P · {Math.round(Number(f.carbs) || 0)}g C · {Math.round(Number(f.fats) || 0)}g F
+                    {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
                   </div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); removeFavorite(fav.name); }} aria-label="Remove favorite"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 18, padding: '2px 6px', lineHeight: 1, flexShrink: 0 }}>★</button>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
-            );
-          })}
+            )
+          ))}
         </div>
       ) : loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Loading...</p>
@@ -1262,17 +1510,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1, marginTop: 2 }}>{ap}</span>
                   </div>
 
-                  {/* Card — also a copy target while in copy mode */}
-                  <div onClick={() => { if (copyMode) copyToHour(h.value); }} style={{
+                  {/* Card — also a copy/move target while picking a destination hour */}
+                  <div onClick={() => { if (copyMode) copyToHour(h.value); else if (moveMode) moveSelectedToHour(h.value); }} style={{
                     flex: 1, background: isNow ? 'var(--accent-light)' : 'var(--card)',
                     borderRadius: 12,
-                    border: copyMode ? '1px dashed var(--accent)' : (isNow ? '1px solid var(--accent)' : '1px solid var(--border)'),
+                    border: (copyMode || moveMode) ? '1px dashed var(--accent)' : (isNow ? '1px solid var(--accent)' : '1px solid var(--border)'),
                     boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
                     padding: '14px 16px',
-                    cursor: copyMode ? 'pointer' : 'default',
+                    cursor: (copyMode || moveMode) ? 'pointer' : 'default',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : openAddFood(h.value); }} style={{
+                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} style={{
                         background: 'none', border: 'none', cursor: 'pointer',
                         color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0,
                       }}>+ Add Food</button>
@@ -1391,7 +1639,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               onEditMicro={editCustomMicro}
               favorited={isFavorite(detailFood.name)}
               onToggleFavorite={() => toggleFavorite(detailFood)}
-              hourLabel={HOURS[addFoodHour].label}
+              hour={addFoodHour}
+              onHourChange={editingEntry ? undefined : setAddFoodHour}
               entryMode={!!editingEntry}
               entryDirty={!!editingEntry && (detailServing !== editingEntry.origServing || detailUnit !== editingEntry.origUnit || detailServings !== editingEntry.origServings)}
               onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); setEditingEntry(null); }}
@@ -1465,106 +1714,57 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
-
-            {displayedCustomFoods.map(food => {
-              const checked = !!checkedFoods[food.name];
-              return (
-                <div key={'custom-' + food.id} onClick={() => openCustomDetail(food, false)} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
-                }}>
-                  <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
-                    <div style={{
-                      width: '22px', height: '22px', borderRadius: '50%',
-                      border: checked ? 'none' : '2px solid var(--border)',
-                      background: checked ? 'var(--accent)' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
-                    }}>
-                      {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
-                    </div>
+          {/* Pills — pick which list to show. Hidden while actively searching. */}
+          {!isSearchActive && (
+            <div style={{ display: 'flex', gap: 8, padding: '0 20px 12px', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {ADD_FOOD_PILLS.map(p => {
+                const active = addFoodTab === p.id;
+                return (
+                  <button key={p.id} className={active ? '' : 'fl-tab-inactive'} onClick={() => setAddFoodTab(p.id)}
+                    style={{ flexShrink: 0, padding: '7px 16px', borderRadius: 20, border: 'none', background: active ? 'var(--accent)' : undefined, color: active ? '#fff' : 'var(--text-primary)', fontWeight: 500, fontSize: 13, cursor: 'pointer' }}>
+                    {p.label}
                   </button>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
-                      {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {food.calories} cal · {food.protein}g P · {food.carbs}g C · {food.fats}g F
-                    </div>
-                  </div>
-                  <button onClick={(e) => {
-                    e.stopPropagation();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setCustomMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                    setCustomMenuOpen(customMenuOpen === food.id ? null : food.id);
-                  }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', padding: '4px 6px', letterSpacing: '2px', lineHeight: 1, flexShrink: 0 }}>···</button>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          )}
 
-            {searchError && (
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
-                {searchError} — showing recent foods
-              </p>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+            {isSearchActive ? (
+              /* Search overrides the pills: custom matches first, then live results. */
+              <>
+                {displayedCustomFoods.map(renderCustomRow)}
+                {searchError && (
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
+                    {searchError} — showing recent foods
+                  </p>
+                )}
+                {(searchError || (searchResults && searchResults.length > 0)) && (
+                  <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>{searchError ? 'Recent' : 'Results'}</p>
+                )}
+                {!searchLoading && !searchError && searchResults && searchResults.length === 0 && (
+                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No results found</p>
+                )}
+                {displayedFoods.map(food => renderFoodRow(food, !!searchError))}
+              </>
+            ) : addFoodTab === 'recent' ? (
+              <>
+                <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>Recent</p>
+                {displayedFoods.length === 0
+                  ? emptyState('No recent foods yet. Search above or add a custom food.')
+                  : displayedFoods.map(food => renderFoodRow(food, true))}
+              </>
+            ) : addFoodTab === 'favorites' ? (
+              favorites.length === 0
+                ? emptyState('No favorites yet. Open a food and choose “Add to Favorites”.')
+                : favorites.map(renderFavoriteRow)
+            ) : addFoodTab === 'custom' ? (
+              customFoods.length === 0
+                ? emptyState('No custom foods yet. Tap “+ Add Custom Food” above.')
+                : customFoods.map(renderCustomRow)
+            ) : (
+              emptyState('Meals coming soon — save groups of foods to log them together.')
             )}
-
-            {(!isSearchActive || searchError || (searchResults && searchResults.length > 0)) && (
-              <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>{searchError ? 'Recent' : listLabel}</p>
-            )}
-
-            {isSearchActive && !searchLoading && !searchError && searchResults && searchResults.length === 0 && (
-              <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No results found</p>
-            )}
-
-            {displayedFoods.map(food => {
-              // Recent rows get an instant-check circle; live USDA search results don't.
-              const showCheckbox = !(isSearchActive && !searchError);
-              const checked = !!checkedFoods[food.name];
-              const ds = defaultServingOf(food);
-              const dm = computeMacros(food, ds.serving, ds.unit);
-              return (
-                <div key={food.name + (food.brandOwner || '')} onClick={() => openDetail(food)} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
-                }}>
-                  {showCheckbox && (
-                    <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
-                      <div style={{
-                        width: '22px', height: '22px', borderRadius: '50%',
-                        border: checked ? 'none' : '2px solid var(--border)',
-                        background: checked ? 'var(--accent)' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
-                      }}>
-                        {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
-                      </div>
-                    </button>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
-                      {isFavorite(food.name) && <span style={{ fontSize: '10px', fontWeight: '700', color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: '8px', whiteSpace: 'nowrap' }}>★ Favorite</span>}
-                    </div>
-                    {food.brandOwner && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{food.brandOwner}</div>
-                    )}
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {dm.calories} cal · {dm.protein}g P · {dm.carbs}g C · {dm.fats}g F
-                    </div>
-                  </div>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
-                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              );
-            })}
           </div>
 
           {checkedCount > 0 && (
@@ -1579,25 +1779,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           )}
           </>
           )}
-
-          {/* Custom food ··· menu */}
-          {customMenuOpen && <div onClick={() => setCustomMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 440 }} />}
-          {customMenuOpen && (() => {
-            const food = customFoods.find(f => f.id === customMenuOpen);
-            if (!food) return null;
-            return (
-              <div style={{
-                position: 'fixed', top: customMenuPos.top, right: customMenuPos.right,
-                background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
-                overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 441, minWidth: '140px',
-              }}>
-                <button onClick={() => { setCustomMenuOpen(null); openCustomDetail(food, true); }}
-                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Edit</button>
-                <button onClick={() => deleteCustomFood(food)}
-                  style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#ff4444' }}>Delete</button>
-              </div>
-            );
-          })()}
         </div>
       )}
 
@@ -1628,25 +1809,33 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         </div>
       )}
 
-      {/* ─── SELECT / COPY BAR ──────────────────────────────── */}
-      {selectMode && (selectedEntries.length > 0 || copyMode) && (
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 72, zIndex: 350, display: 'flex', justifyContent: 'center', padding: '0 16px', pointerEvents: 'none' }}>
-          <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: 480, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: '12px 14px' }}>
-            {copyMode && (
+      {/* ─── SELECT / COPY BAR ──────────────────────────────────
+          Replaces the main bottom tab bar while in edit mode (App.js hides
+          the tab bar via onSelectModeChange). Positioned to match the tab
+          bar exactly (bottom: 6px, same width/radius) and animates in by
+          fading + expanding from the middle outward. Stays visible the
+          whole time edit mode is on, even with nothing selected. */}
+      {selectMode && (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 6, width: '100%', maxWidth: 'calc(100% - 32px)', zIndex: 350, animation: 'selectBarIn 0.22s ease-out' }}>
+          <div style={{ width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: '12px 14px' }}>
+            {(copyMode || moveMode) && (
               <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
-                Tap an hour to copy {selectedEntries.length} food{selectedEntries.length !== 1 ? 's' : ''} there — switch the date first to copy to another day.
+                Tap an hour to {copyMode ? 'copy' : 'move'} {selectedEntries.length} food{selectedEntries.length !== 1 ? 's' : ''} there — switch the date first to {copyMode ? 'copy' : 'move'} to another day.
               </p>
             )}
             <div style={{ display: 'flex', gap: 8 }}>
-              {copyMode ? (
-                <button onClick={() => setCopyMode(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              {(copyMode || moveMode) ? (
+                <button onClick={() => { setCopyMode(false); setMoveMode(false); }} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
               ) : (
                 <>
-                  <button onClick={bulkDeleteSelected}
-                    style={{ flex: 1, background: '#ff4444', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                  <button onClick={bulkDeleteSelected} disabled={selectedEntries.length === 0}
+                    style={{ flex: 1, background: '#ff4444', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: selectedEntries.length === 0 ? 'default' : 'pointer', opacity: selectedEntries.length === 0 ? 0.4 : 1 }}>
                     Delete ({selectedEntries.length})
                   </button>
-                  <button onClick={() => setCopyMode(true)} className="btn-secondary" style={{ flex: 1 }}>Copy</button>
+                  <button onClick={() => setCopyMode(true)} disabled={selectedEntries.length === 0}
+                    className="btn-secondary" style={{ flex: 1, opacity: selectedEntries.length === 0 ? 0.4 : 1, cursor: selectedEntries.length === 0 ? 'default' : 'pointer' }}>Copy</button>
+                  <button onClick={() => setMoveMode(true)} disabled={selectedEntries.length === 0}
+                    className="btn-secondary" style={{ flex: 1, opacity: selectedEntries.length === 0 ? 0.4 : 1, cursor: selectedEntries.length === 0 ? 'default' : 'pointer' }}>Move</button>
                   <button onClick={exitSelectMode}
                     style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer', color: 'var(--text-primary)' }}>
                     Cancel
@@ -1655,6 +1844,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               )}
             </div>
           </div>
+          <style>{`
+            @keyframes selectBarIn {
+              0%   { opacity: 0; transform: translateX(-50%) scaleX(0.4); }
+              100% { opacity: 1; transform: translateX(-50%) scaleX(1); }
+            }
+          `}</style>
         </div>
       )}
     </div>

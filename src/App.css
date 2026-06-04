@@ -112,14 +112,14 @@ border-bottom: none;
 /* Bottom Tab Bar */
 .tab-bar {
   position: fixed;
-  bottom: 12px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
   max-width: calc(100% - 32px);
   background: var(--tab-bar);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   display: flex;
   padding: 8px 0 12px;

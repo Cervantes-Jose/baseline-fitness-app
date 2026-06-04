@@ -245,26 +245,34 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal 
       setFats(Math.round(food.reduce((s, f) => s + Number(f.fats || 0), 0)));
     }
 
-    // Streak: consecutive days with at least one workout session
-    const { data: sessions } = await supabase
-      .from('workout_sessions')
-      .select('date')
-      .order('date', { ascending: false });
+    // Streak: consecutive days with any activity — a logged food OR a workout
+    // session counts that day as active. Both tables store `date` as a
+    // toLocaleDateString() string, so the date strings are directly comparable.
+    const [{ data: sessions }, { data: foodDays }] = await Promise.all([
+      supabase.from('workout_sessions').select('date'),
+      supabase.from('food_entries').select('date'),
+    ]);
 
-    if (sessions && sessions.length > 0) {
-      const uniqueDates = [...new Set(sessions.map(s => s.date))];
-      let count = 0;
-      let cursor = new Date();
-      cursor.setHours(0, 0, 0, 0);
-      for (const d of uniqueDates) {
-        const sd = new Date(d);
-        sd.setHours(0, 0, 0, 0);
-        const diff = Math.round((cursor - sd) / 86400000);
-        if (diff === 0 || diff === 1) { count++; cursor = sd; }
-        else break;
-      }
-      setStreak(count);
+    // Merge both sources into a set of unique active days (as midnight timestamps),
+    // then walk back from today counting consecutive days.
+    const activeDayTimes = [...new Set([
+      ...(sessions || []).map(s => s.date),
+      ...(foodDays || []).map(f => f.date),
+    ])]
+      .map(d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); })
+      .filter(t => !Number.isNaN(t))
+      .sort((a, b) => b - a);
+
+    let count = 0;
+    let cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    let cursorTime = cursor.getTime();
+    for (const t of activeDayTimes) {
+      const diff = Math.round((cursorTime - t) / 86400000);
+      if (diff === 0 || diff === 1) { count++; cursorTime = t; }
+      else break;
     }
+    setStreak(count);
 
     // Workouts this week (Monday–Sunday)
     const now = new Date();
