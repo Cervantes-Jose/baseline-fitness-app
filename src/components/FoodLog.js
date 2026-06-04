@@ -13,6 +13,7 @@
 // create policy "Allow all for now" on public.favorite_foods for all using (true) with check (true);
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import Nutrition from './Nutrition';
 
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
@@ -1400,7 +1401,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <button key={tab}
               className={isActive ? '' : 'fl-tab-inactive'}
               onClick={() => {
-                if (tab === 'Add Food' || tab === 'Favorites' || tab === 'Custom Foods') setActiveFilter(tab);
+                if (tab === 'Add Food' || tab === 'Favorites' || tab === 'Custom Foods' || tab === 'Nutrition') setActiveFilter(tab);
                 else showToast('Coming soon', null, null);
               }} style={{
                 flexShrink: 0, padding: '7px 16px', borderRadius: 20,
@@ -1473,6 +1474,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             )
           ))}
         </div>
+      ) : activeFilter === 'Nutrition' ? (
+        <Nutrition selectedDate={date} />
       ) : loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Loading...</p>
       ) : (
