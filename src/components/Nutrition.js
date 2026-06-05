@@ -341,7 +341,7 @@ function Nutrition({ selectedDate }) {
                         {r.name || r.food?.name || 'Food'}
                       </span>
                       <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {fmtNum(amt)} {selectedNutrient.unit}
+                        {fmtNum(amt)}<span style={{ fontSize: '0.78em', fontWeight: '600', marginLeft: '2px' }}>{selectedNutrient.unit}</span>
                       </span>
                     </div>
                   );
@@ -407,7 +407,7 @@ function Nutrition({ selectedDate }) {
           ) : (
             <>
               <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1.1, marginTop: '12px' }}>
-                {fmtNum(latestEntry.value)} {unit}
+                {fmtNum(latestEntry.value)}<span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
               {rangeEntries.length > 0
@@ -431,7 +431,7 @@ function Nutrition({ selectedDate }) {
                 }}>
                   <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>{fmtLongDate(entry.date)}</span>
                   <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                    {fmtNum(entry.value)} {unit}
+                    {fmtNum(entry.value)}<span style={{ fontSize: '0.75em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
                   </span>
                 </div>
               ))}
@@ -475,7 +475,7 @@ function Nutrition({ selectedDate }) {
           {hasData && last && (
             <div style={{ textAlign: 'right', flexShrink: 0, cursor: 'pointer' }} onClick={open}>
               <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
-                {fmtNum(last.value)} {item.unit}
+                {fmtNum(last.value)}<span style={{ fontSize: '0.72em', fontWeight: '600', marginLeft: '2px' }}>{item.unit}</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                 {fmtListDate(last.date)}

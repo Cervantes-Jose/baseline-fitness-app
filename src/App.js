@@ -30,7 +30,7 @@ function getHeaderTitle(activeTab) {
 
 // ─── SCREENS ────────────────────────────────────────────────
 
-function Profile({ onOpenSettings, onOpenGoals }) {
+function Profile({ onOpenSettings, onOpenGoals, onOpenEditDashboard }) {
   return (
     <div className="content">
       <div className="card">
@@ -41,6 +41,16 @@ function Profile({ onOpenSettings, onOpenGoals }) {
           borderTop: '1px solid var(--border)', cursor: 'pointer', marginTop: '8px',
         }}>
           <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Goals</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button onClick={onOpenEditDashboard} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '14px 0', background: 'none', border: 'none',
+          borderTop: '1px solid var(--border)', cursor: 'pointer',
+        }}>
+          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Edit Dashboard</span>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
@@ -298,6 +308,7 @@ const changeDate = (dir) => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
+      case 'dashboard-edit': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} /></div>;
       case 'profile-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'workout-start':
@@ -324,7 +335,7 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} />;
+      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
@@ -332,8 +343,8 @@ const changeDate = (dir) => {
 
   return (
     <div className="app">
-      {/* Header — hidden on dashboard (Dashboard renders its own) */}
-      {activeTab !== 'dashboard' && (
+      {/* Header — hidden on dashboard + its edit screen (Dashboard renders its own) */}
+      {activeTab !== 'dashboard' && activeTab !== 'dashboard-edit' && (
         <div className="header">
           <span className="header-title">{getHeaderTitle(activeTab)}</span>
         </div>
@@ -421,7 +432,7 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'settings')) ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'settings' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>

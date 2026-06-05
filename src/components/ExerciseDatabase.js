@@ -2,6 +2,7 @@
 // create table custom_exercises (id uuid default uuid_generate_v4() primary key, name text, category text, created_at timestamp default now());
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 
 export const EXERCISE_DATABASE = {
@@ -19,7 +20,25 @@ export const EXERCISE_DATABASE = {
 
 export const CATEGORIES = Object.keys(EXERCISE_DATABASE);
 
-function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onDelete }) {
+function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onRename, onDelete }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const btnRef = useRef(null);
+
+  // Anchor the popover to the three-dots button using its viewport rect. A portal
+  // to document.body avoids the category section's overflow:hidden / transform clipping.
+  const openMenu = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    setMenuOpen(true);
+  };
+
+  const menuItemStyle = {
+    display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+    padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer',
+    textAlign: 'left', fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)',
+  };
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', padding: '12px 14px', borderRadius: '12px', background: 'var(--bg)' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -33,13 +52,15 @@ function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onDelete }) {
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '1px' }}>{categoryLabel}</div>
         )}
       </div>
-      {onDelete && (
+      {(onRename || onDelete) && (
         <button
-          onClick={onDelete}
-          style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'none', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: '8px', color: '#EF4444' }}
+          ref={btnRef}
+          onClick={openMenu}
+          aria-label="Exercise options"
+          style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'none', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: '8px', color: 'var(--text-muted)' }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
           </svg>
         </button>
       )}
@@ -51,6 +72,31 @@ function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onDelete }) {
           <path d="M8 3v10M3 8h10" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round"/>
         </svg>
       </button>
+      {menuOpen && createPortal(
+        <>
+          <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 600 }} />
+          <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 601, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 6px 24px rgba(0,0,0,0.18)', overflow: 'hidden', minWidth: '150px' }}>
+            {onRename && (
+              <button onClick={() => { setMenuOpen(false); onRename(); }} style={menuItemStyle}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--accent)' }}>
+                  <path d="M4 20h4L18.5 9.5a2.121 2.121 0 00-3-3L5 17v3z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Rename
+              </button>
+            )}
+            {onRename && onDelete && <div style={{ height: '1px', background: 'var(--border)' }} />}
+            {onDelete && (
+              <button onClick={() => { setMenuOpen(false); onDelete(); }} style={{ ...menuItemStyle, color: '#EF4444' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Delete
+              </button>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
     </div>
   );
 }
@@ -119,6 +165,12 @@ function ExerciseDatabase() {
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [successMsg, setSuccessMsg] = useState('');
+  // Custom-exercise actions: the rename modal target (+ its draft) and the
+  // delete-confirmation target (with the routines it's in). The three-dots menu
+  // itself is local to each ExerciseRow.
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const searchInputRef = useRef(null);
 
   useEffect(() => {
@@ -189,8 +241,47 @@ function ExerciseDatabase() {
     }
   };
 
+  // Rename a custom exercise everywhere it appears: the library entry, every
+  // routine that uses it (exercises.name), and past sessions (session_exercises.exercise_name).
+  const renameCustom = async () => {
+    const newName = renameValue.trim();
+    if (!renameTarget) return;
+    if (!newName || newName === renameTarget.name) { setRenameTarget(null); setRenameValue(''); return; }
+    const oldName = renameTarget.name;
+    const { error } = await supabase.from('custom_exercises').update({ name: newName }).eq('id', renameTarget.id);
+    if (error) { console.error('renameCustom error:', error); return; }
+    await supabase.from('exercises').update({ name: newName }).eq('name', oldName);
+    await supabase.from('session_exercises').update({ exercise_name: newName }).eq('exercise_name', oldName);
+    setCustomExercises(prev => prev.map(e => e.id === renameTarget.id ? { ...e, name: newName } : e));
+    setRenameTarget(null);
+    setRenameValue('');
+    showSuccess('Exercise renamed');
+  };
+
+  // Delete a custom exercise: if it's used in any routine, warn first (naming the
+  // routines); otherwise delete straight away. On confirm, also remove it from those routines.
+  const requestDelete = async (customEx) => {
+    const { data } = await supabase.from('exercises').select('routine_id').eq('name', customEx.name);
+    const routineIds = [...new Set((data || []).map(r => r.routine_id))];
+    const routineNames = routineIds.map(id => routines.find(r => r.id === id)?.name).filter(Boolean);
+    if (routineNames.length > 0) {
+      setDeleteTarget({ customEx, routineNames });
+    } else {
+      await deleteCustom(customEx.id);
+      showSuccess('Exercise deleted');
+    }
+  };
+
+  const confirmDeleteCascade = async () => {
+    if (!deleteTarget) return;
+    const { customEx } = deleteTarget;
+    await supabase.from('exercises').delete().eq('name', customEx.name);
+    await deleteCustom(customEx.id);
+    setDeleteTarget(null);
+    showSuccess('Exercise deleted');
+  };
+
   const createCustom = async () => {
-    console.log('createCustom called', { newName, newCategory });
     if (!newName.trim()) return;
     const { data, error } = await supabase
       .from('custom_exercises')
@@ -294,7 +385,8 @@ function ExerciseDatabase() {
                     isCustom={custom}
                     categoryLabel={category}
                     onAdd={() => setAddTarget({ name, category })}
-                    onDelete={customEx ? () => deleteCustom(customEx.id) : undefined}
+                    onRename={customEx ? () => { setRenameValue(customEx.name); setRenameTarget(customEx); } : undefined}
+                    onDelete={customEx ? () => requestDelete(customEx) : undefined}
                   />
                 );
               })
@@ -322,7 +414,8 @@ function ExerciseDatabase() {
                       name={name}
                       isCustom={!!customEx}
                       onAdd={() => setAddTarget({ name, category: cat })}
-                      onDelete={customEx ? () => deleteCustom(customEx.id) : undefined}
+                      onRename={customEx ? () => { setRenameValue(customEx.name); setRenameTarget(customEx); } : undefined}
+                      onDelete={customEx ? () => requestDelete(customEx) : undefined}
                     />
                   );
                 })}
@@ -396,6 +489,62 @@ function ExerciseDatabase() {
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowCreateModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
               <button onClick={createCustom} className="btn-primary" style={{ flex: 1 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename custom exercise modal */}
+      {renameTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+          onClick={() => { setRenameTarget(null); setRenameValue(''); }}
+        >
+          <div
+            style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p style={{ fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)', marginBottom: '16px' }}>Rename Exercise</p>
+            <input
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              placeholder="Exercise name"
+              className="input"
+              style={{ marginBottom: '20px' }}
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && renameCustom()}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setRenameTarget(null); setRenameValue(''); }} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={renameCustom} className="btn-primary" style={{ flex: 1 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete warning — custom exercise is used in one or more routines */}
+      {deleteTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+          onClick={() => setDeleteTarget(null)}
+        >
+          <div
+            style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '320px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p style={{ fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)', marginBottom: '12px' }}>Delete "{deleteTarget.customEx.name}"?</p>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '8px' }}>
+              This exercise is used in {deleteTarget.routineNames.length === 1 ? 'the routine' : 'these routines'}:
+            </p>
+            <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: '12px' }}>
+              {deleteTarget.routineNames.join(', ')}
+            </p>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '20px' }}>
+              Deleting it will also remove it from {deleteTarget.routineNames.length === 1 ? 'that routine' : 'those routines'}.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setDeleteTarget(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={confirmDeleteCascade} style={{ flex: 1, padding: '12px', background: '#EF4444', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>

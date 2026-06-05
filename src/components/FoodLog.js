@@ -14,6 +14,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import Nutrition from './Nutrition';
+import MealBuilder from './MealBuilder';
+import {
+  UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
+  defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
+  buildMealComponent, sumMealComponents, mealAsFood,
+} from './foodMath';
 
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
@@ -157,116 +163,8 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
 }
 
 // ─── SERVING / MACRO HELPERS ─────────────────────────────────
-// Macros on every food object are stored per "base" grams: USDA search results
-// use food.servingSize; recent/custom foods have no servingSize so default to 100g.
-const UNIT_TO_GRAMS = { g: 1, oz: 28.35, ml: 1, cup: 240, tbsp: 15 };
-const SERVING_UNITS = ['g', 'oz', 'ml', 'cup', 'tbsp', 'serving'];
-
-const baseGramsOf = (food) => (Number(food?.servingSize) > 0 ? Number(food.servingSize) : 100);
-
-const servingToGrams = (amount, unit, baseGrams) => {
-  const a = Number(amount) || 0;
-  if (unit === 'serving') return a * baseGrams;   // 1 serving = the food's base serving size
-  return a * (UNIT_TO_GRAMS[unit] ?? 1);
-};
-
-const scaleOf = (food, serving, unit) => {
-  const base = baseGramsOf(food);
-  return base > 0 ? servingToGrams(serving, unit, base) / base : 1;
-};
-
-const computeMacros = (food, serving, unit, servings = 1) => {
-  const s = scaleOf(food, serving, unit) * (Number(servings) || 0);
-  return {
-    calories: Math.round((Number(food?.calories) || 0) * s),
-    protein: Math.round((Number(food?.protein) || 0) * s),
-    carbs: Math.round((Number(food?.carbs) || 0) * s),
-    fats: Math.round((Number(food?.fats) || 0) * s),
-  };
-};
-
-// A food's preferred serving (set via the detail screen); falls back to the USDA
-// serving size, else 100g.
-const defaultServingOf = (food) => ({
-  serving: food?.savedServing != null ? food.savedServing
-    : (Number(food?.servingSize) > 0 ? Number(food.servingSize) : 100),
-  unit: food?.savedUnit || food?.servingSizeUnit || 'g',
-});
-
-// Micronutrients: tolerant parse of common USDA foodNutrients shapes. Values are
-// per base serving, so we scale them by the current serving scale. May need
-// tuning to match the food-search edge function's exact output shape.
-const MACRO_NAME_RE = /protein|carbohydrate|total lipid|\bfat\b|fatty|energy|calorie/i;
-const DV_REFERENCE = {
-  Fiber: 28, Sugars: 50, Sodium: 2300, Cholesterol: 300, Potassium: 4700,
-  Calcium: 1300, Iron: 18, 'Vitamin C': 90, 'Vitamin D': 20, 'Vitamin A': 900,
-};
-// Editable micronutrient rows for custom foods. Keys match DV_REFERENCE so %DV could
-// be derived later; values stored as a `micros` jsonb object on the custom_foods row.
-const CUSTOM_MICRO_FIELDS = [
-  { key: 'Fiber', label: 'Fiber', unit: 'g' },
-  { key: 'Sugars', label: 'Sugar', unit: 'g' },
-  { key: 'Sodium', label: 'Sodium', unit: 'mg' },
-  { key: 'Cholesterol', label: 'Cholesterol', unit: 'mg' },
-  { key: 'Potassium', label: 'Potassium', unit: 'mg' },
-  { key: 'Calcium', label: 'Calcium', unit: 'mg' },
-  { key: 'Iron', label: 'Iron', unit: 'mg' },
-  { key: 'Vitamin A', label: 'Vitamin A', unit: 'mcg' },
-  { key: 'Vitamin C', label: 'Vitamin C', unit: 'mg' },
-  { key: 'Vitamin D', label: 'Vitamin D', unit: 'mcg' },
-];
-
-const cleanNutrientName = (name) => String(name).split(',')[0].trim();
-const parseMicros = (food, scale) => {
-  const arr = food?.foodNutrients || food?.nutrients || [];
-  if (!Array.isArray(arr)) return [];
-  return arr
-    .map(n => ({
-      name: cleanNutrientName(n.nutrientName || n.name || n.nutrient?.name || ''),
-      raw: n.value ?? n.amount ?? n.nutrient?.amount,
-      unit: String(n.unitName || n.unit || n.nutrient?.unitName || '').toLowerCase(),
-    }))
-    .filter(n => n.name && n.raw != null && !MACRO_NAME_RE.test(n.name))
-    .map(n => {
-      const value = Number(n.raw) * scale;
-      const ref = DV_REFERENCE[n.name];
-      return {
-        name: n.name,
-        value: Math.round(value * 10) / 10,
-        unit: n.unit,
-        dv: ref ? Math.round((value / ref) * 100) : null,
-      };
-    });
-};
-
-// Build the serving/unit/snapshot stored on a logged food_entries row so it can be
-// reopened in the detail screen and re-scaled. Normalized to grams so custom + USDA foods
-// behave uniformly: snapshot.servingSize === stored serving ⇒ scaleOf === 1 ⇒ the stored
-// (already-adjusted) macros reproduce exactly, and changing the serving scales them.
-const buildLoggedFields = (food, serving, unit, servings, macros) => {
-  const count = Number(servings) || 0;
-  const grams = Math.round(servingToGrams(serving, unit, baseGramsOf(food)) * count) || 0;
-  let nutrients;
-  if (food.isCustom && food.micros) {
-    nutrients = CUSTOM_MICRO_FIELDS
-      .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * count * 10) / 10, unit: m.unit }))
-      .filter(n => n.value > 0);
-  } else {
-    nutrients = parseMicros(food, scaleOf(food, serving, unit) * count).map(n => ({ name: n.name, value: n.value, unit: n.unit }));
-  }
-  const snapshot = {
-    name: food.name,
-    brandOwner: food.brandOwner || null,
-    calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats,
-    servingSize: grams || 1,
-    servingSizeUnit: 'g',
-    nutrients,
-  };
-  return { serving: grams, unit: 'g', food: snapshot };
-};
-
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in the detail view
@@ -500,7 +398,7 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
         )
       ) : (
         <div style={{ padding: '12px 20px 32px', borderTop: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
-          <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>{editable ? 'Save Food' : 'Add Food'}</button>
+          <button onClick={onAdd} className="btn-primary" style={{ width: '100%' }}>{editable ? 'Save Food' : (addLabel || 'Add Food')}</button>
         </div>
       )}
     </div>
@@ -530,6 +428,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // Favorited foods (snapshot of each food, keyed by name). Persisted in favorite_foods.
   const [favorites, setFavorites] = useState([]);
+
+  // Saved meals (groups of foods logged as one entry, per serving). Persisted in `meals`.
+  const [meals, setMeals] = useState([]);
+  // The meal being built/edited (null = builder closed). Controlled so foods picked
+  // from the Add Food sheet append into its components while the builder stays mounted.
+  // Shape: { id|null, name, components:[...], servings: string }
+  const [mealDraft, setMealDraft] = useState(null);
+  // True while the Add Food sheet is picking a food *for the meal builder* (vs. logging).
+  const [addFoodMealMode, setAddFoodMealMode] = useState(false);
 
   // Barcode scanner (ZXing camera) + Open Food Facts lookup.
   const [showScanner, setShowScanner] = useState(false);
@@ -590,7 +497,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => { loadFoods(); }, [date]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFavorites(); loadCustomFoods(); }, []);
+  useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); }, []);
 
   // Leave the Custom Foods quick-edit mode when navigating away from that tab.
   useEffect(() => {
@@ -682,6 +589,86 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       .select('*')
       .order('created_at', { ascending: false });
     if (data) setFavorites(data.map(r => ({ id: r.id, name: r.name, isCustom: r.is_custom, food: r.food })));
+  };
+
+  // ─── Meals ─────────────────────────────────────────────────
+  const loadMeals = async () => {
+    const { data } = await supabase
+      .from('meals')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data) setMeals(data.map(m => ({
+      ...m,
+      components: Array.isArray(m.components) ? m.components : (typeof m.components === 'string' ? JSON.parse(m.components) : []),
+      micros: Array.isArray(m.micros) ? m.micros : (typeof m.micros === 'string' ? JSON.parse(m.micros) : []),
+    })));
+  };
+
+  const openMealBuilder = (meal = null) => {
+    setAddFoodMealMode(false);
+    setMealDraft(meal
+      ? { id: meal.id, name: meal.name, components: meal.components || [], servings: String(meal.servings || 1) }
+      : { id: null, name: '', components: [], servings: '1' });
+  };
+  const closeMealBuilder = () => { setMealDraft(null); setAddFoodMealMode(false); };
+
+  // From the builder's "Add Food": open the Add Food sheet in meal mode (picking a
+  // food appends it to the meal instead of logging it). The builder stays mounted below.
+  const openMealFoodPicker = () => {
+    setAddFoodMealMode(true);
+    setSearchQuery('');
+    setDetailFood(null);
+    setCustomEdit(null);
+    setCustomEditing(false);
+    setAddFoodTab('recent');
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+  };
+
+  // Append the food currently open in the detail screen to the meal in progress.
+  const addDetailToMeal = () => {
+    const food = detailFood;
+    if (!food) return;
+    const component = buildMealComponent(food, Number(detailServing) || 0, detailUnit, Number(detailServings) || 1);
+    setMealDraft(prev => prev ? { ...prev, components: [...prev.components, component] } : prev);
+    setDetailFood(null);
+    setCustomEdit(null);
+    setCustomEditing(false);
+    closeAddFood();   // slide the picker away, revealing the builder
+  };
+
+  const saveMeal = async () => {
+    if (!mealDraft) return;
+    const t = sumMealComponents(mealDraft.components);
+    const servings = Number(mealDraft.servings) > 0 ? Number(mealDraft.servings) : 1;
+    const payload = {
+      name: mealDraft.name.trim(), components: mealDraft.components,
+      total_grams: t.grams, servings,
+      calories: t.calories, protein: t.protein, carbs: t.carbs, fats: t.fats,
+      micros: t.micros,
+    };
+    const { error } = mealDraft.id
+      ? await supabase.from('meals').update(payload).eq('id', mealDraft.id)
+      : await supabase.from('meals').insert([payload]);
+    if (error) { console.error('Failed to save meal:', error); return; }
+    await loadMeals();
+    closeMealBuilder();
+    showToast(mealDraft.id ? 'Meal updated' : 'Meal saved', null, null);
+  };
+
+  const deleteMeal = async (meal) => {
+    setMeals(prev => prev.filter(m => m.id !== meal.id));
+    closeMealBuilder();
+    const { error } = await supabase.from('meals').delete().eq('id', meal.id);
+    if (error) { console.error('Failed to delete meal:', error); loadMeals(); }
+  };
+
+  // Log a saved meal: open the Add Food sheet straight into its detail at one serving.
+  const openMealDetail = (meal) => {
+    setAddFoodHour(currentHour);
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+    openDetail(mealAsFood(meal));
   };
 
   const isFavorite = (name) => favorites.some(f => f.name === name);
@@ -1015,6 +1002,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     stopScanner();                   // ensure camera is released if the sheet closes
     setAddFoodOpen(false);           // slide down
     setAddFoodDragY(0);
+    setAddFoodMealMode(false);       // leave meal-pick mode if it was on
     setTimeout(() => {               // unmount + reset after the slide-out finishes
       setShowAddFoodScreen(false);
       setSearchQuery('');
@@ -1159,6 +1147,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const unit = detailUnit;
     const servings = Number(detailServings) || 0;
     const macros = computeMacros(food, serving, unit, servings);
+    // A saved meal logs as one entry — don't write it into recents/savedServing.
+    if (food.isMeal) {
+      setCheckedFoods(prev => ({ ...prev, [food.name]: { food, serving, unit, servings, adjustedMacros: macros } }));
+      setDetailFood(null);
+      return;
+    }
     // We store savedServing/savedUnit rather than overwriting servingSize/servingSizeUnit
     // so the per-serving macro basis used for scaling stays intact. Custom foods persist
     // these to the row (remembered across sessions). Recent/USDA foods only remember the
@@ -1242,6 +1236,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         display: 'flex', alignItems: 'center', gap: '12px',
         padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
       }}>
+        {!addFoodMealMode && (
         <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
           <div style={{
@@ -1253,6 +1248,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             {checked && <span style={{ color: 'white', fontSize: '12px', lineHeight: 1 }}>✓</span>}
           </div>
         </button>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{food.name}</span>
@@ -1279,7 +1275,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         display: 'flex', alignItems: 'center', gap: '12px',
         padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
       }}>
-        {showCheckbox && (
+        {showCheckbox && !addFoodMealMode && (
           <button onClick={(e) => { e.stopPropagation(); toggleChecked(food); }}
             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{
@@ -1337,6 +1333,56 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const emptyState = (text) => (
     <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '40px 20px' }}>{text}</p>
   );
+
+  // Meal row, log style (Favorites + Meals pill in the Add Food sheet): per-serving
+  // macros under the name, "per serving" on the right. Tapping logs it at one serving.
+  const renderMealLogRow = (meal) => {
+    const s = Number(meal.servings) > 0 ? Number(meal.servings) : 1;
+    const per = (v) => Math.round((Number(v) || 0) / s);
+    return (
+      <div key={'mealrow-' + meal.id} onClick={() => openMealDetail(meal)} style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{meal.name}</span>
+            <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Meal</span>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            {per(meal.calories)} cal · {per(meal.protein)}g P · {per(meal.carbs)}g C · {per(meal.fats)}g F
+          </div>
+        </div>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>per serving</span>
+      </div>
+    );
+  };
+
+  // Meal row, manage style (Meals tab): total weight · serving size · servings.
+  // Tapping opens the builder to edit it.
+  const renderMealManageRow = (meal) => {
+    const s = Number(meal.servings) > 0 ? Number(meal.servings) : 1;
+    const perServingGrams = Math.round((Number(meal.total_grams) || 0) / s);
+    return (
+      <div key={'mealmanage-' + meal.id} onClick={() => openMealBuilder(meal)} style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{meal.name}</span>
+            <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Meal</span>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            {meal.total_grams}g total · {perServingGrams}g/serving · {s} serving{s !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    );
+  };
 
   // Break out of the .content wrapper's 20px padding
   return (
@@ -1401,7 +1447,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             <button key={tab}
               className={isActive ? '' : 'fl-tab-inactive'}
               onClick={() => {
-                if (tab === 'Add Food' || tab === 'Favorites' || tab === 'Custom Foods' || tab === 'Nutrition') setActiveFilter(tab);
+                if (tab === 'Add Food' || tab === 'Favorites' || tab === 'Custom Foods' || tab === 'Nutrition' || tab === 'Meals') setActiveFilter(tab);
                 else showToast('Coming soon', null, null);
               }} style={{
                 flexShrink: 0, padding: '7px 16px', borderRadius: 20,
@@ -1418,9 +1464,25 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       {/* ─── FAVORITES LIST ─────────────────────────────────── */}
       {activeFilter === 'Favorites' ? (
         <div style={{ padding: '8px 20px 40px' }}>
-          {favorites.length === 0
+          {favorites.length === 0 && meals.length === 0
             ? emptyState('No favorites yet. Tap a food and choose “Add to Favorites” to see it here.')
-            : favorites.map(renderFavoriteRow)}
+            : <>
+                {meals.map(renderMealLogRow)}
+                {favorites.map(renderFavoriteRow)}
+              </>}
+        </div>
+      ) : activeFilter === 'Meals' ? (
+        /* ─── MEALS LIST ─────────────────────────────────────── */
+        <div style={{ padding: '8px 20px 40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <button onClick={() => openMealBuilder(null)}
+              style={{ background: 'var(--accent)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              + Add Meal
+            </button>
+          </div>
+          {meals.length === 0
+            ? emptyState('No meals yet. Tap “+ Add Meal” to build one from your foods.')
+            : meals.map(renderMealManageRow)}
         </div>
       ) : activeFilter === 'Custom Foods' ? (
         /* ─── CUSTOM FOODS LIST ──────────────────────────────── */
@@ -1647,7 +1709,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               entryMode={!!editingEntry}
               entryDirty={!!editingEntry && (detailServing !== editingEntry.origServing || detailUnit !== editingEntry.origUnit || detailServings !== editingEntry.origServings)}
               onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); setEditingEntry(null); }}
-              onAdd={editingEntry ? saveLoggedEntry : (customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail))}
+              addLabel={addFoodMealMode ? 'Add to Meal' : undefined}
+              onAdd={(addFoodMealMode && !customEditing) ? addDetailToMeal : (editingEntry ? saveLoggedEntry : (customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail)))}
             />
           ) : (
           <>
@@ -1758,19 +1821,27 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   : displayedFoods.map(food => renderFoodRow(food, true))}
               </>
             ) : addFoodTab === 'favorites' ? (
-              favorites.length === 0
+              (favorites.length === 0 && (addFoodMealMode || meals.length === 0))
                 ? emptyState('No favorites yet. Open a food and choose “Add to Favorites”.')
-                : favorites.map(renderFavoriteRow)
+                : <>
+                    {!addFoodMealMode && meals.map(renderMealLogRow)}
+                    {favorites.map(renderFavoriteRow)}
+                  </>
             ) : addFoodTab === 'custom' ? (
               customFoods.length === 0
                 ? emptyState('No custom foods yet. Tap “+ Add Custom Food” above.')
                 : customFoods.map(renderCustomRow)
             ) : (
-              emptyState('Meals coming soon — save groups of foods to log them together.')
+              /* Meals pill */
+              addFoodMealMode
+                ? emptyState('A meal can’t be added inside another meal.')
+                : meals.length === 0
+                  ? emptyState('No meals yet. Open the Meals tab to build one.')
+                  : meals.map(renderMealLogRow)
             )}
           </div>
 
-          {checkedCount > 0 && (
+          {checkedCount > 0 && !addFoodMealMode && (
             <div style={{
               padding: '12px 20px 32px', borderTop: '1px solid var(--border)',
               background: 'var(--bg)', animation: 'slideUpBar 0.2s ease forwards',
@@ -1783,6 +1854,18 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           </>
           )}
         </div>
+      )}
+
+      {/* Meal builder — full-screen page below the Add Food sheet (so meal-mode picking layers on top) */}
+      {mealDraft && (
+        <MealBuilder
+          draft={mealDraft}
+          onChange={setMealDraft}
+          onAddFood={openMealFoodPicker}
+          onSave={saveMeal}
+          onClose={closeMealBuilder}
+          onDelete={mealDraft.id ? () => deleteMeal(mealDraft) : null}
+        />
       )}
 
       {/* Barcode camera scanner — full-screen, above the Add Food sheet */}

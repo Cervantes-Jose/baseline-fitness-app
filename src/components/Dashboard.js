@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
@@ -218,13 +221,61 @@ function MacroRow({ label, consumed, goal, color, iconColor }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────
-function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal }) {
+// Dashboard widgets, in their default order. The user's custom order + hidden set
+// live in localStorage ('dashboardLayout'); unknown/new ids fall back to this order.
+const WIDGET_IDS = ['glance', 'calories', 'protein', 'weight', 'bodyfat', 'macros'];
+
+function loadDashboardLayout() {
+  try {
+    const s = JSON.parse(localStorage.getItem('dashboardLayout'));
+    if (s && Array.isArray(s.order)) return { order: s.order, hidden: Array.isArray(s.hidden) ? s.hidden : [] };
+  } catch {}
+  return { order: WIDGET_IDS, hidden: [] };
+}
+
+// One draggable/selectable widget in edit mode. A quick tap selects (the sensor's
+// hold-delay means a short press is a click); holding then dragging reorders it.
+function SortableWidget({ id, selected, onSelect, width = '100%', children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners}
+      onClick={() => onSelect(selected ? null : id)}
+      style={{
+        width, boxSizing: 'border-box',
+        transform: CSS.Transform.toString(transform), transition,
+        position: 'relative', zIndex: isDragging ? 20 : 1,
+        cursor: 'grab', touchAction: 'none', userSelect: 'none',
+        opacity: isDragging ? 0.95 : 1,
+      }}>
+      <div style={{
+        borderRadius: 16,
+        background: selected ? 'var(--accent-light)' : 'transparent',
+        boxShadow: selected ? 'inset 0 0 0 2px var(--accent)' : 'none',
+        transition: 'background 0.15s, box-shadow 0.15s',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMode = false, onExitEdit = () => {} }) {
   const [calories, setCalories] = useState(0);
   const [protein, setProtein] = useState(0);
   const [carbs, setCarbs] = useState(0);
   const [fats, setFats] = useState(0);
   const [streak, setStreak] = useState(0);
   const [weekWorkouts, setWeekWorkouts] = useState(0);
+
+  // Custom widget layout (order + hidden) — persisted to localStorage.
+  const [layout, setLayout] = useState(loadDashboardLayout);
+  const [selectedId, setSelectedId] = useState(null);
+  const saveLayout = (next) => { setLayout(next); try { localStorage.setItem('dashboardLayout', JSON.stringify(next)); } catch {} };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
+  );
 
   const today = new Date().toLocaleDateString();
 
@@ -346,9 +397,168 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal 
     },
   ];
 
+  // Effective order: saved order (known ids only) + any new widgets appended.
+  const order = [...layout.order.filter(id => WIDGET_IDS.includes(id)), ...WIDGET_IDS.filter(id => !layout.order.includes(id))];
+  const hidden = new Set(layout.hidden);
+  const visible = order.filter(id => !hidden.has(id));
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const newVisible = arrayMove(visible, visible.indexOf(active.id), visible.indexOf(over.id));
+    saveLayout({ order: [...newVisible, ...order.filter(id => hidden.has(id))], hidden: layout.hidden });
+  };
+  const deleteSelected = () => {
+    if (!selectedId) return;
+    saveLayout({ order, hidden: [...new Set([...layout.hidden, selectedId])] });
+    setSelectedId(null);
+  };
+
+  // Each widget keyed by id, as a bare card. Calories + Protein are "half" widgets
+  // that pair into the original two-column row; everything else is full-width.
+  const HALF = new Set(['calories', 'protein']);
+  const widgetMap = {
+    glance: (
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', padding: '0 20px', marginBottom: 4, marginTop: 8 }}>
+          Today at a glance
+        </div>
+        <div style={{ display: 'flex', overflowX: 'auto', paddingTop: 4, paddingBottom: 8, paddingLeft: 20, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {chips.map((chip, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 24, flexShrink: 0 }}>
+              {chip.icon}
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{chip.value}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginTop: 1 }}>{chip.label}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ minWidth: 20, flexShrink: 0 }} />
+        </div>
+      </div>
+    ),
+    calories: (
+      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)', height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Calories</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <CircleRing value={calories} goal={calorieGoal} size={110} strokeWidth={10} color="#3B82F6" trackColor="#DBEAFE">
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{calories}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>kcal</div>
+          </CircleRing>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{remaining}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Remaining</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{calorieGoal}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+          </div>
+        </div>
+      </div>
+    ),
+    protein: (
+      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)', height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Protein</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <CircleRing value={protein} goal={proteinGoal} size={110} strokeWidth={10} color="#22C55E" trackColor="#DCFCE7">
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{protein}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
+          </CircleRing>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{protein}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Consumed</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{proteinGoal}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+          </div>
+        </div>
+      </div>
+    ),
+    weight: <MeasurementSection title="Weight" measurementName="weight" color="#3B82F6" unit="lbs" />,
+    bodyfat: <MeasurementSection title="Body Fat" measurementName="body fat" color="#F97316" unit="%" />,
+    macros: (
+      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Today's Macro Progress</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <MacroRow label="Protein" consumed={protein} goal={proteinGoal} color="#22C55E" />
+          <MacroRow label="Fats" consumed={fats} goal={fatsGoal} color="#3B82F6" />
+          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
+        </div>
+      </div>
+    ),
+  };
+
+  if (editMode) {
+    return (
+      <div style={{ paddingBottom: 80 }}>
+        {/* Edit bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 4px' }}>
+          <button onClick={onExitEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>Done</button>
+          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Edit Dashboard</span>
+          <button onClick={deleteSelected} disabled={!selectedId}
+            style={{ background: 'none', border: 'none', color: '#EF4444', cursor: selectedId ? 'pointer' : 'default', fontSize: 15, fontWeight: 600, padding: 0, opacity: selectedId ? 1 : 0.4 }}>Delete</button>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 8px' }}>Tap a widget to select · hold and drag to move</p>
+        {visible.length === 0 ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>All widgets hidden.</p>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={visible} strategy={rectSortingStrategy}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', padding: '8px 16px', gap: 12, alignItems: 'flex-start' }}>
+                {visible.map(id => (
+                  <SortableWidget key={id} id={id} selected={selectedId === id} onSelect={setSelectedId}
+                    width={HALF.has(id) ? 'calc(50% - 6px)' : '100%'}>
+                    {widgetMap[id]}
+                  </SortableWidget>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
+    );
+  }
+
+  // Normal layout: walk widgets in order; consecutive "half" widgets pair into
+  // two-column rows, everything else renders full-width (glance is full-bleed).
+  const rows = [];
+  for (let i = 0; i < visible.length; i++) {
+    const id = visible[i];
+    if (HALF.has(id)) {
+      const group = [];
+      while (i < visible.length && HALF.has(visible[i])) { group.push(visible[i]); i++; }
+      i--;
+      for (let j = 0; j < group.length; j += 2) {
+        const pair = group.slice(j, j + 2);
+        rows.push(
+          <div key={'row-' + pair.join('-')} style={{ display: 'flex', gap: 12, padding: '8px 16px' }}>
+            {pair.map(pid => <div key={pid} style={{ flex: 1, minWidth: 0 }}>{widgetMap[pid]}</div>)}
+            {pair.length === 1 && <div style={{ flex: 1 }} />}
+          </div>
+        );
+      }
+    } else {
+      rows.push(
+        <React.Fragment key={id}>
+          {id === 'glance' ? widgetMap[id] : <div style={{ padding: '8px 16px' }}>{widgetMap[id]}</div>}
+        </React.Fragment>
+      );
+    }
+  }
+
   return (
     <div style={{ paddingBottom: 8 }}>
-      {/* Header */}
+      {/* Header / greeting */}
       <div style={{ padding: '20px 20px 8px' }}>
         <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
           {greeting}
@@ -357,98 +567,7 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal 
           Let's crush your goals today.
         </div>
       </div>
-
-      {/* At a Glance label */}
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', padding: '0 20px', marginBottom: 4, marginTop: 16 }}>
-        Today at a glance
-      </div>
-
-      {/* At a Glance chips */}
-      <div style={{ display: 'flex', overflowX: 'auto', paddingTop: 4, paddingBottom: 8, paddingLeft: 20, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-        {chips.map((chip, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center',
-            gap: 8, marginRight: 24, flexShrink: 0,
-          }}>
-            {chip.icon}
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{chip.value}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginTop: 1 }}>{chip.label}</div>
-            </div>
-          </div>
-        ))}
-        <div style={{ minWidth: 20, flexShrink: 0 }} />
-      </div>
-
-      {/* Two Circle Tiles */}
-      <div style={{ display: 'flex', gap: 12, padding: '8px 16px' }}>
-        {/* Calories Tile */}
-        <div style={{ flex: 1, background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Calories</span>
-            <span style={{ fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <CircleRing value={calories} goal={calorieGoal} size={110} strokeWidth={10} color="#3B82F6" trackColor="#DBEAFE">
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{calories}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>kcal</div>
-            </CircleRing>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{remaining}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Remaining</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{calorieGoal}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Protein Tile */}
-        <div style={{ flex: 1, background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Protein</span>
-            <span style={{ fontSize: 16, color: 'var(--text-muted)', lineHeight: 1 }}>›</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <CircleRing value={protein} goal={proteinGoal} size={110} strokeWidth={10} color="#22C55E" trackColor="#DCFCE7">
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{protein}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
-            </CircleRing>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{protein}g</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Consumed</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{proteinGoal}g</div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Measurement Charts */}
-      <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <MeasurementSection title="Weight" measurementName="weight" color="#3B82F6" unit="lbs" />
-        <MeasurementSection title="Body Fat" measurementName="body fat" color="#F97316" unit="%" />
-      </div>
-
-      {/* Macro Progress */}
-      <div style={{ margin: '8px 16px 0', background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Today's Macro Progress</span>
-          <button style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Edit</button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <MacroRow label="Protein" consumed={protein} goal={proteinGoal} color="#22C55E" />
-          <MacroRow label="Fats" consumed={fats} goal={fatsGoal} color="#3B82F6" />
-          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
-        </div>
-      </div>
+      {rows}
     </div>
   );
 }

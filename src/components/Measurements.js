@@ -243,7 +243,6 @@ function MiniChart({ entries, color }) {
 function Measurements({ metricSystem = 'imperial' }) {
   const [view, setView] = useState('list');
   const [measurements, setMeasurements] = useState([]);
-  const [newName, setNewName] = useState('');
   const [activeMeasurement, setActiveMeasurement] = useState(null);
   const [newValue, setNewValue] = useState('');
   const [newUnit, setNewUnit] = useState('');
@@ -252,7 +251,6 @@ function Measurements({ metricSystem = 'imperial' }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [defaultIds, setDefaultIds] = useState(() => new Set(JSON.parse(localStorage.getItem('defaultMeasurementIds') || '[]')));
   const [menuOpen, setMenuOpen] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
@@ -336,18 +334,30 @@ function Measurements({ metricSystem = 'imperial' }) {
     setLoading(false);
   };
 
-  const addMeasurement = async () => {
-    if (!newName.trim()) return;
+  // "+ Add Measurement": create a blank measurement and drop straight into its
+  // detail page (like adding a custom food) — name it inline + log the first entry there.
+  const createAndOpenMeasurement = async () => {
     const { data, error } = await supabase
       .from('measurements')
-      .insert([{ name: newName.trim() }])
+      .insert([{ name: '' }])
       .select()
       .single();
-
     if (error) { console.error(error); return; }
-    setMeasurements([...measurements, { ...data, entries: [] }]);
-    setNewName('');
-    setShowModal(false);
+    const m = { ...data, entries: [] };
+    setMeasurements(prev => [...prev, m]);
+    openMeasurement(m);
+  };
+
+  // Inline rename from the detail title.
+  const updateActiveName = (name) => {
+    setActiveMeasurement(prev => prev && { ...prev, name });
+    setMeasurements(prev => prev.map(m => (activeMeasurement && m.id === activeMeasurement.id ? { ...m, name } : m)));
+  };
+  const persistActiveName = async () => {
+    if (!activeMeasurement) return;
+    const name = (activeMeasurement.name || '').trim();
+    updateActiveName(name);
+    await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id);
   };
 
   const openMeasurement = (m) => {
@@ -432,38 +442,11 @@ function Measurements({ metricSystem = 'imperial' }) {
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Measurements</p>
-        <button onClick={() => setShowModal(true)} aria-label="New measurement"
+        <button onClick={createAndOpenMeasurement} aria-label="New measurement"
           style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           + Add Measurement
         </button>
       </div>
-
-      {showModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          zIndex: 300, padding: '16px',
-        }} onClick={() => { setShowModal(false); setNewName(''); }}>
-          <div className="card" style={{ width: '100%', maxWidth: '448px', padding: '24px' }}
-            onClick={e => e.stopPropagation()}>
-            <p className="section-title" style={{ marginBottom: '16px' }}>New Measurement</p>
-            <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addMeasurement()}
-              placeholder="e.g. Waist, Forearm, Calf"
-              className="input" style={{ width: '100%', marginBottom: '16px' }} />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => { setShowModal(false); setNewName(''); }}
-                style={{ flex: 1, padding: '14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '15px', fontWeight: '600', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                Cancel
-              </button>
-              <button onClick={addMeasurement}
-                style={{ flex: 1, padding: '14px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {renamingMeasurement && (
         <div style={{
@@ -554,7 +537,7 @@ function Measurements({ metricSystem = 'imperial' }) {
               {hasEntries && last && (
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
-                    {last.value}{last.unit ? ` ${last.unit}` : ''}
+                    {last.value}{last.unit ? <span style={{ fontSize: '0.72em', fontWeight: '600', marginLeft: '2px' }}>{last.unit}</span> : ''}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     {fmtListDate(last.date)}
@@ -594,12 +577,33 @@ function Measurements({ metricSystem = 'imperial' }) {
     const sinceMs = since.getTime();
     const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
 
-    // Compare latest vs earliest-in-range; if only one in range, fall back to the entry before it.
-    let compareEntry = null;
-    if (allEntries.length >= 2) {
-      compareEntry = rangeEntries.length >= 2 ? rangeEntries[0] : allEntries[allEntries.length - 2];
+    // Trend delta. Once there's a full two weeks of data we compare weekly averages:
+    // this week (last 7 days) vs last week (the 7 days before that), both anchored on
+    // today. Averaging smooths out daily water-weight noise into a clean per-week rate
+    // (e.g. "2 lbs down on average = 2 lbs/week"). Until both windows have entries we
+    // fall back to the latest-vs-earlier-entry comparison.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const todayMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    const week1Start = todayMs - 7 * dayMs;   // this week: [today-7, today]
+    const week2Start = todayMs - 14 * dayMs;  // last week: [today-14, today-7)
+    const thisWeek = allEntries.filter(e => parseEntryDate(e.date) >= week1Start);
+    const lastWeek = allEntries.filter(e => { const t = parseEntryDate(e.date); return t >= week2Start && t < week1Start; });
+    const avg = arr => arr.reduce((s, e) => s + Number(e.value), 0) / arr.length;
+
+    let diff = 0;
+    let showDelta = false;
+    let compareLabel = '';
+    if (thisWeek.length > 0 && lastWeek.length > 0) {
+      diff = avg(thisWeek) - avg(lastWeek);
+      showDelta = true;
+      compareLabel = 'vs last week avg';
+    } else if (allEntries.length >= 2) {
+      // Fallback: latest vs earliest-in-range, or the entry just before the latest.
+      const compareEntry = rangeEntries.length >= 2 ? rangeEntries[0] : allEntries[allEntries.length - 2];
+      diff = Number(latestEntry.value) - Number(compareEntry.value);
+      showDelta = true;
+      compareLabel = `vs ${fmtListDate(compareEntry.date)}`;
     }
-    const diff = compareEntry ? Number(latestEntry.value) - Number(compareEntry.value) : 0;
     const last7 = descEntries.slice(0, 7);
 
     const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
@@ -633,7 +637,7 @@ function Measurements({ metricSystem = 'imperial' }) {
           ) : (
             <>
               <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                {entry.value}{entry.unit ? ` ${entry.unit}` : ''}
+                {entry.value}{entry.unit ? <span style={{ fontSize: '0.75em', fontWeight: '600', marginLeft: '2px' }}>{entry.unit}</span> : ''}
               </span>
               <button onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -652,7 +656,15 @@ function Measurements({ metricSystem = 'imperial' }) {
           style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
           ← Back
         </button>
-        <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>{activeMeasurement.name}</h2>
+        <input
+          value={activeMeasurement.name}
+          placeholder="Measurement name"
+          autoFocus={!activeMeasurement.name}
+          onChange={e => updateActiveName(e.target.value)}
+          onBlur={persistActiveName}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          style={{ width: '100%', margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }}
+        />
 
         {/* TREND */}
         <div className="card-flat">
@@ -687,15 +699,15 @@ function Measurements({ metricSystem = 'imperial' }) {
           ) : (
             <>
               <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1.1, marginTop: '12px' }}>
-                {latestEntry.value}{latestEntry.unit ? ` ${latestEntry.unit}` : ''}
+                {latestEntry.value}{latestEntry.unit ? <span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
-              {compareEntry && (
+              {showDelta && (
                 <div style={{ marginTop: '10px' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(59,130,246,0.12)', color: BLUE, fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
-                    {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}{latestEntry.unit ? ` ${latestEntry.unit}` : ''}
+                    {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}{latestEntry.unit ? <span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
                   </span>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>vs {fmtListDate(compareEntry.date)}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
                 </div>
               )}
               {rangeEntries.length > 0
