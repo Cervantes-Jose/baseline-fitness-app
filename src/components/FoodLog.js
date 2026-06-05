@@ -481,6 +481,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const searchDebounceRef = useRef(null);
+  const searchAbortRef = useRef(null);
 
   const isToday = date.toDateString() === new Date().toDateString();
   const dateStr = date.toLocaleDateString();
@@ -829,17 +830,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const searchFoods = async (query) => {
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    searchAbortRef.current = new AbortController();
     setSearchLoading(true);
     setSearchError(null);
     try {
       const res = await fetch(
         `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
-        { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY } }
+        { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY }, signal: searchAbortRef.current.signal }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSearchResults(Array.isArray(data) ? data : (data.foods || []));
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Food search error:', err);
       setSearchError('Search unavailable');
       setSearchResults(null);

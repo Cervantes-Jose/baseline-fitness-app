@@ -24,7 +24,8 @@ serve(async (req) => {
     }
 
     const sanitized = query.trim().slice(0, 100);
-    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=25&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS),Branded";
+
+    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=40&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS),Branded";
 
     const response = await fetch(usdaUrl);
     const responseText = await response.text();
@@ -55,15 +56,22 @@ serve(async (req) => {
       .sort((a: any, b: any) => {
         const pa = dataTypePriority[a.dataType] ?? 4;
         const pb = dataTypePriority[b.dataType] ?? 4;
-        return pa - pb;
+        if (pa !== pb) return pa - pb;
+        const ql = sanitized.toLowerCase();
+        const al = (a.description ?? "").toLowerCase();
+        const bl = (b.description ?? "").toLowerCase();
+        if (al.startsWith(ql) && !bl.startsWith(ql)) return -1;
+        if (!al.startsWith(ql) && bl.startsWith(ql)) return 1;
+        return 0;
       })
       .map((f: any) => {
         const getNutrient = (name: string) => {
-          const n = f.foodNutrients?.find((n: any) =>
-            n.nutrientName?.toLowerCase().includes(name)
-          );
-          return n ? Math.round((n.value ?? 0) * 10) / 10 : 0;
-        };
+  const n = f.foodNutrients?.find((n: any) =>
+    n.nutrientName?.toLowerCase().includes(name) ||
+    n.name?.toLowerCase().includes(name)
+  );
+  return n ? Math.round((n.value ?? 0) * 10) / 10 : 0;
+};
 
         const rawName: string = f.description ?? "";
         const cleanedName = isAllCaps(rawName) ? toTitleCase(rawName) : rawName.trim();
@@ -78,9 +86,14 @@ serve(async (req) => {
           protein: getNutrient("protein"),
           carbs: getNutrient("carbohydrate"),
           fats: getNutrient("total lipid"),
+          nutrients: (f.foodNutrients ?? []).map((n: any) => ({
+            name: n.nutrientName ?? "",
+            value: Math.round((n.value ?? 0) * 10) / 10,
+            unit: n.unitName ?? "g",
+          })).filter((n: any) => n.name && n.value > 0),
         };
       })
-      .filter((f: any) => f.calories > 0);
+      .filter((f: any) => f.calories > 0 || f.protein > 0 || f.carbs > 0 || f.fats > 0);
 
     return new Response(
       JSON.stringify({ foods }),
