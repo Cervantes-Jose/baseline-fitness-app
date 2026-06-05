@@ -154,6 +154,21 @@ const [activeWorkout, setActiveWorkout] = useState(() => {
 });
 const [workoutSeconds, setWorkoutSeconds] = useState(() => Number(localStorage.getItem('workoutSeconds')) || 0);
 const [workoutExpanded, setWorkoutExpanded] = useState(false);
+// True only if a workout was already persisted at page load (a crash/reload mid-
+// workout), which triggers the "pick up where you left off?" recovery prompt.
+// A workout started later in this session never flips this back on.
+const [showWorkoutRecovery, setShowWorkoutRecovery] = useState(() => {
+  try { return !!JSON.parse(localStorage.getItem('activeWorkout')); } catch { return false; }
+});
+// The single rest timer that is currently counting down, lifted here so the
+// collapsed mini-bar keeps showing it even after the Workouts component unmounts
+// (switching tabs). { exId, slotIdx, endsAt, duration } | null. Timestamp-based
+// so the remaining time stays accurate regardless of who is rendering it.
+const [activeRest, setActiveRest] = useState(null);
+const [restRemaining, setRestRemaining] = useState(0);
+// One-shot signal pushed to Workouts when a rest finishes naturally, so it can
+// flip the slot to "Rest Completed". token changes each time to re-trigger.
+const [completedRest, setCompletedRest] = useState(null);
 const [workoutsResetKey, setWorkoutsResetKey] = useState(0);
 // True while the food timeline is in multi-select/edit mode — the select bar
 // replaces the main bottom tab bar during this time.
@@ -197,6 +212,35 @@ const changeDate = (dir) => {
     return () => clearInterval(interval);
   }, [activeWorkout]);
 
+  // Drive the active rest countdown. When it reaches zero, buzz the phone and
+  // push a completion signal so the logging card collapses to "Rest Completed".
+  useEffect(() => {
+    if (!activeRest) { setRestRemaining(0); return; }
+    const tick = () => {
+      const msLeft = activeRest.endsAt - Date.now();
+      if (msLeft <= 0) {
+        setRestRemaining(0);
+        if (navigator.vibrate) navigator.vibrate(400);
+        setCompletedRest({ exId: activeRest.exId, slotIdx: activeRest.slotIdx, groupId: activeRest.groupId, kind: activeRest.kind, token: Date.now() });
+        setActiveRest(null);
+        return;
+      }
+      setRestRemaining(Math.ceil(msLeft / 1000));
+    };
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [activeRest]);
+
+  // Start a fresh rest (replaces any running one). duration is in seconds.
+  // kind 'superset' rests carry a groupId so completion can advance the round.
+  const startRest = ({ exId, slotIdx, duration, groupId = null, kind = 'set' }) => {
+    setCompletedRest(null);
+    setActiveRest({ exId, slotIdx, duration, groupId, kind, endsAt: Date.now() + duration * 1000 });
+  };
+  // Stop the running rest without firing completion (used for Skip and uncheck).
+  const skipRest = () => setActiveRest(null);
+
   // Pause/resume the active workout. On pause we bank the elapsed seconds into
   // pausedAccum; on resume the clock restarts from resumedAt. This freezes the
   // displayed time while paused and survives a reload (activeWorkout is persisted).
@@ -233,9 +277,11 @@ const changeDate = (dir) => {
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
   useEffect(() => {
     if (activeWorkout) localStorage.setItem('activeWorkout', JSON.stringify(activeWorkout));
-    else localStorage.removeItem('activeWorkout');
+    else { localStorage.removeItem('activeWorkout'); localStorage.removeItem('activeWorkoutLog'); }
   }, [activeWorkout]);
   useEffect(() => { localStorage.setItem('workoutSeconds', workoutSeconds); }, [workoutSeconds]);
+  // A finished/discarded workout should never leave a rest ticking in the mini-bar.
+  useEffect(() => { if (!activeWorkout) { setActiveRest(null); setCompletedRest(null); } }, [activeWorkout]);
 
 
   const currentTabs = MAIN_TABS;
@@ -272,6 +318,11 @@ const changeDate = (dir) => {
           metricSystem={metricSystem}
           workoutPaused={activeWorkout?.paused || false}
           onTogglePause={togglePause}
+          activeRest={activeRest}
+          restRemaining={restRemaining}
+          completedRest={completedRest}
+          onStartRest={startRest}
+          onSkipRest={skipRest}
         />;
       case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} />;
       case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
@@ -311,11 +362,47 @@ const changeDate = (dir) => {
             width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,
             background: 'var(--card)', border: '1px solid var(--border)',
             borderRadius: '16px', padding: '12px 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            display: 'flex', flexDirection: 'column', gap: '8px',
             cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           }}>
-          <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>{activeWorkout.routineName}</span>
-          <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '15px', fontVariantNumeric: 'tabular-nums' }}>{formatTime(workoutSeconds)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>{activeWorkout.routineName}</span>
+            <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '15px', fontVariantNumeric: 'tabular-nums' }}>{formatTime(workoutSeconds)}</span>
+          </div>
+          {activeRest && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: '600', color: 'var(--text-muted)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rest</span>
+              <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '15px', fontVariantNumeric: 'tabular-nums' }}>{formatTime(restRemaining)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Active-workout recovery prompt — shown after a reload/crash mid-workout */}
+      {showWorkoutRecovery && activeWorkout && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '24px' }}>
+          <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '320px', maxWidth: '100%', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
+            <p style={{ fontWeight: '700', marginBottom: '8px', fontSize: '18px', color: 'var(--text-primary)' }}>Uh oh!</p>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+              Looks like you were in an active workout. Would you like to pick up where you left off?
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setShowWorkoutRecovery(false);
+                  setActiveWorkout(null);
+                  setWorkoutSeconds(0);
+                }}
+                className="btn-secondary" style={{ flex: 1 }}>No</button>
+              <button
+                onClick={() => {
+                  setShowWorkoutRecovery(false);
+                  setActiveTab('workout-start');
+                  setWorkoutExpanded(true);
+                }}
+                className="btn-primary" style={{ flex: 1 }}>Yes</button>
+            </div>
+          </div>
         </div>
       )}
 

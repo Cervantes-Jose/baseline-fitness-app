@@ -27,6 +27,11 @@ function WorkoutHome({
   workoutPaused,
   onTogglePause,
   appActiveTab,
+  activeRest,
+  restRemaining,
+  completedRest,
+  onStartRest,
+  onSkipRest,
 }) {
   const [tab, setTab] = useState(APP_TAB_MAP[appActiveTab] || 'Routines');
   const [weekStats, setWeekStats] = useState({ workouts: 0, volume: 0, duration: 0 });
@@ -125,6 +130,11 @@ function WorkoutHome({
     metricSystem,
     workoutPaused,
     onTogglePause,
+    activeRest,
+    restRemaining,
+    completedRest,
+    onStartRest,
+    onSkipRest,
   };
 
   const stats = [

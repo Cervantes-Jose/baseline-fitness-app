@@ -61,7 +61,7 @@ function parseRest(str) {
 const REST_DEFAULT_SECONDS = 90; // new rest timers default to 1:30
 const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
 
-function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, restTimers = [], addRest, changeRest, deleteRest }) {
+function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, restTimers = [], addRest, changeRest, deleteRest, inSuperset = false }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef(null);
@@ -94,7 +94,9 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
   };
 
   // Rest slot after set `idx`: a divider "Add Rest" button when empty, an editable tile when set.
+  // Grouped (superset) exercises hide per-set rests — rests live at the group level instead.
   const renderRestSlot = (idx) => {
+    if (inSuperset) return null;
     const value = restTimers[idx];
     if (value === null || value === undefined) {
       return (
@@ -171,7 +173,7 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
               </svg>
             </button>
           )}
-          {exerciseEditMode && (
+          {exerciseEditMode && !inSuperset && (
             <div {...listeners} style={{ touchAction: 'none', cursor: 'grab', padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <circle cx="6" cy="5" r="1.5" fill="currentColor"/>
@@ -238,7 +240,163 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
   );
 }
 
-function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise, onRenameExercise }) {
+// One rest slot inside the active-workout logging card. Sits between two sets.
+// - idle:     ---- Rest 1:30 ----   (a configured-but-not-started rest)
+// - running:  expanded tile with "Rest Timer", a live countdown, and Skip Rest
+// - finished: ---- Rest Completed ----  /  ---- Rest Skipped ----
+function RestRow({ duration, running, remaining, status, onSkip, name = 'Rest' }) {
+  if (running) {
+    // Fraction of the rest already elapsed — the bar fills as the next set nears.
+    const elapsed = duration > 0 ? Math.min(1, Math.max(0, (duration - remaining) / duration)) : 0;
+    return (
+      <div style={{
+        margin: '8px 0', padding: '14px 16px',
+        background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px',
+        animation: 'restTileIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rest Timer</span>
+            <span style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.15 }}>{formatRest(remaining)}</span>
+          </div>
+          <button onClick={onSkip}
+            style={{ background: 'transparent', border: '1px solid var(--accent)', borderRadius: '10px', color: 'var(--accent)', fontSize: '14px', fontWeight: '700', padding: '10px 16px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            Skip Rest
+          </button>
+        </div>
+        <div style={{ marginTop: '12px' }}>
+          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Next Set In</span>
+          <div style={{ marginTop: '6px', width: '55%', height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ width: `${elapsed * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px', transition: 'width 0.4s linear' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const label = status === 'completed' ? `${name} Completed`
+    : status === 'skipped' ? `${name} Skipped`
+    : `${name} ${formatRest(duration)}`;
+  const color = status ? 'var(--text-muted)' : 'var(--accent)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '8px 0' }}>
+      <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+      <span style={{ fontSize: '12px', fontWeight: '600', color, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+    </div>
+  );
+}
+
+// Group a flat exercise list into render units: consecutive exercises sharing a
+// superset_id become one { type:'group' } unit; everything else is a 'single'.
+function groupExercises(exercises) {
+  const units = [];
+  let i = 0;
+  while (i < exercises.length) {
+    const gid = exercises[i].superset_id;
+    if (gid) {
+      const members = [];
+      while (i < exercises.length && exercises[i].superset_id === gid) { members.push(exercises[i]); i++; }
+      units.push({ type: 'group', groupId: gid, exercises: members });
+    } else {
+      units.push({ type: 'single', ex: exercises[i] });
+      i++;
+    }
+  }
+  return units;
+}
+
+// Indented gutter with a vertical line + circles that visually binds the
+// exercises of a superset together (like the food-log timeline). `rows` is an
+// array of { node, circle } — circle marks an exercise (vs the rest block).
+function SupersetWrap({ rows }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      {rows.map((row, i) => {
+        const isFirst = i === 0;
+        const isLast = i === rows.length - 1;
+        return (
+          <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+            <div style={{ width: '16px', position: 'relative', flexShrink: 0 }}>
+              {/* Continuous line from the first circle down to the last row */}
+              <div style={{ position: 'absolute', left: '7px', top: isFirst ? '20px' : 0, bottom: isLast ? '8px' : 0, width: '2px', background: 'var(--accent)', opacity: 0.4 }} />
+              {row.circle && <div style={{ position: 'absolute', left: '2px', top: '14px', width: '12px', height: '12px', borderRadius: '50%', border: '2px solid var(--accent)', background: 'var(--bg)' }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, marginBottom: '8px' }}>{row.node}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Config-view rest editor for a superset group: 5 slots in the same divider
+// style as the per-set rests — "── Rest 1  [− 1:30 +]  Delete ──", or a
+// "── + Add Rest ──" divider when a slot is deleted.
+function GroupRestConfig({ gid, rests, addGroupRest, changeGroupRest, deleteGroupRest }) {
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState('');
+  const stepBtnStyle = {
+    width: '28px', height: '28px', borderRadius: '8px', border: '1px solid var(--border)',
+    background: 'var(--card)', color: 'var(--accent)', cursor: 'pointer', fontSize: '18px',
+    fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0,
+  };
+  const commit = () => {
+    if (editing === null) return;
+    const parsed = parseRest(draft);
+    if (parsed !== null) changeGroupRest(gid, editing, parsed);
+    setEditing(null); setDraft('');
+  };
+  return (
+    <>
+      {Array.from({ length: 5 }).map((_, idx) => {
+        const value = rests[idx];
+        if (value === null || value === undefined) {
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              <button onClick={() => addGroupRest(gid, idx)}
+                style={{ background: 'transparent', border: '1px solid var(--accent)', borderRadius: '8px', color: 'var(--accent)', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: '5px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                + Add Rest
+              </button>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+            </div>
+          );
+        }
+        return (
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '10px 0' }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent)', whiteSpace: 'nowrap' }}>Rest {idx + 1}</span>
+              <button onClick={() => changeGroupRest(gid, idx, value - REST_STEP_SECONDS)} disabled={value <= 0} aria-label="Decrease rest"
+                style={{ ...stepBtnStyle, opacity: value <= 0 ? 0.4 : 1, cursor: value <= 0 ? 'default' : 'pointer' }}>−</button>
+              {editing === idx ? (
+                <input value={draft} autoFocus onChange={e => setDraft(e.target.value)} onBlur={commit}
+                  onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setEditing(null); setDraft(''); } }}
+                  placeholder="m:ss" inputMode="numeric"
+                  className="input" style={{ width: '64px', padding: '6px', textAlign: 'center', fontSize: '15px' }} />
+              ) : (
+                <button onClick={() => { setEditing(idx); setDraft(formatRest(value)); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', minWidth: '54px', textAlign: 'center', padding: 0 }}>
+                  {formatRest(value)}
+                </button>
+              )}
+              <button onClick={() => changeGroupRest(gid, idx, value + REST_STEP_SECONDS)} aria-label="Increase rest" style={stepBtnStyle}>+</button>
+            </div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              <button onClick={() => deleteGroupRest(gid, idx)}
+                style={{ background: 'transparent', border: '1px solid #EF4444', borderRadius: '8px', cursor: 'pointer', color: '#EF4444', fontSize: '12px', fontWeight: '600', padding: '5px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isExpanded, onToggleExpand, onDeleteExercise, onRenameExercise, restTimers = [], activeRest, restRemaining, restStatus = {}, onSkipRest = () => {} }) {
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -246,7 +404,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
 
   useEffect(() => {
     if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
-  }, [isExpanded, sessionLog, checkedSets, editMode]);
+  }, [isExpanded, sessionLog, checkedSets, editMode, restTimers, restStatus, activeRest]);
 
   // Collapsing the card (e.g. opening another exercise) also exits edit mode.
   useEffect(() => { if (!isExpanded) setEditMode(false); }, [isExpanded]);
@@ -255,6 +413,11 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   const prevSets = ex.lastSession?.sets || [];
   const doneCount = checkedSets.filter(Boolean).length;
   const SET_GRID = '28px 54px 1fr 1fr 36px';
+  // While a rest is running in THIS exercise, gently shrink the sets and other
+  // logging UI so the rest tile stands out. Transforms don't affect layout, so
+  // the card's measured height is unchanged.
+  const restActive = !!activeRest && activeRest.exId === ex.id;
+  const shrink = { transform: restActive ? 'scale(0.95)' : 'scale(1)', transformOrigin: 'center', transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)' };
 
   // Entering edit mode makes the name editable and reveals the delete-exercise
   // and per-set trash icons; force the card open so the sets are visible.
@@ -309,7 +472,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
       </div>
       <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px', ...shrink }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Weight</div>
@@ -317,7 +480,8 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
             <div />
           </div>
           {sets.map((set, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: (!editMode && checkedSets[idx]) ? 0.45 : 1, transition: 'opacity 0.2s' }}>
+            <React.Fragment key={idx}>
+            <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', alignItems: 'center', opacity: (!editMode && checkedSets[idx]) ? 0.45 : 1, transform: restActive ? 'scale(0.95)' : 'scale(1)', transformOrigin: 'center', transition: 'opacity 0.2s, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}>
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
               <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
@@ -345,9 +509,19 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
                 </button>
               )}
             </div>
+            {!editMode && typeof restTimers[idx] === 'number' && (
+              <RestRow
+                duration={restTimers[idx]}
+                running={!!activeRest && activeRest.exId === ex.id && activeRest.slotIdx === idx}
+                remaining={restRemaining}
+                status={restStatus[idx]}
+                onSkip={() => onSkipRest(idx)}
+              />
+            )}
+            </React.Fragment>
           ))}
           <button onClick={() => addSet(ex.id)}
-            style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', ...shrink }}>
             Add Set
           </button>
         </div>
@@ -438,12 +612,23 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {} }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {}, activeRest = null, restRemaining = 0, completedRest = null, onStartRest = () => {}, onSkipRest = () => {} }) {
+  // When a workout is in progress, the live logging state is mirrored to
+  // localStorage ('activeWorkoutLog') so switching to a completely different app
+  // tab — which unmounts this component — doesn't lose entered weights/reps,
+  // checked sets, rest progress, or rest dividers. Read it once on mount.
+  const savedLogRef = useRef(undefined);
+  if (savedLogRef.current === undefined) {
+    try { savedLogRef.current = activeWorkout ? JSON.parse(localStorage.getItem('activeWorkoutLog')) : null; }
+    catch { savedLogRef.current = null; }
+  }
+  const savedLog = savedLogRef.current;
+
   const [view, setView] = useState(initialView || (activeWorkout ? 'logging' : 'routines'));
   const [routines, setRoutines] = useState([]);
   const [newRoutineName, setNewRoutineName] = useState('');
-  const [activeRoutine, setActiveRoutine] = useState(activeWorkout?.routine || null);
-  const [sessionLog, setSessionLog] = useState(activeWorkout?.sessionLog || {});
+  const [activeRoutine, setActiveRoutine] = useState(savedLog?.routine || activeWorkout?.routine || null);
+  const [sessionLog, setSessionLog] = useState(savedLog?.sessionLog || activeWorkout?.sessionLog || {});
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(null);
@@ -453,10 +638,18 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [showCreateModal, setShowCreateModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
   // Rest timers keyed by exercise id: array where index i = rest (seconds) after set i, or null/undefined for no timer.
-  const [restTimers, setRestTimers] = useState({});
+  const [restTimers, setRestTimers] = useState(savedLog?.restTimers || {});
   const restTimersRef = useRef(restTimers);
-  const [checkedSets, setCheckedSets] = useState({});
-  const [expandedExId, setExpandedExId] = useState(null);
+  // Finished rest states during the active workout: { [exId]: { [slotIdx]: 'completed' | 'skipped' } }.
+  // The *running* rest itself is owned by App (activeRest prop); this only tracks the after-state.
+  const [restStatus, setRestStatus] = useState(savedLog?.restStatus || {});
+  // Superset between-round rests keyed by group id: { [gid]: [s0..s4] } (null = deleted).
+  const [supersetRests, setSupersetRests] = useState(savedLog?.supersetRests || {});
+  // Active-workout superset progress: current round per group, and finished rest labels.
+  const [supersetRound, setSupersetRound] = useState(savedLog?.supersetRound || {});
+  const [supersetRestStatus, setSupersetRestStatus] = useState(savedLog?.supersetRestStatus || {});
+  const [checkedSets, setCheckedSets] = useState(savedLog?.checkedSets || {});
+  const [expandedExId, setExpandedExId] = useState(savedLog?.expandedExId ?? null);
   const [dragY, setDragY] = useState(0);
   const dragStartY = useRef(null);
   const [editMode, setEditMode] = useState(false);
@@ -493,6 +686,83 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   useEffect(() => {
     restTimersRef.current = restTimers;
   }, [restTimers]);
+
+  // Mirror the live logging state to localStorage while a workout is active.
+  // App removes the key when the workout ends (finish/discard).
+  useEffect(() => {
+    if (!activeWorkout) return;
+    try {
+      localStorage.setItem('activeWorkoutLog', JSON.stringify({
+        routine: activeRoutine, sessionLog, checkedSets, restStatus, restTimers, expandedExId,
+        supersetRests, supersetRound, supersetRestStatus,
+      }));
+    } catch {}
+  }, [activeWorkout, activeRoutine, sessionLog, checkedSets, restStatus, restTimers, expandedExId, supersetRests, supersetRound, supersetRestStatus]);
+
+  const markRestStatus = (exId, slotIdx, status) => {
+    setRestStatus(prev => ({ ...prev, [exId]: { ...(prev[exId] || {}), [slotIdx]: status } }));
+  };
+  const clearRestStatus = (exId, slotIdx) => {
+    setRestStatus(prev => {
+      if (prev[exId]?.[slotIdx] === undefined) return prev;
+      const inner = { ...prev[exId] };
+      delete inner[slotIdx];
+      return { ...prev, [exId]: inner };
+    });
+  };
+
+  // When App reports a rest finished naturally, flip it to "...Completed". For a
+  // superset's between-round rest, also advance the group to the next round.
+  useEffect(() => {
+    if (!completedRest) return;
+    if (completedRest.kind === 'superset') {
+      const gid = completedRest.groupId, round = completedRest.slotIdx;
+      setSupersetRestStatus(prev => ({ ...prev, [gid]: { ...(prev[gid] || {}), [round]: 'completed' } }));
+      const members = activeRoutine?.exercises?.filter(e => e.superset_id === gid) || [];
+      advanceSupersetRound(gid, round, members);
+    } else {
+      markRestStatus(completedRest.exId, completedRest.slotIdx, 'completed');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedRest?.token]);
+
+  // Tapping the Skip Rest button: stop the running rest and label the slot "Rest Skipped".
+  const handleSkipRest = (exId, slotIdx) => {
+    markRestStatus(exId, slotIdx, 'skipped');
+    onSkipRest();
+  };
+
+  // Skip a superset's between-round rest: label it and advance the round.
+  const handleSkipSupersetRest = (gid, round) => {
+    setSupersetRestStatus(prev => ({ ...prev, [gid]: { ...(prev[gid] || {}), [round]: 'skipped' } }));
+    onSkipRest();
+    const members = activeRoutine.exercises.filter(e => e.superset_id === gid);
+    advanceSupersetRound(gid, round, members);
+  };
+
+  // Drive the superset alternation when a set is checked: collapse the current
+  // exercise and expand the next; after the last one, run that round's rest.
+  const handleSupersetCheck = (gid, exId, setIdx, nowChecked) => {
+    const members = activeRoutine.exercises.filter(e => e.superset_id === gid);
+    const j = members.findIndex(e => e.id === exId);
+    const round = supersetRound[gid] || 0;
+    if (!nowChecked) {
+      if (activeRest?.kind === 'superset' && activeRest.groupId === gid && activeRest.slotIdx === round) onSkipRest();
+      return;
+    }
+    if (setIdx !== round) return; // only the active round's set advances the group
+    if (j < members.length - 1) {
+      setExpandedExId(members[j + 1].id);
+    } else {
+      const dur = (supersetRests[gid] || [])[round];
+      setSupersetRestStatus(prev => ({ ...prev, [gid]: { ...(prev[gid] || {}), [round]: undefined } }));
+      if (typeof dur === 'number' && dur > 0) {
+        onStartRest({ exId: gid, slotIdx: round, duration: dur, groupId: gid, kind: 'superset' });
+      } else {
+        advanceSupersetRound(gid, round, members);
+      }
+    }
+  };
 
   // Persist an exercise's full rest-timer array to its row. The exercises table
   // GRANT/RLS already cover all columns, so this is a plain column update.
@@ -719,6 +989,18 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
   };
 
+  // Build the per-group rest map from exercises' superset_rests column.
+  const buildSupersetRests = (exercises) => {
+    const map = {};
+    exercises.forEach(ex => {
+      if (ex.superset_id && !map[ex.superset_id]) {
+        const r = ex.superset_rests;
+        map[ex.superset_id] = Array.isArray(r) ? r : (typeof r === 'string' ? JSON.parse(r) : []);
+      }
+    });
+    return map;
+  };
+
   const openRoutine = (routine) => {
     const prefilled = {};
     const prefilledRest = {};
@@ -733,9 +1015,62 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setSessionLog(prefilled);
     setRestTimers(prefilledRest);
     restTimersRef.current = prefilledRest;
+    setSupersetRests(buildSupersetRests(routine.exercises));
     setExerciseEditMode(false);
     setSelectedExercises(new Set());
     setView('exercises');
+  };
+
+  // Create a superset from the selected exercises: assign a shared id, pull them
+  // contiguous, seed 5 default rests, and persist positions + grouping.
+  const createSuperset = async () => {
+    if (selectedExercises.size < 2 || !activeRoutine) return;
+    const gid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `ss-${Date.now()}`;
+    const rests = [REST_DEFAULT_SECONDS, REST_DEFAULT_SECONDS, REST_DEFAULT_SECONDS, REST_DEFAULT_SECONDS, REST_DEFAULT_SECONDS];
+    const exs = activeRoutine.exercises;
+    const selectedInOrder = exs.filter(e => selectedExercises.has(e.id));
+    const nonSelected = exs.filter(e => !selectedExercises.has(e.id));
+    const firstIdx = exs.findIndex(e => selectedExercises.has(e.id));
+    const insertAt = exs.slice(0, firstIdx).filter(e => !selectedExercises.has(e.id)).length;
+    const reordered = [...nonSelected.slice(0, insertAt), ...selectedInOrder, ...nonSelected.slice(insertAt)];
+    const next = reordered.map((e, idx) => selectedExercises.has(e.id)
+      ? { ...e, position: idx, superset_id: gid, superset_rests: rests }
+      : { ...e, position: idx });
+    setActiveRoutine(prev => ({ ...prev, exercises: next }));
+    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: next } : r));
+    setSupersetRests(prev => ({ ...prev, [gid]: rests }));
+    setExerciseEditMode(false);
+    setSelectedExercises(new Set());
+    await Promise.all(next.map((e, idx) => {
+      const patch = { position: idx };
+      if (selectedInOrder.some(s => s.id === e.id)) { patch.superset_id = gid; patch.superset_rests = rests; }
+      return supabase.from('exercises').update(patch).eq('id', e.id);
+    }));
+  };
+
+  const ungroupSuperset = async (gid) => {
+    const next = activeRoutine.exercises.map(e => e.superset_id === gid ? { ...e, superset_id: null, superset_rests: null } : e);
+    setActiveRoutine(prev => ({ ...prev, exercises: next }));
+    setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: next } : r));
+    setSupersetRests(prev => { const n = { ...prev }; delete n[gid]; return n; });
+    await supabase.from('exercises').update({ superset_id: null, superset_rests: null }).eq('superset_id', gid);
+  };
+
+  // Group rest config (write to all members of the group so any can be read back).
+  const commitGroupRests = (gid, arr) => {
+    setSupersetRests(prev => ({ ...prev, [gid]: arr }));
+    supabase.from('exercises').update({ superset_rests: arr }).eq('superset_id', gid)
+      .then(({ error }) => { if (error) console.error(error); });
+  };
+  const addGroupRest = (gid, idx) => { const arr = [...(supersetRests[gid] || [])]; arr[idx] = REST_DEFAULT_SECONDS; commitGroupRests(gid, arr); };
+  const changeGroupRest = (gid, idx, sec) => { const arr = [...(supersetRests[gid] || [])]; arr[idx] = Math.max(0, sec); commitGroupRests(gid, arr); };
+  const deleteGroupRest = (gid, idx) => { const arr = [...(supersetRests[gid] || [])]; arr[idx] = null; commitGroupRests(gid, arr); };
+
+  // Advance a superset to its next round (expand the first exercise), or mark done.
+  const advanceSupersetRound = (gid, round, members) => {
+    const maxSets = Math.max(0, ...members.map(m => (sessionLogRef.current[m.id] || []).length));
+    setSupersetRound(prev => ({ ...prev, [gid]: round + 1 }));
+    if (round + 1 < maxSets && members[0]) setExpandedExId(members[0].id);
   };
 
   const sensors = useSensors(
@@ -794,14 +1129,33 @@ const updateSet = (exId, setIdx, field, value) => {
       arr.splice(setIdx, 1);
       commitRestTimers(exId, arr);
     }
+    // Slots shifted, so drop any finished-rest labels for this exercise to avoid mislabeling.
+    setRestStatus(prev => (prev[exId] ? { ...prev, [exId]: {} } : prev));
   };
 
   const toggleCheck = (exId, setIdx) => {
+    const nowChecked = !checkedSets[exId]?.[setIdx];
     setCheckedSets(prev => {
       const arr = [...(prev[exId] || [])];
-      arr[setIdx] = !arr[setIdx];
+      arr[setIdx] = nowChecked;
       return { ...prev, [exId]: arr };
     });
+    // Superset members use group-level alternation + between-round rests instead.
+    const exObj = activeRoutine?.exercises?.find(e => e.id === exId);
+    if (exObj?.superset_id) {
+      handleSupersetCheck(exObj.superset_id, exId, setIdx, nowChecked);
+      return;
+    }
+    // Auto-start / cancel the rest configured after this set (if any).
+    const dur = restTimersRef.current[exId]?.[setIdx];
+    if (typeof dur === 'number' && dur > 0) {
+      clearRestStatus(exId, setIdx); // re-checking restarts a fresh rest
+      if (nowChecked) {
+        onStartRest({ exId, slotIdx: setIdx, duration: dur });
+      } else if (activeRest && activeRest.exId === exId && activeRest.slotIdx === setIdx) {
+        onSkipRest(); // unchecking cancels the running rest back to plain "Rest"
+      }
+    }
   };
 
   const startLogging = () => {
@@ -813,6 +1167,10 @@ const updateSet = (exId, setIdx, field, value) => {
     });
     setSessionLog(initial);
     setCheckedSets({});
+    setRestStatus({});
+    setSupersetRound({});
+    setSupersetRestStatus({});
+    setSupersetRests(buildSupersetRests(activeRoutine.exercises));
     setExpandedExId(activeRoutine.exercises[0]?.id || null);
     setView('logging');
     setActiveWorkout({ routineName: activeRoutine.name, startTime: Date.now(), routine: activeRoutine, sessionLog: initial });
@@ -926,6 +1284,62 @@ const updateSet = (exId, setIdx, field, value) => {
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
+  // A single logging card. `inSuperset` hides its per-set rests (group rests are
+  // rendered separately at the bottom of the group).
+  const renderLoggingCard = (ex, inSuperset = false) => (
+    <LoggingExerciseCard
+      key={ex.id}
+      ex={ex}
+      sessionLog={sessionLog}
+      updateSet={updateSet}
+      addSet={addSet}
+      deleteSet={deleteSet}
+      checkedSets={checkedSets[ex.id] || []}
+      toggleCheck={(idx) => toggleCheck(ex.id, idx)}
+      restTimers={inSuperset ? [] : (restTimers[ex.id] || [])}
+      activeRest={activeRest}
+      restRemaining={restRemaining}
+      restStatus={restStatus[ex.id] || {}}
+      onSkipRest={(idx) => handleSkipRest(ex.id, idx)}
+      isExpanded={expandedExId === ex.id}
+      onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
+      onDeleteExercise={async () => {
+        setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }));
+        setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.filter(e => e.id !== ex.id) } : r));
+        setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+        setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
+        await supabase.from('exercises').delete().eq('id', ex.id);
+      }}
+      onRenameExercise={async (newName) => {
+        setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) }));
+        setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) } : r));
+        await supabase.from('exercises').update({ name: newName }).eq('id', ex.id);
+      }}
+    />
+  );
+
+  // The stacked group-rest tiles shown at the bottom of a superset in the
+  // logging view (Rest 1…5; only configured rests appear).
+  const renderGroupRests = (gid) => {
+    const arr = supersetRests[gid] || [];
+    if (!arr.some(v => typeof v === 'number')) return null;
+    return (
+      <div>
+        {arr.map((val, r) => typeof val === 'number' ? (
+          <RestRow
+            key={r}
+            name={`Rest ${r + 1}`}
+            duration={val}
+            running={activeRest?.kind === 'superset' && activeRest.groupId === gid && activeRest.slotIdx === r}
+            remaining={restRemaining}
+            status={supersetRestStatus[gid]?.[r]}
+            onSkip={() => handleSkipSupersetRest(gid, r)}
+          />
+        ) : null)}
+      </div>
+    );
+  };
+
   let loggingModal = null;
   if (view === 'logging') {
     const totalSets = activeRoutine.exercises.reduce((sum, ex) => sum + (sessionLog[ex.id] || []).length, 0);
@@ -1008,32 +1422,17 @@ const updateSet = (exId, setIdx, field, value) => {
 
         {/* Exercise cards */}
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {activeRoutine.exercises.map(ex => (
-            <LoggingExerciseCard
-              key={ex.id}
-              ex={ex}
-              sessionLog={sessionLog}
-              updateSet={updateSet}
-              addSet={addSet}
-              deleteSet={deleteSet}
-              checkedSets={checkedSets[ex.id] || []}
-              toggleCheck={(idx) => toggleCheck(ex.id, idx)}
-              isExpanded={expandedExId === ex.id}
-              onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
-              onDeleteExercise={async () => {
-                setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }));
-                setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.filter(e => e.id !== ex.id) } : r));
-                setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
-                setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
-                await supabase.from('exercises').delete().eq('id', ex.id);
-              }}
-              onRenameExercise={async (newName) => {
-                setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) }));
-                setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) } : r));
-                await supabase.from('exercises').update({ name: newName }).eq('id', ex.id);
-              }}
-            />
-          ))}
+          {groupExercises(activeRoutine.exercises).map(unit => unit.type === 'single'
+            ? renderLoggingCard(unit.ex)
+            : (
+              <SupersetWrap key={unit.groupId} rows={unit.exercises.flatMap((ex, i) => {
+                const row = { node: renderLoggingCard(ex, true), circle: true };
+                return i === 0
+                  ? [row, { node: renderGroupRests(unit.groupId), circle: false }]
+                  : [row];
+              })} />
+            )
+          )}
         </div>
 
         {/* Pause / Finish buttons */}
@@ -1341,6 +1740,10 @@ const updateSet = (exId, setIdx, field, value) => {
     </div>
   );
 
+  const renderConfigExercise = (ex, inSuperset = false) => (
+    <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} inSuperset={inSuperset} />
+  );
+
   if (view === 'exercises') return (
     <>
     <div style={{ padding: '16px', paddingBottom: '80px', display: 'flex', flexDirection: 'column', gap: '8px', WebkitOverflowScrolling: 'touch' }}>
@@ -1358,18 +1761,10 @@ const updateSet = (exId, setIdx, field, value) => {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {exerciseEditMode && selectedExercises.size > 0 && (
-            <button onClick={deleteSelectedExercises}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          )}
-          {activeRoutine?.exercises?.length > 0 && (
-            <button onClick={() => { setExerciseEditMode(e => !e); setSelectedExercises(new Set()); }}
+          {!exerciseEditMode && activeRoutine?.exercises?.length > 0 && (
+            <button onClick={() => { setExerciseEditMode(true); setSelectedExercises(new Set()); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
-              {exerciseEditMode ? 'Done' : 'Edit'}
+              Edit
             </button>
           )}
           <button onClick={openExercisePicker} aria-label="Add exercise"
@@ -1381,14 +1776,34 @@ const updateSet = (exId, setIdx, field, value) => {
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-          {activeRoutine.exercises.map(ex => (
-            <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
-          ))}
+          {groupExercises(activeRoutine.exercises).map(unit => unit.type === 'single'
+            ? renderConfigExercise(unit.ex)
+            : (
+              <div key={unit.groupId}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 2px 6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Superset</span>
+                  {exerciseEditMode && (
+                    <button onClick={() => ungroupSuperset(unit.groupId)}
+                      style={{ background: 'transparent', border: '1px solid #EF4444', borderRadius: '8px', color: '#EF4444', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: '5px 12px' }}>
+                      Ungroup Superset
+                    </button>
+                  )}
+                </div>
+                <SupersetWrap rows={unit.exercises.flatMap((ex, i) => {
+                  const row = { node: renderConfigExercise(ex, true), circle: true };
+                  // Rests sit between the exercises (after the first one).
+                  return i === 0
+                    ? [row, { node: <GroupRestConfig gid={unit.groupId} rests={supersetRests[unit.groupId] || []} addGroupRest={addGroupRest} changeGroupRest={changeGroupRest} deleteGroupRest={deleteGroupRest} />, circle: false }]
+                    : [row];
+                })} />
+              </div>
+            )
+          )}
         </SortableContext>
       </DndContext>
 
     </div>
-    {activeRoutine.exercises.length > 0 && (
+    {!exerciseEditMode && activeRoutine.exercises.length > 0 && (
       <button onClick={startLogging} style={{
         position: 'fixed', bottom: '82px', left: '50%', transform: 'translateX(-50%)',
         width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 150,
@@ -1400,6 +1815,26 @@ const updateSet = (exId, setIdx, field, value) => {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M3 2l10 6-10 6V2z"/></svg>
         Start Workout
       </button>
+    )}
+    {/* Edit-mode action bar (mirrors the food-log select bar) */}
+    {exerciseEditMode && (
+      <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 6, width: '100%', maxWidth: 'calc(100% - 32px)', zIndex: 350, animation: 'selectBarIn 0.22s ease-out' }}>
+        <div style={{ width: '100%', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: '12px 14px', display: 'flex', gap: 8 }}>
+          <button onClick={createSuperset} disabled={selectedExercises.size < 2}
+            style={{ flex: 1, background: selectedExercises.size >= 2 ? 'var(--accent)' : 'var(--border)', color: selectedExercises.size >= 2 ? '#fff' : 'var(--text-muted)', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: selectedExercises.size >= 2 ? 'pointer' : 'default' }}>
+            Superset
+          </button>
+          <button onClick={deleteSelectedExercises} disabled={selectedExercises.size === 0}
+            style={{ flex: 1, background: '#ff4444', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: selectedExercises.size === 0 ? 'default' : 'pointer', opacity: selectedExercises.size === 0 ? 0.4 : 1 }}>
+            Delete{selectedExercises.size > 0 ? ` (${selectedExercises.size})` : ''}
+          </button>
+          <button onClick={() => { setExerciseEditMode(false); setSelectedExercises(new Set()); }}
+            style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer', color: 'var(--text-primary)' }}>
+            Save
+          </button>
+        </div>
+        <style>{`@keyframes selectBarIn { 0% { opacity: 0; transform: translateX(-50%) scaleX(0.4); } 100% { opacity: 1; transform: translateX(-50%) scaleX(1); } }`}</style>
+      </div>
     )}
     {exercisePickerSheet}
     </>
