@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 // Small inline spinner used inside buttons while auth is processing.
@@ -18,18 +18,29 @@ function ButtonSpinner() {
 // Full-screen login / signup / forgot-password flow. Rendered by App.js when
 // there is no authenticated user. No bottom tab bar here.
 export default function AuthScreen({ onAuth = () => {} }) {
-  const [view, setView] = useState('login'); // login | signup | forgot
+  const [view, setView] = useState('login'); // login | signup | forgot | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Supabase redirects back from a password-reset email with a recovery token in
+  // the URL hash. Detect it on mount and show the "Set New Password" form.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      setView('reset');
+    }
+  }, []);
 
   // Switch views and reset any transient state (errors, success, password fields).
   const switchView = (next) => {
     setView(next);
     setError('');
+    setSuccess('');
     setResetSent(false);
     setPassword('');
     setConfirmPassword('');
@@ -68,11 +79,32 @@ export default function AuthScreen({ onAuth = () => {} }) {
     setResetSent(true);
   };
 
+  // Set a new password using the recovery session established by the email link.
+  const handleUpdatePassword = async () => {
+    setError('');
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (password !== confirmPassword) { setError("Passwords don't match"); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (error) { setError(error.message); return; }
+    // End the temporary recovery session so the user must re-authenticate with
+    // their new password.
+    await supabase.auth.signOut();
+    // Clear the recovery hash from the URL so a refresh doesn't re-trigger reset.
+    window.history.replaceState(null, '', window.location.pathname);
+    setSuccess('Password updated successfully. Please sign in.');
+    setPassword('');
+    setConfirmPassword('');
+    setView('login');
+  };
+
   const onSubmit = (e) => {
     e.preventDefault();
     if (loading) return;
     if (view === 'login') handleSignIn();
     else if (view === 'signup') handleSignUp();
+    else if (view === 'reset') handleUpdatePassword();
     else handleReset();
   };
 
@@ -106,37 +138,45 @@ export default function AuthScreen({ onAuth = () => {} }) {
         className="card-flat"
         style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}
       >
-        <input
-          className="input"
-          type="email"
-          inputMode="email"
-          autoCapitalize="none"
-          autoComplete="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-        />
+        {view === 'reset' && (
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>
+            Set New Password
+          </h2>
+        )}
+
+        {view !== 'reset' && (
+          <input
+            className="input"
+            type="email"
+            inputMode="email"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+          />
+        )}
 
         {view !== 'forgot' && (
           <input
             className="input"
             type="password"
             autoComplete={view === 'login' ? 'current-password' : 'new-password'}
-            placeholder="Password"
+            placeholder={view === 'reset' ? 'New password' : 'Password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
           />
         )}
 
-        {view === 'signup' && (
+        {(view === 'signup' || view === 'reset') && (
           <>
             <input
               className="input"
               type="password"
               autoComplete="new-password"
-              placeholder="Confirm password"
+              placeholder={view === 'reset' ? 'Confirm new password' : 'Confirm password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={loading}
@@ -154,6 +194,13 @@ export default function AuthScreen({ onAuth = () => {} }) {
           </p>
         )}
 
+        {/* Success message (e.g. after a password update) */}
+        {success && (
+          <p style={{ fontSize: 14, color: 'var(--green)', fontWeight: 600 }}>
+            {success}
+          </p>
+        )}
+
         {/* Error message */}
         {error && (
           <p style={{ fontSize: 14, color: '#EF4444', fontWeight: 500 }}>
@@ -168,7 +215,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
           disabled={loading}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 50, opacity: loading ? 0.85 : 1 }}
         >
-          {loading ? <ButtonSpinner /> : (view === 'login' ? 'Sign In' : view === 'signup' ? 'Create Account' : 'Send Reset Link')}
+          {loading ? <ButtonSpinner /> : (view === 'login' ? 'Sign In' : view === 'signup' ? 'Create Account' : view === 'reset' ? 'Update Password' : 'Send Reset Link')}
         </button>
 
         {/* Forgot password link (login only) */}

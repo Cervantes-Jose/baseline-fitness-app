@@ -132,8 +132,13 @@ const changeDate = (dir) => {
      setUser(session?.user ?? null);
      setAuthLoading(false);
    });
-   const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+     // Recovery link signs the user into a temporary session; keep them on
+     // AuthScreen (user stays null) so its "Set New Password" form can show.
+     if (event === 'PASSWORD_RECOVERY') { setUser(null); return; }
      setUser(session?.user ?? null);
+     // Session ended (sign-out or expired/failed token refresh) → back to AuthScreen.
+     if (event === 'SIGNED_OUT') setUser(null);
    });
    return () => subscription.unsubscribe();
  }, []);
