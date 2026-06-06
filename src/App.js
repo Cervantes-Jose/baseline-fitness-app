@@ -5,6 +5,8 @@ import FoodLog from './components/FoodLog';
 import WorkoutHome from './components/WorkoutHome';
 import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
+import Profile from './components/Profile';
+import AccountInformation from './components/AccountInformation';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -23,102 +25,12 @@ function getHeaderTitle(activeTab) {
     'workout-start': 'Workouts',
     'profile': 'Profile',
     'profile-goals': 'Goals',
-    'settings': 'Settings',
+    'profile-account': 'Account Information',
   };
   return titles[activeTab] || 'Fitness Tracker';
 }
 
 // ─── SCREENS ────────────────────────────────────────────────
-
-function Profile({ onOpenSettings, onOpenGoals, onOpenEditDashboard }) {
-  return (
-    <div className="content">
-      <div className="card">
-        <p className="section-title">General</p>
-        <button onClick={onOpenGoals} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '14px 0', background: 'none', border: 'none',
-          borderTop: '1px solid var(--border)', cursor: 'pointer', marginTop: '8px',
-        }}>
-          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Goals</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <button onClick={onOpenEditDashboard} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '14px 0', background: 'none', border: 'none',
-          borderTop: '1px solid var(--border)', cursor: 'pointer',
-        }}>
-          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Edit Dashboard</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <button onClick={onOpenSettings} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          width: '100%', padding: '14px 0', background: 'none', border: 'none',
-          borderTop: '1px solid var(--border)', cursor: 'pointer',
-        }}>
-          <span style={{ fontSize: '15px', color: 'var(--text-primary)', fontWeight: '500' }}>Settings</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M6 3l5 5-5 5" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      </div>
-      <div className="card">
-        <p className="section-title">Account</p>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '8px' }}>
-          Login and account features coming soon.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function Settings({ theme, setTheme, metricSystem, setMetricSystem }) {
-  return (
-    <div className="content">
-      <div className="card">
-        <p className="section-title">Appearance</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-          {['system', 'light', 'dark'].map(t => (
-            <button key={t} onClick={() => setTheme(t)}
-              style={{
-                padding: '12px 16px', borderRadius: '12px', border: '1.5px solid',
-                borderColor: theme === t ? 'var(--accent)' : 'var(--border)',
-                background: theme === t ? 'var(--accent-light)' : 'var(--card)',
-                color: theme === t ? 'var(--accent)' : 'var(--text-primary)',
-                cursor: 'pointer', textAlign: 'left', fontSize: '15px', fontWeight: '500',
-              }}>
-              {t === 'system' ? 'System Default' : t === 'light' ? 'Light' : 'Dark'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="card">
-        <p className="section-title">Units</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-          {[
-            { id: 'imperial', label: 'Imperial', sub: 'lbs, inches' },
-            { id: 'metric', label: 'Metric', sub: 'kg, cm' },
-          ].map(opt => (
-            <button key={opt.id} onClick={() => setMetricSystem(opt.id)}
-              style={{
-                padding: '12px 16px', borderRadius: '12px', border: '1.5px solid',
-                borderColor: metricSystem === opt.id ? 'var(--accent)' : 'var(--border)',
-                background: metricSystem === opt.id ? 'var(--accent-light)' : 'var(--card)',
-                cursor: 'pointer', textAlign: 'left', fontSize: '15px',
-              }}>
-              <span style={{ fontWeight: '600', color: metricSystem === opt.id ? 'var(--accent)' : 'var(--text-primary)' }}>{opt.label}</span>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)', marginLeft: '8px' }}>{opt.sub}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function getGreeting(name) {
   const hour = new Date().getHours();
@@ -152,7 +64,7 @@ const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
-const [profileName] = useState('Jose');
+const [profileName, setProfileName] = useState(() => localStorage.getItem('profileName') || 'Jose');
 const [calorieGoal, setCalorieGoal] = useState(2000);
 // eslint-disable-next-line no-unused-vars
 const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
@@ -282,6 +194,7 @@ const changeDate = (dir) => {
     }
   }, [theme]);
 
+  useEffect(() => { localStorage.setItem('profileName', profileName); }, [profileName]);
   useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('metricSystem', metricSystem); }, [metricSystem]);
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
@@ -335,8 +248,8 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenSettings={() => setActiveTab('settings')} onOpenGoals={() => setActiveTab('profile-goals')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} />;
-      case 'settings': return <Settings theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} profileName={profileName} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} profileName={profileName} setProfileName={setProfileName} metricSystem={metricSystem} />;
       default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
@@ -432,7 +345,7 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'settings' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-account' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>

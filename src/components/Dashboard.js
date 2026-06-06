@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
+import AddWidgetSheet from './AddWidgetSheet';
 
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
 // `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
@@ -113,7 +114,7 @@ function LineChart({ data, color, height = 80 }) {
 }
 
 // ─── MEASUREMENT CHART SECTION ──────────────────────────────
-function MeasurementSection({ title, measurementName, color, unit }) {
+function MeasurementSection({ title, measurementName, color, unit: unitProp = '' }) {
   const [range, setRange] = useState('7D');
   const [entries, setEntries] = useState([]);
 
@@ -133,16 +134,20 @@ function MeasurementSection({ title, measurementName, color, unit }) {
 
       const { data } = await supabase
         .from('measurement_entries')
-        .select('value, created_at')
+        .select('value, created_at, unit')
         .eq('measurement_id', mData[0].id)
         .gte('created_at', sinceStr)
         .order('created_at', { ascending: true });
 
       if (data) {
-        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.created_at })));
+        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.created_at, unit: e.unit || '' })));
       }
     })();
   }, [range, measurementName]);
+
+  // Unit comes from the measurement's own latest entry (each measurement stores its
+  // own unit), falling back to whatever the caller passed.
+  const unit = entries.length ? (entries[entries.length - 1].unit || unitProp) : unitProp;
 
   const latest = entries.length > 0 ? entries[entries.length - 1].value : null;
   const first = entries.length > 1 ? entries[0].value : null;
@@ -221,16 +226,60 @@ function MacroRow({ label, consumed, goal, color, iconColor }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────
-// Dashboard widgets, in their default order. The user's custom order + hidden set
-// live in localStorage ('dashboardLayout'); unknown/new ids fall back to this order.
-const WIDGET_IDS = ['glance', 'calories', 'protein', 'weight', 'bodyfat', 'macros'];
+// Widgets shown on a fresh dashboard, in order. Everything else (Carbs, Fats, and
+// the per-measurement trend charts) lives in the "Add Widget" pool until the user
+// places it. The layout is just the ordered list of placed widget ids; deleting a
+// widget removes it from the list and it returns to the pool.
+// `glance` (the day-streak summary) is pinned at the top and rendered outside the
+// orderable set — it isn't draggable, deletable, or in the Add Widget picker.
+const DEFAULT_ORDER = ['calories', 'protein', 'weight', 'bodyfat', 'macros'];
+
+// Half-width tiles (the rest are full-width). Calories/Protein/Carbs/Fats are the
+// small ring tiles that can pair two-per-row.
+const HALF = new Set(['calories', 'protein', 'carbs', 'fats']);
+
+// Stable color palette for dynamically-generated measurement trend widgets.
+const MEAS_COLORS = ['#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#EF4444', '#06B6D4', '#EC4899'];
+
+// Default measurements get fixed ids so existing saved layouts keep working; all
+// other measurements use a `meas:<id>` key.
+function widgetIdForMeasurement(name, id) {
+  const n = (name || '').trim().toLowerCase();
+  if (n === 'weight') return 'weight';
+  if (n === 'body fat') return 'bodyfat';
+  return `meas:${id}`;
+}
 
 function loadDashboardLayout() {
   try {
     const s = JSON.parse(localStorage.getItem('dashboardLayout'));
-    if (s && Array.isArray(s.order)) return { order: s.order, hidden: Array.isArray(s.hidden) ? s.hidden : [] };
+    if (Array.isArray(s)) return { order: s, breaks: [] };                       // [ids] shape
+    if (s && Array.isArray(s.order)) {
+      if (Array.isArray(s.breaks)) return { order: s.order, breaks: s.breaks };   // current { order, breaks }
+      const hidden = new Set(Array.isArray(s.hidden) ? s.hidden : []);            // legacy { order, hidden }
+      return { order: s.order.filter(id => !hidden.has(id)), breaks: [] };
+    }
   } catch {}
-  return { order: WIDGET_IDS, hidden: [] };
+  return { order: DEFAULT_ORDER, breaks: [] };
+}
+
+// Group the flat ordered id list into explicit rows. A new row starts when a tile
+// is flagged as a break, when it (or the previous tile) is full-width, or when the
+// current row already holds two half tiles. This keeps the default greedy packing
+// (two halves per row) but lets a break force a half tile onto its own row, so
+// arrangements like one-on-top / two-below hold instead of re-flowing.
+function buildRows(ids, breakSet) {
+  const rows = [];
+  let cur = [];
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    const full = !HALF.has(id);
+    const prevFull = i > 0 && !HALF.has(ids[i - 1]);
+    if (i > 0 && (breakSet.has(id) || full || prevFull || cur.length >= 2)) { rows.push(cur); cur = []; }
+    cur.push(id);
+  }
+  if (cur.length) rows.push(cur);
+  return rows;
 }
 
 // One draggable/selectable widget in edit mode. A quick tap selects (the sensor's
@@ -267,10 +316,25 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
   const [streak, setStreak] = useState(0);
   const [weekWorkouts, setWeekWorkouts] = useState(0);
 
-  // Custom widget layout (order + hidden) — persisted to localStorage.
-  const [layout, setLayout] = useState(loadDashboardLayout);
+  // Custom widget layout — the ordered list of placed widget ids, plus the set of ids
+  // that force a new row before themselves. Persisted together to localStorage.
+  const [order, setOrder] = useState(() => loadDashboardLayout().order);
+  const [breaks, setBreaks] = useState(() => new Set(loadDashboardLayout().breaks));
   const [selectedId, setSelectedId] = useState(null);
-  const saveLayout = (next) => { setLayout(next); try { localStorage.setItem('dashboardLayout', JSON.stringify(next)); } catch {} };
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [measurements, setMeasurements] = useState([]);
+  const persistLayout = (nextOrder, nextBreaks) => {
+    try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [...nextBreaks] })); } catch {}
+  };
+  const saveOrder = (next) => { setOrder(next); persistLayout(next, breaks); };
+  const toggleBreak = (id) => {
+    setBreaks(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      persistLayout(order, next);
+      return next;
+    });
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
@@ -281,6 +345,12 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, [today]);
+
+  // All measurements the user tracks — each becomes an available trend widget.
+  useEffect(() => {
+    supabase.from('measurements').select('id, name').order('created_at', { ascending: true })
+      .then(({ data }) => { if (data) setMeasurements(data); });
+  }, []);
 
   const loadData = async () => {
     // Today's food
@@ -397,25 +467,8 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
     },
   ];
 
-  // Effective order: saved order (known ids only) + any new widgets appended.
-  const order = [...layout.order.filter(id => WIDGET_IDS.includes(id)), ...WIDGET_IDS.filter(id => !layout.order.includes(id))];
-  const hidden = new Set(layout.hidden);
-  const visible = order.filter(id => !hidden.has(id));
-
-  const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    const newVisible = arrayMove(visible, visible.indexOf(active.id), visible.indexOf(over.id));
-    saveLayout({ order: [...newVisible, ...order.filter(id => hidden.has(id))], hidden: layout.hidden });
-  };
-  const deleteSelected = () => {
-    if (!selectedId) return;
-    saveLayout({ order, hidden: [...new Set([...layout.hidden, selectedId])] });
-    setSelectedId(null);
-  };
-
-  // Each widget keyed by id, as a bare card. Calories + Protein are "half" widgets
-  // that pair into the original two-column row; everything else is full-width.
-  const HALF = new Set(['calories', 'protein']);
+  // Each widget keyed by id, as a bare card. Calories/Protein/Carbs/Fats are the
+  // half-width ring tiles; everything else is full-width.
   const widgetMap = {
     glance: (
       <div>
@@ -482,8 +535,52 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
         </div>
       </div>
     ),
-    weight: <MeasurementSection title="Weight" measurementName="weight" color="#3B82F6" unit="lbs" />,
-    bodyfat: <MeasurementSection title="Body Fat" measurementName="body fat" color="#F97316" unit="%" />,
+    carbs: (
+      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)', height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Carbs</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <CircleRing value={carbs} goal={carbsGoal} size={110} strokeWidth={10} color="#EAB308" trackColor="#FEF9C3">
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{carbs}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
+          </CircleRing>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{carbs}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Consumed</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{carbsGoal}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+          </div>
+        </div>
+      </div>
+    ),
+    fats: (
+      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)', height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Fats</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <CircleRing value={fats} goal={fatsGoal} size={110} strokeWidth={10} color="#3B82F6" trackColor="#DBEAFE">
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{fats}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500 }}>g</div>
+          </CircleRing>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{fats}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Consumed</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{fatsGoal}g</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Goal</div>
+          </div>
+        </div>
+      </div>
+    ),
     macros: (
       <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -498,63 +595,116 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
     ),
   };
 
+  // One trend widget per measurement the user tracks, merged into the widget map.
+  // Weight/Body Fat keep their fixed ids; the rest are keyed `meas:<id>`.
+  const measurementItems = measurements.map((m, i) => ({
+    id: widgetIdForMeasurement(m.name, m.id),
+    label: m.name,
+    node: <MeasurementSection title={m.name} measurementName={m.name} color={MEAS_COLORS[i % MEAS_COLORS.length]} />,
+  }));
+  measurementItems.forEach(({ id, node }) => { widgetMap[id] = node; });
+
+  // `placed` = the widgets currently on the dashboard (valid ids only — drops stale
+  // ones, e.g. a measurement that was deleted). `glance` is excluded because it's
+  // pinned and rendered separately. Everything else is available to add.
+  const placed = order.filter(id => widgetMap[id] && id !== 'glance');
+  const placedSet = new Set(placed);
+
+  // Catalog for the Add Widget sheet — grouped into the categories the user picks from.
+  const catalog = [
+    { category: 'Food', items: [
+      { id: 'calories', label: 'Calories' },
+      { id: 'protein', label: 'Protein' },
+      { id: 'carbs', label: 'Carbs' },
+      { id: 'fats', label: 'Fats' },
+      { id: 'macros', label: 'Macro Progress' },
+    ] },
+    { category: 'Measurements', items: measurementItems.map(({ id, label }) => ({ id, label })) },
+  ];
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    saveOrder(arrayMove(placed, placed.indexOf(active.id), placed.indexOf(over.id)));
+  };
+  const deleteSelected = () => {
+    if (!selectedId) return;
+    const nextOrder = placed.filter(id => id !== selectedId);
+    const nextBreaks = new Set(breaks); nextBreaks.delete(selectedId);
+    setOrder(nextOrder); setBreaks(nextBreaks); persistLayout(nextOrder, nextBreaks);
+    setSelectedId(null);
+  };
+  const addWidgets = (ids) => {
+    const toAdd = ids.filter(id => !placedSet.has(id));
+    if (toAdd.length) saveOrder([...placed, ...toAdd]);
+    setPickerOpen(false);
+  };
+
   if (editMode) {
     return (
       <div style={{ paddingBottom: 80 }}>
-        {/* Edit bar */}
+        {/* Edit bar — right slot shows Delete while a widget is selected, otherwise Add Widget */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 4px' }}>
           <button onClick={onExitEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>Done</button>
           <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Edit Dashboard</span>
-          <button onClick={deleteSelected} disabled={!selectedId}
-            style={{ background: 'none', border: 'none', color: '#EF4444', cursor: selectedId ? 'pointer' : 'default', fontSize: 15, fontWeight: 600, padding: 0, opacity: selectedId ? 1 : 0.4 }}>Delete</button>
+          {selectedId ? (
+            <button onClick={deleteSelected}
+              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>Delete</button>
+          ) : (
+            <button onClick={() => setPickerOpen(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>+ Add Widget</button>
+          )}
         </div>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 8px' }}>Tap a widget to select · hold and drag to move</p>
-        {visible.length === 0 ? (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>All widgets hidden.</p>
+        {selectedId && HALF.has(selectedId) ? (
+          <div style={{ textAlign: 'center', margin: '0 0 8px' }}>
+            <button onClick={() => toggleBreak(selectedId)}
+              style={{ background: 'var(--accent-light)', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 20 }}>
+              {breaks.has(selectedId) ? '↥ Merge with row above' : '↧ Start new row'}
+            </button>
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 8px' }}>Tap a widget to select · hold and drag to move</p>
+        )}
+        {/* Pinned summary — always at the top, not movable */}
+        <div style={{ position: 'relative' }}>
+          {widgetMap.glance}
+          <span style={{ position: 'absolute', top: 6, right: 20, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', background: 'var(--bg)', padding: '2px 8px', borderRadius: 10 }}>Pinned</span>
+        </div>
+        {placed.length === 0 ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>No widgets yet — tap “+ Add Widget” to add some.</p>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={visible} strategy={rectSortingStrategy}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', padding: '8px 16px', gap: 12, alignItems: 'flex-start' }}>
-                {visible.map(id => (
-                  <SortableWidget key={id} id={id} selected={selectedId === id} onSelect={setSelectedId}
-                    width={HALF.has(id) ? 'calc(50% - 6px)' : '100%'}>
-                    {widgetMap[id]}
-                  </SortableWidget>
+            <SortableContext items={placed} strategy={rectSortingStrategy}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 16px' }}>
+                {buildRows(placed, breaks).map((row, ri) => (
+                  <div key={ri} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    {row.map(id => (
+                      <SortableWidget key={id} id={id} selected={selectedId === id} onSelect={setSelectedId}
+                        width={HALF.has(id) ? 'calc(50% - 6px)' : '100%'}>
+                        {widgetMap[id]}
+                      </SortableWidget>
+                    ))}
+                  </div>
                 ))}
               </div>
             </SortableContext>
           </DndContext>
         )}
+        <AddWidgetSheet
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          catalog={catalog}
+          placedSet={placedSet}
+          renderPreview={(id) => widgetMap[id]}
+          isHalf={(id) => HALF.has(id)}
+          onAdd={addWidgets}
+        />
       </div>
     );
   }
 
-  // Normal layout: walk widgets in order; consecutive "half" widgets pair into
-  // two-column rows, everything else renders full-width (glance is full-bleed).
-  const rows = [];
-  for (let i = 0; i < visible.length; i++) {
-    const id = visible[i];
-    if (HALF.has(id)) {
-      const group = [];
-      while (i < visible.length && HALF.has(visible[i])) { group.push(visible[i]); i++; }
-      i--;
-      for (let j = 0; j < group.length; j += 2) {
-        const pair = group.slice(j, j + 2);
-        rows.push(
-          <div key={'row-' + pair.join('-')} style={{ display: 'flex', gap: 12, padding: '8px 16px' }}>
-            {pair.map(pid => <div key={pid} style={{ flex: 1, minWidth: 0 }}>{widgetMap[pid]}</div>)}
-            {pair.length === 1 && <div style={{ flex: 1 }} />}
-          </div>
-        );
-      }
-    } else {
-      rows.push(
-        <React.Fragment key={id}>
-          {id === 'glance' ? widgetMap[id] : <div style={{ padding: '8px 16px' }}>{widgetMap[id]}</div>}
-        </React.Fragment>
-      );
-    }
-  }
+  // Half tiles (Calories/Protein/Carbs/Fats) take half a row so two can pair; a row
+  // with one half tile leaves the other half empty, keeping the arrangement static.
+  const itemWidth = (id) => ({ width: HALF.has(id) ? 'calc(50% - 6px)' : '100%' });
 
   return (
     <div style={{ paddingBottom: 8 }}>
@@ -567,7 +717,19 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
           Let's crush your goals today.
         </div>
       </div>
-      {rows}
+      {/* Pinned summary */}
+      {widgetMap.glance}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 16px' }}>
+        {buildRows(placed, breaks).map((row, ri) => (
+          <div key={ri} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            {row.map(id => (
+              <div key={id} style={{ ...itemWidth(id), boxSizing: 'border-box' }}>
+                {widgetMap[id]}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

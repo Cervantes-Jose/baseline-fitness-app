@@ -156,7 +156,6 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
 
 function ExerciseDatabase() {
   const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [expanded, setExpanded] = useState(new Set());
   const [customExercises, setCustomExercises] = useState([]);
   const [routines, setRoutines] = useState([]);
@@ -172,13 +171,6 @@ function ExerciseDatabase() {
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const searchInputRef = useRef(null);
-
-  useEffect(() => {
-    if (searchOpen) {
-      const id = setTimeout(() => searchInputRef.current?.focus(), 100);
-      return () => clearTimeout(id);
-    }
-  }, [searchOpen]);
 
   useEffect(() => {
     supabase.from('custom_exercises').select('*').order('created_at').then(({ data }) => {
@@ -207,10 +199,6 @@ function ExerciseDatabase() {
       return next;
     });
   };
-
-  // Collapse the search bar (and clear its text) once focus leaves the input —
-  // i.e. when the keyboard is dismissed by tapping away.
-  const closeSearch = () => { setSearch(''); setSearchOpen(false); };
 
   const searchResults = search.trim()
     ? CATEGORIES.flatMap(cat =>
@@ -303,65 +291,25 @@ function ExerciseDatabase() {
   return (
     <div style={{ paddingBottom: '20px' }}>
 
-      {/* Top bar */}
+      {/* Top bar — always-visible search + add button */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '16px 16px 12px' }}>
-        {/* "Exercises" label — crossfades out as the search bar slides in */}
-        <div style={{ flex: 1, position: 'relative', height: '44px' }}>
-          <p style={{
-            position: 'absolute', inset: 0, margin: 0,
-            display: 'flex', alignItems: 'center',
-            fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)',
-            opacity: searchOpen ? 0 : 1,
-            transition: 'opacity 0.25s ease',
-            pointerEvents: 'none',
-          }}>
-            Exercises
-          </p>
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center',
-            opacity: searchOpen ? 1 : 0,
-            transform: searchOpen ? 'translateX(0)' : 'translateX(20px)',
-            transition: 'opacity 0.25s ease, transform 0.25s ease',
-            pointerEvents: searchOpen ? 'auto' : 'none',
-          }}>
-            <input
-              ref={searchInputRef}
-              id="exercise-search"
-              name="exercise-search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onBlur={() => setTimeout(closeSearch, 150)}
-              placeholder="Search exercises..."
-              className="input"
-              style={{ width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
-        </div>
-
-        {/* Glass + plus — bare accent icons, matching the Routines tab */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            onClick={() => {
-              if (searchOpen) { searchInputRef.current?.blur(); closeSearch(); }
-              else setSearchOpen(true);
-            }}
-            aria-label="Search exercises"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2.2"/>
-              <path d="M16.5 16.5L21 21" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            aria-label="Add custom exercise"
-            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            + Add Exercise
-          </button>
-        </div>
+        <input
+          ref={searchInputRef}
+          id="exercise-search"
+          name="exercise-search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search exercises..."
+          className="input"
+          style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
+        />
+        <button
+          onClick={() => setShowCreateModal(true)}
+          aria-label="Add custom exercise"
+          style={{ flexShrink: 0, background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          + Add Exercise
+        </button>
       </div>
 
       {/* Success message */}
