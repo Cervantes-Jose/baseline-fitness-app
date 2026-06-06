@@ -293,7 +293,10 @@ function SortableWidget({ id, selected, onSelect, width = '100%', children }) {
         width, boxSizing: 'border-box',
         transform: CSS.Transform.toString(transform), transition,
         position: 'relative', zIndex: isDragging ? 20 : 1,
-        cursor: 'grab', touchAction: 'none', userSelect: 'none',
+        // pan-y (not none) lets a quick vertical swipe scroll the page, while the
+        // 250ms long-press still starts a drag — otherwise the full-screen widgets
+        // become non-scrollable drag surfaces and you can't scroll the edit screen.
+        cursor: 'grab', touchAction: 'pan-y', userSelect: 'none',
         opacity: isDragging ? 0.95 : 1,
       }}>
       <div style={{
