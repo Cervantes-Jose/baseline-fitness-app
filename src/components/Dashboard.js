@@ -5,13 +5,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
 // `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
 function useChartDraw(ref, dep) {
@@ -132,7 +125,9 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
     const sinceStr = since.toISOString();
 
     (async () => {
-      const uid = (await getUser()).id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
       const { data: mData } = await supabase
         .from('measurements')
         .select('id')
@@ -362,14 +357,18 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
   // All measurements the user tracks — each becomes an available trend widget.
   useEffect(() => {
     (async () => {
-      const uid = (await getUser()).id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
       supabase.from('measurements').select('id, name').eq('user_id', uid).order('created_at', { ascending: true })
         .then(({ data }) => { if (data) setMeasurements(data); });
     })();
   }, []);
 
   const loadData = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     // Today's food
     const { data: food } = await supabase
       .from('food_entries')

@@ -1,13 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
 // each: { name, value, unit }) by case-insensitive substring, so e.g. "fiber"
@@ -237,7 +230,9 @@ function Nutrition({ selectedDate }) {
 
   const load = async () => {
     setLoading(true);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     // Window by meal date: the 14 days ending at the anchored (selected) date.
     // food_entries.date is a locale string, so we filter client-side rather than in SQL.
     const sinceMs = anchorMs - 14 * 24 * 60 * 60 * 1000;

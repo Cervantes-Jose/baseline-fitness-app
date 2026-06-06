@@ -4,13 +4,6 @@ import Workouts from './Workouts';
 import ExerciseDatabase from './ExerciseDatabase';
 import Measurements from './Measurements';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 const TABS = ['Routines', 'Exercises', 'Measurements', 'History'];
 
 const APP_TAB_MAP = {
@@ -67,7 +60,9 @@ function WorkoutHome({
     prevMonday.setDate(monday.getDate() - 7);
 
     // Pull both this week and last week in one query, then split by date
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data: sessions } = await supabase
       .from('workout_sessions')
       .select('id, duration, created_at')

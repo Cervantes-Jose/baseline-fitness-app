@@ -17,13 +17,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 // Palette for the routine accent bar (matches the Measurements color set).
 const CHART_COLORS = ['#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#EF4444', '#06B6D4', '#EC4899'];
 
@@ -430,7 +423,6 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   );
 }
 
-
 function SortableRoutineWrapper({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return (
@@ -632,7 +624,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   // Persist an exercise's full rest-timer array to its row. The exercises table
   // GRANT/RLS already cover all columns, so this is a plain column update.
   const persistRest = async (exId, arr) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId).eq('user_id', uid);
     if (error) console.error(error);
   };
@@ -691,7 +685,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const loadRoutines = async () => {
     setLoading(true);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data: routineData, error: routineError } = await supabase
       .from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true });
     if (routineError) { console.error(routineError); setLoading(false); return; }
@@ -754,7 +750,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   };
 
   const loadHistory = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data: sessions, error } = await supabase
       .from('workout_sessions').select('*, session_exercises(*)').eq('user_id', uid).order('created_at', { ascending: false });
     if (error) { console.error(error); return; }
@@ -766,7 +764,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const deleteSelectedSessions = async () => {
     const ids = [...selectedSessions];
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     await supabase.from('session_exercises').delete().eq('user_id', uid).in('session_id', ids);
     await supabase.from('workout_sessions').delete().eq('user_id', uid).in('id', ids);
     setHistory(prev => prev.filter(s => !selectedSessions.has(s.id)));
@@ -779,14 +779,18 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setRoutines(prev => prev.filter(r => !selectedRoutines.has(r.id)));
     setSelectedRoutines(new Set());
     setRoutineEditMode(false);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     await supabase.from('exercises').delete().eq('user_id', uid).in('routine_id', ids);
     await supabase.from('routines').delete().eq('user_id', uid).in('id', ids);
   };
 
   const deleteSelectedExercises = async () => {
     const ids = [...selectedExercises];
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const updated = activeRoutine.exercises.filter(e => !selectedExercises.has(e.id));
     setActiveRoutine(prev => ({ ...prev, exercises: updated }));
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
@@ -803,7 +807,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       'Workout deleted',
       () => setHistory(prev => [...prev, item]),
       async () => {
-        const uid = (await getUser()).id;
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
         await supabase.from('session_exercises').delete().eq('user_id', uid).eq('session_id', id);
         await supabase.from('workout_sessions').delete().eq('user_id', uid).eq('id', id);
       }
@@ -812,7 +818,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const addRoutine = async () => {
     if (!newRoutineName.trim()) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase.from('routines')
       .insert([{ name: newRoutineName.trim(), user_id: uid }]).select().single();
     if (error) { console.error(error); return; }
@@ -828,7 +836,12 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     showToast(
       `"${item.name}" deleted`,
       () => setRoutines(prev => [...prev, item]),
-      async () => { const uid = (await getUser()).id; await supabase.from('routines').delete().eq('id', id).eq('user_id', uid); }
+      async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
+        await supabase.from('routines').delete().eq('id', id).eq('user_id', uid);
+      }
     );
   };
 
@@ -840,7 +853,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const submitRename = async () => {
     if (!renameValue.trim() || !renamingRoutine) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('routines')
       .update({ name: renameValue.trim() }).eq('id', renamingRoutine.id).eq('user_id', uid);
     if (error) { console.error(error); return; }
@@ -851,7 +866,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
 
   const duplicateRoutine = async (routine) => {
     setMenuOpen(null);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data: newRoutine, error: routineError } = await supabase.from('routines')
       .insert([{ name: `${routine.name} (copy)`, user_id: uid }]).select().single();
     if (routineError) { console.error(routineError); return; }
@@ -897,7 +914,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       const reordered = arrayMove(activeRoutine.exercises, oldIndex, newIndex);
       setActiveRoutine(prev => ({ ...prev, exercises: reordered }));
       setRoutines(routines.map(r => r.id === activeRoutine.id ? { ...r, exercises: reordered } : r));
-      const uid = (await getUser()).id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
       const updates = reordered.map((ex, index) =>
         supabase.from('exercises').update({ position: index }).eq('id', ex.id).eq('user_id', uid)
       );
@@ -982,16 +1001,18 @@ const updateSet = (exId, setIdx, field, value) => {
 
   const confirmFinishWorkout = async () => {
     const currentLog = sessionLogRef.current;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
 
-    const { data: session, error: sessionError } = await supabase
+    const { data: sessionRow, error: sessionError } = await supabase
       .from('workout_sessions')
       .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString(), duration: workoutSeconds, user_id: uid }])
       .select().single();
     if (sessionError) { console.error(sessionError); return; }
 
     const exerciseInserts = activeRoutine.exercises.map(ex => ({
-      session_id: session.id,
+      session_id: sessionRow.id,
       exercise_name: ex.name,
       sets: currentLog[ex.id] || [],
       user_id: uid
@@ -1035,7 +1056,9 @@ const updateSet = (exId, setIdx, field, value) => {
     setExpandedPickerCategories(new Set());
     setPickerDragY(0);
     setShowExercisePicker(true);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at');
     if (data) setPickerCustomExercises(data);
   };
@@ -1056,7 +1079,9 @@ const updateSet = (exId, setIdx, field, value) => {
   const addPickerExercises = async () => {
     if (selectedPickerExercises.size === 0 || !activeRoutine) return;
     const basePosition = activeRoutine.exercises.length;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx, user_id: uid }));
     const { data, error } = await supabase.from('exercises').insert(inserts).select();
     if (error) { console.error(error); return; }
@@ -1111,7 +1136,9 @@ const updateSet = (exId, setIdx, field, value) => {
       isExpanded={expandedExId === ex.id}
       onToggleExpand={() => setExpandedExId(expandedExId === ex.id ? null : ex.id)}
       onDeleteExercise={async () => {
-        const uid = (await getUser()).id;
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
         setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.filter(e => e.id !== ex.id) }));
         setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.filter(e => e.id !== ex.id) } : r));
         setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
@@ -1119,7 +1146,9 @@ const updateSet = (exId, setIdx, field, value) => {
         await supabase.from('exercises').delete().eq('id', ex.id).eq('user_id', uid);
       }}
       onRenameExercise={async (newName) => {
-        const uid = (await getUser()).id;
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
         setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) }));
         setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) } : r));
         await supabase.from('exercises').update({ name: newName }).eq('id', ex.id).eq('user_id', uid);

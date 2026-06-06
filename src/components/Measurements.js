@@ -1,13 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -258,7 +251,8 @@ function Measurements({ metricSystem = 'imperial' }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [loading, setLoading] = useState(true);
-  const [defaultIds, setDefaultIds] = useState(() => new Set(JSON.parse(localStorage.getItem('defaultMeasurementIds') || '[]')));
+  // Populated per-user by loadMeasurements (the localStorage key is scoped by uid).
+  const [defaultIds, setDefaultIds] = useState(() => new Set());
   const [menuOpen, setMenuOpen] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const [renamingMeasurement, setRenamingMeasurement] = useState(null);
@@ -295,7 +289,9 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   const loadMeasurements = async () => {
     setLoading(true);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data: measurementData, error: measurementError } = await supabase
       .from('measurements')
       .select('*')
@@ -304,16 +300,19 @@ function Measurements({ metricSystem = 'imperial' }) {
 
     if (measurementError) { console.error(measurementError); setLoading(false); return; }
 
-    let storedDefaultIds = JSON.parse(localStorage.getItem('defaultMeasurementIds') || '[]');
+    // Seed-tracking is per-user: a stale global key must never block a new account's
+    // defaults. Seed whenever this user has no measurements of their own yet.
+    const storageKey = `defaultMeasurementIds_${uid}`;
+    let storedDefaultIds = JSON.parse(localStorage.getItem(storageKey) || '[]');
 
-    if (storedDefaultIds.length === 0 && measurementData.length === 0) {
+    if (measurementData.length === 0) {
       const { data: seeded, error: seedError } = await supabase
         .from('measurements')
         .insert(DEFAULT_MEASUREMENT_NAMES.map(name => ({ name, user_id: uid })))
         .select();
       if (!seedError && seeded) {
         storedDefaultIds = seeded.map(m => m.id);
-        localStorage.setItem('defaultMeasurementIds', JSON.stringify(storedDefaultIds));
+        localStorage.setItem(storageKey, JSON.stringify(storedDefaultIds));
         setDefaultIds(new Set(storedDefaultIds));
         setMeasurements(seeded.map(m => ({ ...m, entries: [] })));
         setLoading(false);
@@ -323,7 +322,7 @@ function Measurements({ metricSystem = 'imperial' }) {
 
     const validIds = storedDefaultIds.filter(id => measurementData.some(m => m.id === id));
     if (validIds.length !== storedDefaultIds.length) {
-      localStorage.setItem('defaultMeasurementIds', JSON.stringify(validIds));
+      localStorage.setItem(storageKey, JSON.stringify(validIds));
     }
     setDefaultIds(new Set(validIds));
 
@@ -347,7 +346,9 @@ function Measurements({ metricSystem = 'imperial' }) {
   // "+ Add Measurement": create a blank measurement and drop straight into its
   // detail page (like adding a custom food) — name it inline + log the first entry there.
   const createAndOpenMeasurement = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase
       .from('measurements')
       .insert([{ name: '', user_id: uid }])
@@ -366,7 +367,9 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
   const persistActiveName = async () => {
     if (!activeMeasurement) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const name = (activeMeasurement.name || '').trim();
     updateActiveName(name);
     await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id).eq('user_id', uid);
@@ -381,7 +384,9 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
 
   const duplicateMeasurement = async (m) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase.from('measurements').insert([{ name: `${m.name} (copy)`, user_id: uid }]).select().single();
     if (error) { console.error(error); return; }
     setMeasurements(prev => [...prev, { ...data, entries: [] }]);
@@ -391,14 +396,18 @@ function Measurements({ metricSystem = 'imperial' }) {
   const deleteMeasurement = async (m) => {
     setMeasurements(prev => prev.filter(item => item.id !== m.id));
     setMenuOpen(null);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     await supabase.from('measurement_entries').delete().eq('user_id', uid).eq('measurement_id', m.id);
     await supabase.from('measurements').delete().eq('user_id', uid).eq('id', m.id);
   };
 
   const renameMeasurement = async () => {
     if (!renameValue.trim() || !renamingMeasurement) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('measurements').update({ name: renameValue.trim() }).eq('id', renamingMeasurement.id).eq('user_id', uid);
     if (error) { console.error(error); return; }
     setMeasurements(prev => prev.map(m => m.id === renamingMeasurement.id ? { ...m, name: renameValue.trim() } : m));
@@ -407,7 +416,9 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
 
   const deleteEntry = async (entryId) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setActiveMeasurement(prev => ({ ...prev, entries: prev.entries.filter(e => e.id !== entryId) }));
     setMeasurements(prev => prev.map(m =>
       m.id === activeMeasurement.id ? { ...m, entries: m.entries.filter(e => e.id !== entryId) } : m
@@ -418,7 +429,9 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   const saveEditEntry = async (entry) => {
     if (!editValue.trim()) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id).eq('user_id', uid);
     if (error) { console.error(error); return; }
     const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: editValue } : e);
@@ -432,7 +445,9 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   const logEntry = async () => {
     if (!newValue.trim()) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase
       .from('measurement_entries')
       .insert([{

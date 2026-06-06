@@ -21,13 +21,6 @@ import {
   buildMealComponent, sumMealComponents, mealAsFood,
 } from './foodMath';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
 
@@ -535,7 +528,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const loadFoods = async () => {
     setLoading(true);
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase
       .from('food_entries')
       .select('*')
@@ -555,7 +550,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const loadRecentFoods = async () => {
     // Only foods logged in the last 7 days count as "recent".
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase
       .from('food_entries')
       .select('name, calories, protein, carbs, fats')
@@ -581,7 +578,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const loadCustomFoods = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase
       .from('custom_foods')
       .select('*')
@@ -598,7 +597,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // ─── Favorites ─────────────────────────────────────────────
   const loadFavorites = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase
       .from('favorite_foods')
       .select('*')
@@ -609,7 +610,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // ─── Meals ─────────────────────────────────────────────────
   const loadMeals = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase
       .from('meals')
       .select('*')
@@ -659,7 +662,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!mealDraft) return;
     const t = sumMealComponents(mealDraft.components);
     const servings = Number(mealDraft.servings) > 0 ? Number(mealDraft.servings) : 1;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const payload = {
       name: mealDraft.name.trim(), components: mealDraft.components,
       total_grams: t.grams, servings,
@@ -676,7 +681,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const deleteMeal = async (meal) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setMeals(prev => prev.filter(m => m.id !== meal.id));
     closeMealBuilder();
     const { error } = await supabase.from('meals').delete().eq('id', meal.id).eq('user_id', uid);
@@ -696,7 +703,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Persist a favorite (snapshot of the food). No-op if already favorited.
   const addFavorite = async (food) => {
     if (!food?.name || isFavorite(food.name)) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const payload = { name: food.name, is_custom: !!food.isCustom, food, user_id: uid };
     const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
     if (error) { console.error('Failed to add favorite:', error); return; }
@@ -704,7 +713,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const removeFavorite = async (name) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setFavorites(prev => prev.filter(f => f.name !== name));
     const { error } = await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
     if (error) console.error('Failed to remove favorite:', error);
@@ -749,7 +760,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const saveCustomDetail = async () => {
     const e = customEdit;
     if (!e) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const name = (e.name || '').trim() || 'Custom Food';
     const macros = {
       calories: Number(e.calories) || 0,
@@ -822,7 +835,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const deleteCustomFood = async (food) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setCustomFoods(prev => prev.filter(f => f.id !== food.id));
     setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
     if (isFavorite(food.name)) removeFavorite(food.name);
@@ -834,7 +849,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const commitRename = async (food, raw) => {
     const newName = (raw ?? '').trim() || 'Custom Food';
     if (newName === food.name) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
     const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id).eq('user_id', uid);
     if (error) { console.error('Failed to rename custom food:', error); return; }
@@ -883,7 +900,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     showToast(
       `"${item.name}" deleted`,
       () => setFoods(prev => ({ ...prev, [hour]: [...(prev[hour] || []), item] })),
-      async () => { const uid = (await getUser()).id; await supabase.from('food_entries').delete().eq('id', id).eq('user_id', uid); }
+      async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
+        await supabase.from('food_entries').delete().eq('id', id).eq('user_id', uid);
+      }
     );
   };
 
@@ -916,7 +938,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const bulkDeleteSelected = async () => {
     const ids = selectedEntries.map(e => e.id);
     if (ids.length === 0) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     setFoods(prev => {
       const next = {};
       for (const [h, list] of Object.entries(prev)) next[h] = list.filter(f => !ids.includes(f.id));
@@ -929,7 +953,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // Copy the selected foods to the tapped hour on the currently-shown date.
   const copyToHour = async (hour) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const inserts = selectedEntries.map(e => ({
       name: e.name, calories: e.calories, protein: e.protein, carbs: e.carbs, fats: e.fats,
       hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null, food: e.food ?? null,
@@ -949,7 +975,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const count = ids.length;
     exitSelectMode();
     if (count === 0) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).eq('user_id', uid).in('id', ids);
     if (error) { console.error(error); loadFoods(); return; }
     loadFoods();
@@ -1005,7 +1033,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const saveLoggedEntry = async () => {
     const e = editingEntry;
     if (!e) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const food = detailFood;
     const serving = Number(detailServing) || 0;
     const unit = detailUnit;
@@ -1192,7 +1222,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     // serving for the current session — food_entries stores adjusted-total macros with no
     // per-base reference, so a saved serving can't be re-scaled correctly there.
     if (food.isCustom) {
-      const uid = (await getUser()).id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
       supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid)
         .then(({ error }) => { if (error) console.error('Failed to persist serving:', error); });
@@ -1212,7 +1244,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const handleAddChecked = async () => {
     const items = Object.values(checkedFoods);
     if (items.length === 0) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const inserts = items.map(({ food, serving, unit, servings, adjustedMacros }) => ({
       name: food.name,
       calories: adjustedMacros.calories,

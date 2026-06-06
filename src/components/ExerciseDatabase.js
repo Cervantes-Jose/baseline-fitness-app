@@ -5,13 +5,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
   "Shoulders": ["Arnold Press","Band External Shoulder Rotation","Band Internal Shoulder Rotation","Band Pull-Apart","Banded Face Pull","Barbell Front Raise","Barbell Rear Delt Row","Barbell Upright Row","Behind the Neck Press","Cable Internal Shoulder Rotation","Cable External Shoulder Rotation","Cable Front Raise","Cable Lateral Raise","Cable Rear Delt Row","Cuban Press","Devils Press","Dumbbell Front Raise","Dumbbell Lateral Raise","Dumbbell Rear Delt Row","Dumbbell Shoulder Press","Face Pull","Front Hold","Handstand Push-Up","Kettlebell Halo","Kettlebell Press","Kettlebell Push Press","Landmine Press","Machine Lateral Raise","Machine Shoulder Press","Overhead Press","Plate Front Raise","Push Press","Resistance Band Lateral Raise","Reverse Cable Flyes","Reverse Dumbbell Flyes","Reverse Machine Fly","Seated Dumbbell Shoulder Press","Seated Barbell Overhead Press","Seated Smith Machine Shoulder Press","Turkish Get-Up","Z Press"],
@@ -181,7 +174,9 @@ function ExerciseDatabase() {
 
   useEffect(() => {
     (async () => {
-      const uid = (await getUser()).id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
       supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at').then(({ data }) => {
         if (data) setCustomExercises(data);
       });
@@ -225,7 +220,9 @@ function ExerciseDatabase() {
 
   const addToRoutine = async (routineId, routineName) => {
     if (!addTarget) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('exercises').insert([{ routine_id: routineId, name: addTarget.name, user_id: uid }]);
     if (!error) {
       setAddTarget(null);
@@ -234,7 +231,9 @@ function ExerciseDatabase() {
   };
 
   const deleteCustom = async (id) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('custom_exercises').delete().eq('id', id).eq('user_id', uid);
     if (!error) {
       setCustomExercises(prev => prev.filter(e => e.id !== id));
@@ -248,7 +247,9 @@ function ExerciseDatabase() {
     if (!renameTarget) return;
     if (!newName || newName === renameTarget.name) { setRenameTarget(null); setRenameValue(''); return; }
     const oldName = renameTarget.name;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { error } = await supabase.from('custom_exercises').update({ name: newName }).eq('id', renameTarget.id).eq('user_id', uid);
     if (error) { console.error('renameCustom error:', error); return; }
     await supabase.from('exercises').update({ name: newName }).eq('name', oldName).eq('user_id', uid);
@@ -262,7 +263,9 @@ function ExerciseDatabase() {
   // Delete a custom exercise: if it's used in any routine, warn first (naming the
   // routines); otherwise delete straight away. On confirm, also remove it from those routines.
   const requestDelete = async (customEx) => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data } = await supabase.from('exercises').select('routine_id').eq('name', customEx.name).eq('user_id', uid);
     const routineIds = [...new Set((data || []).map(r => r.routine_id))];
     const routineNames = routineIds.map(id => routines.find(r => r.id === id)?.name).filter(Boolean);
@@ -277,7 +280,9 @@ function ExerciseDatabase() {
   const confirmDeleteCascade = async () => {
     if (!deleteTarget) return;
     const { customEx } = deleteTarget;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     await supabase.from('exercises').delete().eq('name', customEx.name).eq('user_id', uid);
     await deleteCustom(customEx.id);
     setDeleteTarget(null);
@@ -286,7 +291,9 @@ function ExerciseDatabase() {
 
   const createCustom = async () => {
     if (!newName.trim()) return;
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase
       .from('custom_exercises')
       .insert([{ name: newName.trim(), category: newCategory, user_id: uid }])

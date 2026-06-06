@@ -1,13 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-// Returns the currently authenticated user. Every Supabase query is scoped to
-// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
-const getUser = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-};
-
 const DEFAULTS = { calorie_goal: 2000, protein_goal: 180, carbs_goal: 200, fats_goal: 60 };
 
 const MACROS = [
@@ -38,7 +31,9 @@ function Goals({ onGoalsUpdate = () => {} }) {
   }, []);
 
   const loadGoals = async () => {
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     const { data, error } = await supabase
       .from('user_goals')
       .select('*')
@@ -68,7 +63,9 @@ function Goals({ onGoalsUpdate = () => {} }) {
       carbs_goal:   draft.carbs_goal,
       fats_goal:    draft.fats_goal,
     };
-    const uid = (await getUser()).id;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
     let error;
     if (rowId) {
       ({ error } = await supabase.from('user_goals').update(payload).eq('id', rowId).eq('user_id', uid));
