@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { supabase } from '../supabaseClient';
 
 // ─── ICONS ──────────────────────────────────────────────────
 // All row icons inherit color from their IconBox (accent), 18px, stroke style.
@@ -198,6 +199,18 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
         <Row icon={ICONS.document} label="Terms of Service" onClick={comingSoon} />
         <Row icon={ICONS.chat} label="Feedback" onClick={comingSoon} isLast />
       </Section>
+
+      {/* Sign Out — App.js redirects to AuthScreen via the onAuthStateChange listener */}
+      <button
+        onClick={() => supabase.auth.signOut()}
+        style={{
+          display: 'block', width: 'calc(100% - 32px)', margin: '24px 16px 0',
+          padding: '14px', background: 'transparent', border: '1px solid var(--border)',
+          borderRadius: 12, color: '#EF4444', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+        }}
+      >
+        Sign Out
+      </button>
 
       <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} theme={theme} setTheme={setTheme} />
 

@@ -7,6 +7,8 @@ import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
 import Profile from './components/Profile';
 import AccountInformation from './components/AccountInformation';
+import AuthScreen from './components/AuthScreen';
+import { supabase } from './supabaseClient';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -60,6 +62,8 @@ function formatTime(seconds) {
 
 // ─── APP ────────────────────────────────────────────────────
 function App() {
+const [user, setUser] = useState(null);
+const [authLoading, setAuthLoading] = useState(true);
 const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
@@ -119,6 +123,20 @@ const changeDate = (dir) => {
   d.setDate(d.getDate() + dir);
   setDate(d);
 };
+
+ // Check the current session on mount and subscribe to auth changes. The
+ // onAuthStateChange listener keeps `user` in sync across sign-in/out (including
+ // the sign-out triggered from Profile, which redirects back to AuthScreen).
+ useEffect(() => {
+   supabase.auth.getSession().then(({ data: { session } }) => {
+     setUser(session?.user ?? null);
+     setAuthLoading(false);
+   });
+   const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+     setUser(session?.user ?? null);
+   });
+   return () => subscription.unsubscribe();
+ }, []);
 
  useEffect(() => {
     if (!activeWorkout) return;
@@ -253,6 +271,21 @@ const changeDate = (dir) => {
       default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
+
+  // While the initial session check is in flight, show a centered spinner.
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <style>{`@keyframes appAuthSpin { to { transform: rotate(360deg); } }`}</style>
+        <span style={{ width: 36, height: 36, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'appAuthSpin 0.7s linear infinite' }} />
+      </div>
+    );
+  }
+
+  // No authenticated user → full-screen auth flow (no tab bar).
+  if (!user) {
+    return <AuthScreen onAuth={setUser} />;
+  }
 
   return (
     <div className="app">
