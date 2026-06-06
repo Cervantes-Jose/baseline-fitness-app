@@ -24,6 +24,15 @@ export default function AddWidgetSheet({ open, onClose, catalog, placedSet, rend
     setShown(false);
   }, [open]);
 
+  // Lock background scroll while the sheet is open (the inner list still scrolls).
+  // Prevents the page behind the overlay from scroll-chaining on mobile.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   if (!mounted) return null;
 
   const toggleSelect = (id) => {
