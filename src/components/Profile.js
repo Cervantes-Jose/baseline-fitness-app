@@ -135,7 +135,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenEditDashboard = () => {}, profileName = 'Jose', theme, setTheme, metricSystem, setMetricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenEditDashboard = () => {}, user, theme, setTheme, metricSystem, setMetricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const toastTimer = useRef(null);
@@ -148,7 +148,17 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
     toastTimer.current = setTimeout(() => setToast(''), 1800);
   };
 
-  const memberSince = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  // Display name = the part of the email before "@", capitalized. Falls back to "User".
+  const emailLocalPart = user?.email ? user.email.split('@')[0] : '';
+  const displayName = emailLocalPart
+    ? emailLocalPart.charAt(0).toUpperCase() + emailLocalPart.slice(1)
+    : 'User';
+
+  // "Baseline member since <Month Year>" from the account creation date, or just
+  // "Baseline member" when no creation date is available.
+  const memberSince = user?.created_at
+    ? `Baseline member since ${new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+    : 'Baseline member';
 
   return (
     <div style={{ paddingTop: 8, paddingBottom: 100 }}>
@@ -162,8 +172,8 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
           </svg>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)' }}>{profileName || 'Jose'}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Baseline member since {memberSince}</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)' }}>{displayName}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{memberSince}</div>
           <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, fontWeight: 700, background: '#EFF6FF', color: '#3B82F6', padding: '3px 10px', borderRadius: 20 }}>
             Free
           </span>
