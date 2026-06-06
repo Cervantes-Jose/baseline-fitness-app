@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
+// Returns the currently authenticated user. Every Supabase query is scoped to
+// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
+const getUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
+
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -288,9 +295,11 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   const loadMeasurements = async () => {
     setLoading(true);
+    const uid = (await getUser()).id;
     const { data: measurementData, error: measurementError } = await supabase
       .from('measurements')
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: true });
 
     if (measurementError) { console.error(measurementError); setLoading(false); return; }
@@ -300,7 +309,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     if (storedDefaultIds.length === 0 && measurementData.length === 0) {
       const { data: seeded, error: seedError } = await supabase
         .from('measurements')
-        .insert(DEFAULT_MEASUREMENT_NAMES.map(name => ({ name })))
+        .insert(DEFAULT_MEASUREMENT_NAMES.map(name => ({ name, user_id: uid })))
         .select();
       if (!seedError && seeded) {
         storedDefaultIds = seeded.map(m => m.id);
@@ -321,6 +330,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     const { data: entryData, error: entryError } = await supabase
       .from('measurement_entries')
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: true });
 
     if (entryError) { console.error(entryError); setLoading(false); return; }
@@ -337,9 +347,10 @@ function Measurements({ metricSystem = 'imperial' }) {
   // "+ Add Measurement": create a blank measurement and drop straight into its
   // detail page (like adding a custom food) — name it inline + log the first entry there.
   const createAndOpenMeasurement = async () => {
+    const uid = (await getUser()).id;
     const { data, error } = await supabase
       .from('measurements')
-      .insert([{ name: '' }])
+      .insert([{ name: '', user_id: uid }])
       .select()
       .single();
     if (error) { console.error(error); return; }
@@ -355,9 +366,10 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
   const persistActiveName = async () => {
     if (!activeMeasurement) return;
+    const uid = (await getUser()).id;
     const name = (activeMeasurement.name || '').trim();
     updateActiveName(name);
-    await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id);
+    await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id).eq('user_id', uid);
   };
 
   const openMeasurement = (m) => {
@@ -369,7 +381,8 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
 
   const duplicateMeasurement = async (m) => {
-    const { data, error } = await supabase.from('measurements').insert([{ name: `${m.name} (copy)` }]).select().single();
+    const uid = (await getUser()).id;
+    const { data, error } = await supabase.from('measurements').insert([{ name: `${m.name} (copy)`, user_id: uid }]).select().single();
     if (error) { console.error(error); return; }
     setMeasurements(prev => [...prev, { ...data, entries: [] }]);
     setMenuOpen(null);
@@ -378,13 +391,15 @@ function Measurements({ metricSystem = 'imperial' }) {
   const deleteMeasurement = async (m) => {
     setMeasurements(prev => prev.filter(item => item.id !== m.id));
     setMenuOpen(null);
-    await supabase.from('measurement_entries').delete().eq('measurement_id', m.id);
-    await supabase.from('measurements').delete().eq('id', m.id);
+    const uid = (await getUser()).id;
+    await supabase.from('measurement_entries').delete().eq('user_id', uid).eq('measurement_id', m.id);
+    await supabase.from('measurements').delete().eq('user_id', uid).eq('id', m.id);
   };
 
   const renameMeasurement = async () => {
     if (!renameValue.trim() || !renamingMeasurement) return;
-    const { error } = await supabase.from('measurements').update({ name: renameValue.trim() }).eq('id', renamingMeasurement.id);
+    const uid = (await getUser()).id;
+    const { error } = await supabase.from('measurements').update({ name: renameValue.trim() }).eq('id', renamingMeasurement.id).eq('user_id', uid);
     if (error) { console.error(error); return; }
     setMeasurements(prev => prev.map(m => m.id === renamingMeasurement.id ? { ...m, name: renameValue.trim() } : m));
     setRenamingMeasurement(null);
@@ -392,17 +407,19 @@ function Measurements({ metricSystem = 'imperial' }) {
   };
 
   const deleteEntry = async (entryId) => {
+    const uid = (await getUser()).id;
     setActiveMeasurement(prev => ({ ...prev, entries: prev.entries.filter(e => e.id !== entryId) }));
     setMeasurements(prev => prev.map(m =>
       m.id === activeMeasurement.id ? { ...m, entries: m.entries.filter(e => e.id !== entryId) } : m
     ));
     setEntryMenuOpen(null);
-    await supabase.from('measurement_entries').delete().eq('id', entryId);
+    await supabase.from('measurement_entries').delete().eq('id', entryId).eq('user_id', uid);
   };
 
   const saveEditEntry = async (entry) => {
     if (!editValue.trim()) return;
-    const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id);
+    const uid = (await getUser()).id;
+    const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id).eq('user_id', uid);
     if (error) { console.error(error); return; }
     const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: editValue } : e);
     setActiveMeasurement(prev => ({ ...prev, entries: updater(prev.entries) }));
@@ -415,13 +432,15 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   const logEntry = async () => {
     if (!newValue.trim()) return;
+    const uid = (await getUser()).id;
     const { data, error } = await supabase
       .from('measurement_entries')
       .insert([{
         measurement_id: activeMeasurement.id,
         value: newValue,
         unit: newUnit,
-        date: newDate
+        date: newDate,
+        user_id: uid
       }])
       .select()
       .single();

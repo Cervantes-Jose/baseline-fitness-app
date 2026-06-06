@@ -21,6 +21,13 @@ import {
   buildMealComponent, sumMealComponents, mealAsFood,
 } from './foodMath';
 
+// Returns the currently authenticated user. Every Supabase query is scoped to
+// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
+const getUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
+
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
 
@@ -528,9 +535,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const loadFoods = async () => {
     setLoading(true);
+    const uid = (await getUser()).id;
     const { data, error } = await supabase
       .from('food_entries')
       .select('*')
+      .eq('user_id', uid)
       .eq('date', dateStr)
       .order('created_at', { ascending: true });
     if (error) { console.error(error); setLoading(false); return; }
@@ -546,9 +555,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const loadRecentFoods = async () => {
     // Only foods logged in the last 7 days count as "recent".
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const uid = (await getUser()).id;
     const { data } = await supabase
       .from('food_entries')
       .select('name, calories, protein, carbs, fats')
+      .eq('user_id', uid)
       .gte('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
       .limit(200);
@@ -570,9 +581,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const loadCustomFoods = async () => {
+    const uid = (await getUser()).id;
     const { data } = await supabase
       .from('custom_foods')
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (data) setCustomFoods(data.map(f => ({
       ...f,
@@ -585,18 +598,22 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // ─── Favorites ─────────────────────────────────────────────
   const loadFavorites = async () => {
+    const uid = (await getUser()).id;
     const { data } = await supabase
       .from('favorite_foods')
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (data) setFavorites(data.map(r => ({ id: r.id, name: r.name, isCustom: r.is_custom, food: r.food })));
   };
 
   // ─── Meals ─────────────────────────────────────────────────
   const loadMeals = async () => {
+    const uid = (await getUser()).id;
     const { data } = await supabase
       .from('meals')
       .select('*')
+      .eq('user_id', uid)
       .order('created_at', { ascending: false });
     if (data) setMeals(data.map(m => ({
       ...m,
@@ -642,6 +659,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!mealDraft) return;
     const t = sumMealComponents(mealDraft.components);
     const servings = Number(mealDraft.servings) > 0 ? Number(mealDraft.servings) : 1;
+    const uid = (await getUser()).id;
     const payload = {
       name: mealDraft.name.trim(), components: mealDraft.components,
       total_grams: t.grams, servings,
@@ -649,8 +667,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       micros: t.micros,
     };
     const { error } = mealDraft.id
-      ? await supabase.from('meals').update(payload).eq('id', mealDraft.id)
-      : await supabase.from('meals').insert([payload]);
+      ? await supabase.from('meals').update(payload).eq('id', mealDraft.id).eq('user_id', uid)
+      : await supabase.from('meals').insert([{ ...payload, user_id: uid }]);
     if (error) { console.error('Failed to save meal:', error); return; }
     await loadMeals();
     closeMealBuilder();
@@ -658,9 +676,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const deleteMeal = async (meal) => {
+    const uid = (await getUser()).id;
     setMeals(prev => prev.filter(m => m.id !== meal.id));
     closeMealBuilder();
-    const { error } = await supabase.from('meals').delete().eq('id', meal.id);
+    const { error } = await supabase.from('meals').delete().eq('id', meal.id).eq('user_id', uid);
     if (error) { console.error('Failed to delete meal:', error); loadMeals(); }
   };
 
@@ -677,15 +696,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Persist a favorite (snapshot of the food). No-op if already favorited.
   const addFavorite = async (food) => {
     if (!food?.name || isFavorite(food.name)) return;
-    const payload = { name: food.name, is_custom: !!food.isCustom, food };
+    const uid = (await getUser()).id;
+    const payload = { name: food.name, is_custom: !!food.isCustom, food, user_id: uid };
     const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
     if (error) { console.error('Failed to add favorite:', error); return; }
     setFavorites(prev => [{ id: data.id, name: data.name, isCustom: data.is_custom, food: data.food }, ...prev]);
   };
 
   const removeFavorite = async (name) => {
+    const uid = (await getUser()).id;
     setFavorites(prev => prev.filter(f => f.name !== name));
-    const { error } = await supabase.from('favorite_foods').delete().eq('name', name);
+    const { error } = await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
     if (error) console.error('Failed to remove favorite:', error);
   };
 
@@ -728,6 +749,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const saveCustomDetail = async () => {
     const e = customEdit;
     if (!e) return;
+    const uid = (await getUser()).id;
     const name = (e.name || '').trim() || 'Custom Food';
     const macros = {
       calories: Number(e.calories) || 0,
@@ -743,8 +765,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const payload = { name, ...macros, micros, saved_serving: serving, saved_unit: unit };
 
     const { data: row, error } = e.id
-      ? await supabase.from('custom_foods').update(payload).eq('id', e.id).select().single()
-      : await supabase.from('custom_foods').insert([payload]).select().single();
+      ? await supabase.from('custom_foods').update(payload).eq('id', e.id).eq('user_id', uid).select().single()
+      : await supabase.from('custom_foods').insert([{ ...payload, user_id: uid }]).select().single();
     if (error) { console.error('Failed to save custom food:', error); return; }
 
     const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
@@ -755,7 +777,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       addFavorite(food);
     } else if (isFavorite(name)) {
       setFavorites(prev => prev.map(f => (f.name === name ? { ...f, food } : f)));
-      supabase.from('favorite_foods').update({ food }).eq('name', name)
+      supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid)
         .then(({ error }) => { if (error) console.error('Failed to update favorite:', error); });
     }
 
@@ -800,10 +822,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const deleteCustomFood = async (food) => {
+    const uid = (await getUser()).id;
     setCustomFoods(prev => prev.filter(f => f.id !== food.id));
     setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
     if (isFavorite(food.name)) removeFavorite(food.name);
-    await supabase.from('custom_foods').delete().eq('id', food.id);
+    await supabase.from('custom_foods').delete().eq('id', food.id).eq('user_id', uid);
   };
 
   // Quick-rename from the Custom Foods edit mode. No-op when the name is unchanged.
@@ -811,13 +834,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const commitRename = async (food, raw) => {
     const newName = (raw ?? '').trim() || 'Custom Food';
     if (newName === food.name) return;
+    const uid = (await getUser()).id;
     setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
-    const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id);
+    const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id).eq('user_id', uid);
     if (error) { console.error('Failed to rename custom food:', error); return; }
     if (isFavorite(food.name)) {
       const snap = { ...food, name: newName };
       setFavorites(prev => prev.map(fv => (fv.name === food.name ? { ...fv, name: newName, food: snap } : fv)));
-      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name)
+      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name).eq('user_id', uid)
         .then(({ error }) => { if (error) console.error('Failed to sync favorite name:', error); });
     }
   };
@@ -859,7 +883,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     showToast(
       `"${item.name}" deleted`,
       () => setFoods(prev => ({ ...prev, [hour]: [...(prev[hour] || []), item] })),
-      async () => { await supabase.from('food_entries').delete().eq('id', id); }
+      async () => { const uid = (await getUser()).id; await supabase.from('food_entries').delete().eq('id', id).eq('user_id', uid); }
     );
   };
 
@@ -892,21 +916,24 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const bulkDeleteSelected = async () => {
     const ids = selectedEntries.map(e => e.id);
     if (ids.length === 0) return;
+    const uid = (await getUser()).id;
     setFoods(prev => {
       const next = {};
       for (const [h, list] of Object.entries(prev)) next[h] = list.filter(f => !ids.includes(f.id));
       return next;
     });
     exitSelectMode();
-    const { error } = await supabase.from('food_entries').delete().in('id', ids);
+    const { error } = await supabase.from('food_entries').delete().eq('user_id', uid).in('id', ids);
     if (error) { console.error(error); loadFoods(); }
   };
 
   // Copy the selected foods to the tapped hour on the currently-shown date.
   const copyToHour = async (hour) => {
+    const uid = (await getUser()).id;
     const inserts = selectedEntries.map(e => ({
       name: e.name, calories: e.calories, protein: e.protein, carbs: e.carbs, fats: e.fats,
       hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null, food: e.food ?? null,
+      user_id: uid,
     }));
     const count = inserts.length;
     exitSelectMode();
@@ -922,7 +949,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const count = ids.length;
     exitSelectMode();
     if (count === 0) return;
-    const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).in('id', ids);
+    const uid = (await getUser()).id;
+    const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).eq('user_id', uid).in('id', ids);
     if (error) { console.error(error); loadFoods(); return; }
     loadFoods();
     showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
@@ -977,6 +1005,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const saveLoggedEntry = async () => {
     const e = editingEntry;
     if (!e) return;
+    const uid = (await getUser()).id;
     const food = detailFood;
     const serving = Number(detailServing) || 0;
     const unit = detailUnit;
@@ -984,7 +1013,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const macros = computeMacros(food, serving, unit, servings);
     const fields = buildLoggedFields(food, serving, unit, servings, macros);
     const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
-    const { error } = await supabase.from('food_entries').update(update).eq('id', e.id);
+    const { error } = await supabase.from('food_entries').update(update).eq('id', e.id).eq('user_id', uid);
     if (error) { console.error('Failed to update entry:', error); return; }
     setEditingEntry(null);
     closeAddFood();
@@ -1144,7 +1173,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // Confirm serving from the detail screen: save the preferred serving back to the
   // source list and add the food (with adjusted macros) to checkedFoods.
-  const confirmDetail = () => {
+  const confirmDetail = async () => {
     const food = detailFood;
     if (!food) return;
     const serving = Number(detailServing) || 0;
@@ -1163,8 +1192,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     // serving for the current session — food_entries stores adjusted-total macros with no
     // per-base reference, so a saved serving can't be re-scaled correctly there.
     if (food.isCustom) {
+      const uid = (await getUser()).id;
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
-      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id)
+      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid)
         .then(({ error }) => { if (error) console.error('Failed to persist serving:', error); });
     } else {
       setRecentFoodList(prev => {
@@ -1182,6 +1212,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const handleAddChecked = async () => {
     const items = Object.values(checkedFoods);
     if (items.length === 0) return;
+    const uid = (await getUser()).id;
     const inserts = items.map(({ food, serving, unit, servings, adjustedMacros }) => ({
       name: food.name,
       calories: adjustedMacros.calories,
@@ -1190,6 +1221,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       fats: adjustedMacros.fats,
       hour: addFoodHour,
       date: dateStr,
+      user_id: uid,
       ...buildLoggedFields(food, serving, unit, servings ?? 1, adjustedMacros),
     }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();

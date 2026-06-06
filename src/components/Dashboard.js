@@ -5,6 +5,13 @@ import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
 
+// Returns the currently authenticated user. Every Supabase query is scoped to
+// this user's id so the RLS policy (user_id = auth.uid()) is satisfied.
+const getUser = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+};
+
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
 // `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
 function useChartDraw(ref, dep) {
@@ -125,9 +132,11 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
     const sinceStr = since.toISOString();
 
     (async () => {
+      const uid = (await getUser()).id;
       const { data: mData } = await supabase
         .from('measurements')
         .select('id')
+        .eq('user_id', uid)
         .ilike('name', measurementName)
         .limit(1);
       if (!mData || mData.length === 0) return;
@@ -135,6 +144,7 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
       const { data } = await supabase
         .from('measurement_entries')
         .select('value, created_at, unit')
+        .eq('user_id', uid)
         .eq('measurement_id', mData[0].id)
         .gte('created_at', sinceStr)
         .order('created_at', { ascending: true });
@@ -351,15 +361,20 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
 
   // All measurements the user tracks — each becomes an available trend widget.
   useEffect(() => {
-    supabase.from('measurements').select('id, name').order('created_at', { ascending: true })
-      .then(({ data }) => { if (data) setMeasurements(data); });
+    (async () => {
+      const uid = (await getUser()).id;
+      supabase.from('measurements').select('id, name').eq('user_id', uid).order('created_at', { ascending: true })
+        .then(({ data }) => { if (data) setMeasurements(data); });
+    })();
   }, []);
 
   const loadData = async () => {
+    const uid = (await getUser()).id;
     // Today's food
     const { data: food } = await supabase
       .from('food_entries')
       .select('calories, protein, carbs, fats')
+      .eq('user_id', uid)
       .eq('date', today);
 
     if (food) {
@@ -373,8 +388,8 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
     // session counts that day as active. Both tables store `date` as a
     // toLocaleDateString() string, so the date strings are directly comparable.
     const [{ data: sessions }, { data: foodDays }] = await Promise.all([
-      supabase.from('workout_sessions').select('date'),
-      supabase.from('food_entries').select('date'),
+      supabase.from('workout_sessions').select('date').eq('user_id', uid),
+      supabase.from('food_entries').select('date').eq('user_id', uid),
     ]);
 
     // Merge both sources into a set of unique active days (as midnight timestamps),
@@ -416,7 +431,8 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
 
     const { data: weekData } = await supabase
       .from('workout_sessions')
-      .select('date');
+      .select('date')
+      .eq('user_id', uid);
 
     if (weekData) {
       setWeekWorkouts(weekData.filter(s => weekDateStrs.has(s.date)).length);
