@@ -248,7 +248,7 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} profileName={profileName} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} profileName={profileName} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} profileName={profileName} setProfileName={setProfileName} metricSystem={metricSystem} />;
       default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }

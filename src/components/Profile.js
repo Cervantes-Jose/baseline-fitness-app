@@ -134,7 +134,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, profileName = 'Jose', theme, setTheme, metricSystem, setMetricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenEditDashboard = () => {}, profileName = 'Jose', theme, setTheme, metricSystem, setMetricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const toastTimer = useRef(null);
@@ -182,7 +182,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
         <Row icon={ICONS.target} label="Nutrition Targets" onClick={onOpenGoals} />
         <Row icon={ICONS.dumbbell} label="Workout Preferences" onClick={comingSoon} />
         <Row icon={ICONS.appearance} label="App Appearance" onClick={() => setThemeOpen(true)} />
-        <Row icon={ICONS.grid} label="Edit Dashboard" onClick={comingSoon} isLast />
+        <Row icon={ICONS.grid} label="Edit Dashboard" onClick={onOpenEditDashboard} isLast />
       </Section>
 
       {/* NOTIFICATIONS */}
