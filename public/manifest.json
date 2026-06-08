@@ -1,17 +1,18 @@
 {
+  "id": "app.baselinestudios.baseline",
   "name": "Baseline Fitness",
   "short_name": "Baseline Fitness",
+  "description": "Track everything. Know your baseline. Food logging, workout tracking, and body measurements in one place.",
+  "categories": ["health", "fitness", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#EFF8FF",
   "theme_color": "#3B82F6",
   "orientation": "portrait",
   "icons": [
-    {
-      "src": "favicon.ico",
-      "sizes": "64x64",
-      "type": "image/x-icon"
-    },
     {
       "src": "logo192.png",
       "sizes": "192x192",
