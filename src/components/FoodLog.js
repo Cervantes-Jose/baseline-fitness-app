@@ -12,7 +12,7 @@
 // alter table public.favorite_foods enable row level security;
 // create policy "Allow all for now" on public.favorite_foods for all using (true) with check (true);
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase, supabaseAnonKey } from '../supabaseClient';
 import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
 import {
@@ -22,7 +22,6 @@ import {
 } from './foodMath';
 
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhidm5jYnZveWF0eGJkaGtraWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzOTQzNzgsImV4cCI6MjA5NDk3MDM3OH0.rMAoMAlVvaAgfcAM4um750S-ZFXLccVy45OGe2-VHl0';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => {
   const h = i % 12 === 0 ? 12 : i % 12;
@@ -537,6 +536,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       .eq('user_id', uid)
       .eq('date', dateStr)
       .order('created_at', { ascending: true });
+    // eslint-disable-next-line no-console
     if (error) { console.error(error); setLoading(false); return; }
     const grouped = {};
     data.forEach(entry => {
@@ -674,6 +674,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { error } = mealDraft.id
       ? await supabase.from('meals').update(payload).eq('id', mealDraft.id).eq('user_id', uid)
       : await supabase.from('meals').insert([{ ...payload, user_id: uid }]);
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to save meal:', error); return; }
     await loadMeals();
     closeMealBuilder();
@@ -687,6 +688,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setMeals(prev => prev.filter(m => m.id !== meal.id));
     closeMealBuilder();
     const { error } = await supabase.from('meals').delete().eq('id', meal.id).eq('user_id', uid);
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to delete meal:', error); loadMeals(); }
   };
 
@@ -708,6 +710,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     const payload = { name: food.name, is_custom: !!food.isCustom, food, user_id: uid };
     const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to add favorite:', error); return; }
     setFavorites(prev => [{ id: data.id, name: data.name, isCustom: data.is_custom, food: data.food }, ...prev]);
   };
@@ -718,6 +721,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     setFavorites(prev => prev.filter(f => f.name !== name));
     const { error } = await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
+    // eslint-disable-next-line no-console
     if (error) console.error('Failed to remove favorite:', error);
   };
 
@@ -780,6 +784,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { data: row, error } = e.id
       ? await supabase.from('custom_foods').update(payload).eq('id', e.id).eq('user_id', uid).select().single()
       : await supabase.from('custom_foods').insert([{ ...payload, user_id: uid }]).select().single();
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to save custom food:', error); return; }
 
     const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
@@ -791,6 +796,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     } else if (isFavorite(name)) {
       setFavorites(prev => prev.map(f => (f.name === name ? { ...f, food } : f)));
       supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid)
+        // eslint-disable-next-line no-console
         .then(({ error }) => { if (error) console.error('Failed to update favorite:', error); });
     }
 
@@ -854,11 +860,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
     const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id).eq('user_id', uid);
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to rename custom food:', error); return; }
     if (isFavorite(food.name)) {
       const snap = { ...food, name: newName };
       setFavorites(prev => prev.map(fv => (fv.name === food.name ? { ...fv, name: newName, food: snap } : fv)));
       supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name).eq('user_id', uid)
+        // eslint-disable-next-line no-console
         .then(({ error }) => { if (error) console.error('Failed to sync favorite name:', error); });
     }
   };
@@ -878,13 +886,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     try {
       const res = await fetch(
         `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
-        { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'apikey': SUPABASE_ANON_KEY }, signal: searchAbortRef.current.signal }
+        { headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey }, signal: searchAbortRef.current.signal }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSearchResults(Array.isArray(data) ? data : (data.foods || []));
     } catch (err) {
       if (err.name === 'AbortError') return;
+      // eslint-disable-next-line no-console
       console.error('Food search error:', err);
       setSearchError('Search unavailable');
       setSearchResults(null);
@@ -948,6 +957,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     });
     exitSelectMode();
     const { error } = await supabase.from('food_entries').delete().eq('user_id', uid).in('id', ids);
+    // eslint-disable-next-line no-console
     if (error) { console.error(error); loadFoods(); }
   };
 
@@ -964,6 +974,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const count = inserts.length;
     exitSelectMode();
     const { error } = await supabase.from('food_entries').insert(inserts);
+    // eslint-disable-next-line no-console
     if (error) { console.error(error); return; }
     loadFoods();
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
@@ -979,6 +990,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).eq('user_id', uid).in('id', ids);
+    // eslint-disable-next-line no-console
     if (error) { console.error(error); loadFoods(); return; }
     loadFoods();
     showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
@@ -1044,6 +1056,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const fields = buildLoggedFields(food, serving, unit, servings, macros);
     const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
     const { error } = await supabase.from('food_entries').update(update).eq('id', e.id).eq('user_id', uid);
+    // eslint-disable-next-line no-console
     if (error) { console.error('Failed to update entry:', error); return; }
     setEditingEntry(null);
     closeAddFood();
@@ -1107,6 +1120,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         }
       );
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Camera error full:', err);
       setScannerError(err.message || err.toString() || 'Unknown error');
       // Keep the overlay open so the on-screen error is visible (close via the × button).
@@ -1126,7 +1140,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const handleBarcodeResult = async (barcode) => {
     setScanning(true);
     try {
-      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+      const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
       const data = await response.json();
 
       if (data.status !== 1 || !data.product) {
@@ -1158,6 +1172,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setScanning(false);
       openDetail(food);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Barcode lookup error:', err);
       showToast('Could not look up product', null, null);
       setScanning(false);
@@ -1227,6 +1242,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       if (!uid) return;
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
       supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid)
+        // eslint-disable-next-line no-console
         .then(({ error }) => { if (error) console.error('Failed to persist serving:', error); });
     } else {
       setRecentFoodList(prev => {
@@ -1259,6 +1275,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ...buildLoggedFields(food, serving, unit, servings ?? 1, adjustedMacros),
     }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
+    // eslint-disable-next-line no-console
     if (error) { console.error(error); return; }
     const newFoods = { ...foods };
     data.forEach(entry => {
