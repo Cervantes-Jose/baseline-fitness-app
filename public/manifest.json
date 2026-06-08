@@ -1,5 +1,5 @@
 {
-  "id": "app.baselinestudios.baseline",
+  "id": "com.baselinestudios.baselinefitness",
   "name": "Baseline Fitness",
   "short_name": "Baseline Fitness",
   "description": "Track everything. Know your baseline. Food logging, workout tracking, and body measurements in one place.",
@@ -10,7 +10,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#EFF8FF",
-  "theme_color": "#3B82F6",
+  "theme_color": "#FAFBFC",
   "orientation": "portrait",
   "icons": [
     {
