@@ -1,8 +1,11 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "com.baselinestudios.baselinefitness",
-        "sha256_cert_fingerprints": ["C9:82:B4:E6:45:98:96:31:1E:E9:A2:20:20:DC:7E:63:06:8D:44:60:A2:63:D7:F6:26:51:81:AB:9F:89:91:1F"]
-      }
-    }]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.baselinestudios.baselinefitness",
+      "sha256_cert_fingerprints":
+        ["A2:CC:2B:99:F9:7F:53:D4:31:BE:CA:D3:EA:AC:2C:4E:52:08:7B:98:FA:87:B2:D4:A2:FB:EC:8F:D2:84:06:4D"]
+    }
+  }
+]
