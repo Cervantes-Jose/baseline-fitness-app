@@ -3,6 +3,7 @@
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   /* Kill the blue flash when tapping pills/buttons on mobile */
   -webkit-tap-highlight-color: transparent;
   /* Prevent the long-press "search/copy" callout + text-selection popup */
@@ -249,6 +250,13 @@ border-bottom: none;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
+/* Promote cards to their own GPU layer so transforms/scroll stay smooth on 120/144hz */
+.card, .card-flat {
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
 /* Dashboard Tiles */
 .tile-grid {
   display: grid;
@@ -407,4 +415,12 @@ border-bottom: none;
 @keyframes restTileIn {
   from { opacity: 0; transform: translateY(-6px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Respect users who prefer reduced motion (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

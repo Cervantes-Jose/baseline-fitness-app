@@ -88,17 +88,9 @@ const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
 function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
-  const contentRef = useRef(null);
-  const [contentHeight, setContentHeight] = useState(0);
   // Which rest slot (set index) is being manually edited, and its draft text.
   const [editingRest, setEditingRest] = useState(null);
   const [restDraft, setRestDraft] = useState('');
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight);
-    }
-  }, [expanded, sessionLog, restTimers, editingRest]);
 
   const sets = sessionLog ? (sessionLog[ex.id] || []) : [];
   const prevSets = ex.lastSession?.sets || [];
@@ -214,17 +206,16 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
 
         {!exerciseEditMode && (
           <div style={{
-            height: expanded ? `${contentHeight}px` : '0px',
+            maxHeight: expanded ? '2000px' : '0px',
             overflow: 'hidden',
             opacity: expanded ? 1 : 0,
-            transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
-            willChange: 'height',
+            transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
             transform: 'translateZ(0)',
             WebkitTransform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
           }}>
-            <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
+            <div style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '32px 54px 1fr 1fr 36px', gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
@@ -312,14 +303,8 @@ function RestRow({ duration, running, remaining, status, onSkip, name = 'Rest' }
 }
 
 function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isCustom = false, isExpanded, onToggleExpand, onDeleteExercise, onRenameExercise, restTimers = [], activeRest, restRemaining, restStatus = {}, onSkipRest = () => {} }) {
-  const contentRef = useRef(null);
-  const [contentHeight, setContentHeight] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [nameDraft, setNameDraft] = useState(ex.name);
-
-  useEffect(() => {
-    if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
-  }, [isExpanded, sessionLog, checkedSets, editMode, restTimers, restStatus, activeRest]);
 
   // Collapsing the card (e.g. opening another exercise) also exits edit mode.
   useEffect(() => { if (!isExpanded) setEditMode(false); }, [isExpanded]);
@@ -388,8 +373,8 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
           </svg>
         )}
       </div>
-      <div style={{ height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', willChange: 'height', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-        <div ref={contentRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
+      <div style={{ maxHeight: isExpanded ? '2000px' : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+        <div style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px', ...shrink }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
@@ -469,11 +454,10 @@ function SortableRoutineWrapper({ id, children }) {
 }
 
 function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedExercises, onToggleExercise, pickerCustomExercises }) {
-  const contentRef = useRef(null);
-  const [contentHeight, setContentHeight] = useState(0);
-  useEffect(() => {
-    if (contentRef.current) setContentHeight(contentRef.current.scrollHeight);
-  }, [isExpanded, exercises.length, selectedExercises]);
+  // Upper bound for the expanded height, derived from the row count (no per-frame DOM
+  // measurement). Generous per-row estimate so the tallest categories (40+ exercises)
+  // never clip, while staying tight enough that the collapse animation reads well.
+  const expandedMax = exercises.length * 60 + 60;
   return (
     <div>
       <div onClick={onToggle} style={{
@@ -492,11 +476,11 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
         </svg>
       </div>
       <div style={{
-        height: isExpanded ? `${contentHeight}px` : '0px', overflow: 'hidden',
+        maxHeight: isExpanded ? `${expandedMax}px` : '0px', overflow: 'hidden',
         opacity: isExpanded ? 1 : 0,
-        transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease', willChange: 'height',
+        transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
       }}>
-        <div ref={contentRef} style={{
+        <div style={{
           display: 'flex', flexDirection: 'column', gap: '6px',
           padding: '8px 16px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
         }}>
@@ -1211,8 +1195,9 @@ const updateSet = (exId, setIdx, field, value) => {
       <div style={{
         position: 'fixed', inset: 0, zIndex: 350,
         background: 'var(--bg)',
-        transform: workoutExpanded ? `translateY(${dragY}px)` : 'translateY(100%)',
+        transform: workoutExpanded ? `translateY(${dragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
         transition: dragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        willChange: 'transform',
         display: 'flex', flexDirection: 'column',
       }}>
         {/* Drag handle */}
@@ -1310,8 +1295,9 @@ const updateSet = (exId, setIdx, field, value) => {
   const exercisePickerSheet = showExercisePicker && (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
-      transform: pickerOpen ? `translateY(${pickerDragY}px)` : 'translateY(100%)',
+      transform: pickerOpen ? `translateY(${pickerDragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
       transition: pickerDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      willChange: 'transform',
       display: 'flex', flexDirection: 'column',
     }}>
       {/* Drag handle — full 60px touch area */}
