@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import Dashboard from './components/Dashboard';
 import FoodLog from './components/FoodLog';
@@ -34,24 +34,13 @@ function getHeaderTitle(activeTab) {
 
 // ─── SCREENS ────────────────────────────────────────────────
 
-function getGreeting(name) {
-  const hour = new Date().getHours();
-  const greetings = {
-    morning: ['Good morning', 'Morning'],
-    afternoon: ['Good afternoon', 'Hey', `Hi ${name}`],
-    evening: ['Good evening', 'Evening', 'Hey there'],
-    night: ['Good night', 'Hey'],
-  };
-  let timeOfDay;
-  if (hour >= 5 && hour < 12) timeOfDay = 'morning';
-  else if (hour >= 12 && hour < 17) timeOfDay = 'afternoon';
-  else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
-  else timeOfDay = 'night';
-
-  const options = greetings[timeOfDay];
-  const greeting = options[Math.floor(Math.random() * options.length)];
-  return greeting.includes(name) ? greeting : `${greeting}, ${name}`;
-}
+// Per-user data cached in localStorage. Cleared on sign-out so a different account
+// signing in on the same browser never sees the previous user's data. (Device-level
+// preferences like theme/metricSystem are intentionally not in this list.)
+const PER_USER_KEYS = [
+  'accountInfo', 'profileName', 'dashboardLayout', 'routineOrder',
+  'activeWorkout', 'activeWorkoutLog', 'workoutSeconds', 'activeTab',
+];
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -68,7 +57,6 @@ const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
-const [profileName, setProfileName] = useState(() => localStorage.getItem('profileName') || 'Jose');
 const [calorieGoal, setCalorieGoal] = useState(2000);
 // eslint-disable-next-line no-unused-vars
 const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
@@ -104,8 +92,6 @@ const [updateAvailable, setUpdateAvailable] = useState(false);
 const toastTimerRef = useRef(null);
 const pendingDeleteRef = useRef(null);
 const toastIdRef = useRef(0);
-// eslint-disable-next-line no-unused-vars
-const greeting = useMemo(() => getGreeting(profileName), [profileName]);
 const showToast = (message, onUndo, onConfirmDelete) => {
   if (pendingDeleteRef.current) pendingDeleteRef.current();
   clearTimeout(toastTimerRef.current);
@@ -138,7 +124,16 @@ const changeDate = (dir) => {
      if (event === 'PASSWORD_RECOVERY') { setUser(null); return; }
      setUser(session?.user ?? null);
      // Session ended (sign-out or expired/failed token refresh) → back to AuthScreen.
-     if (event === 'SIGNED_OUT') setUser(null);
+     // Wipe per-user localStorage and in-memory workout state so the next account to
+     // sign in on this browser never inherits the previous user's data.
+     if (event === 'SIGNED_OUT') {
+       setUser(null);
+       PER_USER_KEYS.forEach(k => localStorage.removeItem(k));
+       setActiveWorkout(null);
+       setWorkoutSeconds(0);
+       setShowWorkoutRecovery(false);
+       setActiveTab('dashboard');
+     }
    });
    return () => subscription.unsubscribe();
  }, []);
@@ -217,7 +212,6 @@ const changeDate = (dir) => {
     }
   }, [theme]);
 
-  useEffect(() => { localStorage.setItem('profileName', profileName); }, [profileName]);
   useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('metricSystem', metricSystem); }, [metricSystem]);
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
@@ -271,8 +265,8 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} profileName={profileName} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
-      case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} profileName={profileName} setProfileName={setProfileName} metricSystem={metricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} user={user} metricSystem={metricSystem} />;
       default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };

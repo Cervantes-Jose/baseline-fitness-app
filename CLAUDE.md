@@ -38,10 +38,30 @@ npm test -- --watchAll=false  # single run
 
 Every new table must include all four steps. Never skip any of them:
 
-1. CREATE the table
-2. GRANT access: grant select, insert, update, delete on public.your_table to anon, authenticated, service_role;
-3. ENABLE RLS: alter table public.your_table enable row level security;
-4. ADD POLICY: create policy "Allow all for now" on public.your_table for all using (true) with check (true);
+1. CREATE the table (always include user_id column):
+   create table public.your_table (
+     id uuid default gen_random_uuid() primary key,
+     user_id uuid references auth.users(id) not null,
+     -- your columns here
+     created_at timestamptz default now()
+   );
+
+2. GRANT access:
+   grant select, insert, update, delete on public.your_table to anon, authenticated, service_role;
+
+3. ENABLE RLS:
+   alter table public.your_table enable row level security;
+
+4. ADD POLICY (scoped to authenticated user — never use "Allow all for now"):
+   create policy "Users can only access their own data"
+   on public.your_table
+   for all
+   using (auth.uid() = user_id)
+   with check (auth.uid() = user_id);
+
+Never use using (true) — that allows any authenticated user to read all other users' data.
+
+Note: For tables with server-only fields (subscription status, rate limits, billing), a blanket for all owner policy is not sufficient — see the RLS Audit Scenarios section below for additional checks required.
 
 Missing the GRANT step causes a 403 permission denied error from the Data API.
 

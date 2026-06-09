@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { supabase } from '../supabaseClient';
 
-// NOTE: account fields persist to localStorage for now — the app has no auth, so a
-// shared Supabase row would be wrong until login exists. `name` is wired to the
-// global profileName (App) so it stays in sync with the Dashboard greeting / Profile
-// header. Profile-photo upload is deferred (needs storage); the row toasts for now.
+// Account fields are per-user: Name lives in Supabase auth user_metadata
+// (`first_name`), Email is the read-only auth login email, and Gender/DOB/Height
+// live in the `profiles` table (one row per user, RLS-scoped to auth.uid()).
+// Profile-photo upload is deferred (needs storage); the row toasts for now.
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
@@ -29,15 +30,15 @@ function Section({ title, children }) {
 
 // label + current value + chevron (taps to edit). Value greys out as a placeholder
 // when unset.
-function ValueRow({ label, value, placeholder, onClick, isLast }) {
+function ValueRow({ label, value, placeholder, onClick, isLast, readOnly }) {
   const empty = value == null || value === '';
   return (
-    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: isLast ? 'none' : '1px solid var(--border)', cursor: 'pointer' }}>
+    <div onClick={readOnly ? undefined : onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: isLast ? 'none' : '1px solid var(--border)', cursor: readOnly ? 'default' : 'pointer' }}>
       <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{label}</span>
       <span style={{ fontSize: 15, color: empty ? 'var(--text-muted)' : 'var(--text-secondary)', maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {empty ? (placeholder || 'Not set') : value}
       </span>
-      <Chevron />
+      {!readOnly && <Chevron />}
     </div>
   );
 }
@@ -121,34 +122,82 @@ function EditSheet({ field, onClose, onSave }) {
 }
 
 // ─── ACCOUNT INFORMATION ────────────────────────────────────
-export default function AccountInformation({ onBack = () => {}, profileName = '', setProfileName = () => {}, metricSystem = 'imperial' }) {
-  const [account, setAccount] = useState(() => {
-    try { return { email: '', gender: '', dob: '', height: '', ...JSON.parse(localStorage.getItem('accountInfo')) }; }
-    catch { return { email: '', gender: '', dob: '', height: '' }; }
-  });
+export default function AccountInformation({ onBack = () => {}, user = null, metricSystem = 'imperial' }) {
+  // gender/dob/height come from this user's `profiles` row; name + email come from auth.
+  const [profile, setProfile] = useState({ gender: '', dob: '', height: '' });
   const [editing, setEditing] = useState(null);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
+  const uid = user?.id;
+  const firstName = user?.user_metadata?.first_name || '';
+  const email = user?.email || '';
+
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
-  const persist = (next) => { try { localStorage.setItem('accountInfo', JSON.stringify(next)); } catch {} };
+  // Load this user's profile fields. RLS guarantees only their own row is returned.
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('gender, dob, height')
+        .eq('user_id', uid)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) { console.error(error); return; }
+      if (data) {
+        setProfile({
+          gender: data.gender || '',
+          dob: data.dob || '',
+          height: data.height != null ? String(data.height) : '',
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [uid]);
 
-  const saveField = (key, value) => {
-    const v = typeof value === 'string' ? value.trim() : value;
-    if (key === 'name') { setProfileName(v || 'Jose'); return; }
-    setAccount(prev => { const next = { ...prev, [key]: v }; persist(next); return next; });
-  };
-
-  const photoComingSoon = () => {
-    setToast('Coming soon');
+  const showToast = (msg) => {
+    setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 1800);
   };
 
+  // Upsert gender/dob/height into the user's single profiles row (unique on user_id).
+  const saveProfile = async (key, value) => {
+    if (!uid) return;
+    const v = typeof value === 'string' ? value.trim() : value;
+    const next = { ...profile, [key]: v };
+    setProfile(next);
+    const { error } = await supabase.from('profiles').upsert({
+      user_id: uid,
+      gender: next.gender || null,
+      dob: next.dob || null,
+      height: next.height === '' ? null : Number(next.height),
+    }, { onConflict: 'user_id' });
+    if (error) { console.error(error); showToast('Could not save'); }
+  };
+
+  // Name lives in auth user_metadata. App.user refreshes via the onAuthStateChange
+  // USER_UPDATED listener, so the Dashboard greeting / Profile header update too.
+  const saveName = async (value) => {
+    const v = (value || '').trim();
+    if (!v) return;
+    const { error } = await supabase.auth.updateUser({ data: { first_name: v } });
+    if (error) { console.error(error); showToast('Could not save name'); }
+  };
+
+  const saveField = (key, value) => {
+    if (key === 'name') { saveName(value); return; }
+    saveProfile(key, value);
+  };
+
+  const photoComingSoon = () => showToast('Coming soon');
+
   const heightUnit = metricSystem === 'metric' ? 'cm' : 'in';
-  const dobDisplay = account.dob
-    ? new Date(account.dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const dobDisplay = profile.dob
+    ? new Date(profile.dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : '';
 
   return (
@@ -171,20 +220,19 @@ export default function AccountInformation({ onBack = () => {}, profileName = ''
           <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Profile Photo</span>
           <Chevron />
         </div>
-        <ValueRow label="Name" value={profileName}
-          onClick={() => setEditing({ key: 'name', label: 'Name', value: profileName, placeholder: 'Your name' })} />
-        <ValueRow label="Email" value={account.email} placeholder="Add email" isLast
-          onClick={() => setEditing({ key: 'email', label: 'Email', value: account.email, inputType: 'email', inputMode: 'email', placeholder: 'you@example.com' })} />
+        <ValueRow label="Name" value={firstName} placeholder="Your name"
+          onClick={() => setEditing({ key: 'name', label: 'Name', value: firstName, placeholder: 'Your name' })} />
+        <ValueRow label="Email" value={email} placeholder="No email" readOnly isLast />
       </Section>
 
       {/* PERSONAL */}
       <Section title="Personal">
-        <ValueRow label="Gender" value={account.gender}
-          onClick={() => setEditing({ key: 'gender', label: 'Gender', value: account.gender, options: GENDER_OPTIONS })} />
+        <ValueRow label="Gender" value={profile.gender}
+          onClick={() => setEditing({ key: 'gender', label: 'Gender', value: profile.gender, options: GENDER_OPTIONS })} />
         <ValueRow label="Date of Birth" value={dobDisplay}
-          onClick={() => setEditing({ key: 'dob', label: 'Date of Birth', value: account.dob, inputType: 'date' })} />
-        <ValueRow label="Height" value={account.height ? `${account.height} ${heightUnit}` : ''} isLast
-          onClick={() => setEditing({ key: 'height', label: `Height (${heightUnit})`, value: account.height, inputType: 'number', inputMode: 'decimal', placeholder: heightUnit })} />
+          onClick={() => setEditing({ key: 'dob', label: 'Date of Birth', value: profile.dob, inputType: 'date' })} />
+        <ValueRow label="Height" value={profile.height ? `${profile.height} ${heightUnit}` : ''} isLast
+          onClick={() => setEditing({ key: 'height', label: `Height (${heightUnit})`, value: profile.height, inputType: 'number', inputMode: 'decimal', placeholder: heightUnit })} />
       </Section>
 
       <EditSheet field={editing} onClose={() => setEditing(null)} onSave={saveField} />
