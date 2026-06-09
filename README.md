@@ -146,7 +146,6 @@ This is the same workflow used at many professional software teams today. Knowin
 - [ ] Samsung Health / Apple Health integration
 - [ ] Community food database (user-submitted foods shared across accounts)
 - [ ] Subscription tier with Stripe
-- [ ] Cycle tracking and correlation dashboard
 - [ ] Rest timer countdown in active workouts
 
 ---
