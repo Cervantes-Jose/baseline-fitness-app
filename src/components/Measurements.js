@@ -687,8 +687,9 @@ function Measurements({ metricSystem = 'imperial' }) {
     return (
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button onClick={() => setView('list')}
-          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', textAlign: 'left', padding: 0 }}>
-          ← Back
+          style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', alignSelf: 'flex-start' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          Back
         </button>
         <input
           value={activeMeasurement.name}

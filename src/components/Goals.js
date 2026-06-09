@@ -9,7 +9,7 @@ const MACROS = [
   { label: 'Fats',    goalKey: 'fats_goal',    mKey: 'fats',    factor: 9 },
 ];
 
-function Goals({ onGoalsUpdate = () => {} }) {
+function Goals({ onGoalsUpdate = () => {}, onBack = () => {} }) {
   const [draft, setDraft] = useState(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -156,6 +156,12 @@ function Goals({ onGoalsUpdate = () => {} }) {
 
   return (
     <div className="content" style={{ paddingBottom: '120px' }}>
+
+      {/* Back to Profile */}
+      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '0 0 12px' }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        Back
+      </button>
 
       {/* Calorie Goal card */}
       <div className="card">

@@ -29,6 +29,31 @@ const routineColor = (id) => {
   return CHART_COLORS[hash % CHART_COLORS.length];
 };
 
+// Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
+// once; if a name appears in multiple categories it's attributed to the first
+// (canonical CATEGORIES order). Categories aren't stored on the `exercises` table,
+// so we resolve them by name here. Custom exercises (not in the database) resolve to
+// undefined and are simply omitted from a routine's category list.
+const NAME_TO_CATEGORY = (() => {
+  const map = {};
+  for (const cat of CATEGORIES) {
+    for (const name of EXERCISE_DATABASE[cat]) {
+      if (!(name in map)) map[name] = cat;
+    }
+  }
+  return map;
+})();
+
+// The unique categories represented by a routine's exercises, in canonical order.
+const routineCategories = (routine) => {
+  const present = new Set();
+  for (const ex of routine.exercises || []) {
+    const cat = ex.category || NAME_TO_CATEGORY[ex.name];
+    if (cat) present.add(cat);
+  }
+  return CATEGORIES.filter(c => present.has(c));
+};
+
 function formatHMS(seconds) {
   const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
   const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -1082,7 +1107,7 @@ const updateSet = (exId, setIdx, field, value) => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx, user_id: uid }));
+    const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx, user_id: uid, category: NAME_TO_CATEGORY[name] || null }));
     const { data, error } = await supabase.from('exercises').insert(inserts).select();
     if (error) { console.error(error); return; }
     const newExs = data.map(ex => ({ ...ex, lastSession: null }));
@@ -1449,12 +1474,17 @@ const updateSet = (exId, setIdx, field, value) => {
             ) : (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)' }}>{r.name}</div>
+                  <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)', lineHeight: 1.1 }}>{r.name}</div>
                   {activeWorkout?.routine?.id === r.id && (
                     <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>Active</span>
                   )}
                 </div>
-                <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid var(--blue-200)', borderRadius: '20px', padding: '2px 10px' }}>
+                {routineCategories(r).length > 0 && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {routineCategories(r).join('  •  ')}
+                  </div>
+                )}
+                <span style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid var(--blue-200)', borderRadius: '20px', padding: '2px 10px' }}>
                   {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
                 </span>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
@@ -1557,7 +1587,8 @@ const updateSet = (exId, setIdx, field, value) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           <button onClick={() => { setView('routines'); setExerciseEditMode(false); setSelectedExercises(new Set()); }}
             style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-            ← Back
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            Back
           </button>
           {activeRoutine?.name && (
             <>
@@ -1653,8 +1684,8 @@ const updateSet = (exId, setIdx, field, value) => {
           ) : (
             initialView !== 'history' && (
               <button onClick={() => setView('routines')}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: 0 }}>
-                ←
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: 0, display: 'flex', alignItems: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
             )
           )}
