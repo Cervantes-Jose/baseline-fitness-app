@@ -208,8 +208,7 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
           <div style={{
             maxHeight: expanded ? '2000px' : '0px',
             overflow: 'hidden',
-            opacity: expanded ? 1 : 0,
-            transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
+            transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             transform: 'translateZ(0)',
             WebkitTransform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
@@ -373,7 +372,7 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
           </svg>
         )}
       </div>
-      <div style={{ maxHeight: isExpanded ? '2000px' : '0px', overflow: 'hidden', opacity: isExpanded ? 1 : 0, transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+      <div style={{ maxHeight: isExpanded ? '2000px' : '0px', overflow: 'hidden', transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <div style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px', ...shrink }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
@@ -477,8 +476,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
       </div>
       <div style={{
         maxHeight: isExpanded ? `${expandedMax}px` : '0px', overflow: 'hidden',
-        opacity: isExpanded ? 1 : 0,
-        transition: 'max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease',
+        transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         <div style={{
           display: 'flex', flexDirection: 'column', gap: '6px',
