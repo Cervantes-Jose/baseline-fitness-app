@@ -243,8 +243,8 @@ const changeDate = (dir) => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
-      case 'dashboard-edit': return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
+      case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
+      case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} /></div>;
       case 'profile-goals': return <Goals onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'workout-start':
@@ -273,7 +273,7 @@ const changeDate = (dir) => {
         />;
       case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} profileName={profileName} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} profileName={profileName} setProfileName={setProfileName} metricSystem={metricSystem} />;
-      default: return <Dashboard profileName={profileName} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
+      default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
 

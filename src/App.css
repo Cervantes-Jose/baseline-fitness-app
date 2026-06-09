@@ -3,6 +3,18 @@
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  /* Kill the blue flash when tapping pills/buttons on mobile */
+  -webkit-tap-highlight-color: transparent;
+  /* Prevent the long-press "search/copy" callout + text-selection popup */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* …but form fields must stay selectable so users can edit their text */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 :root {

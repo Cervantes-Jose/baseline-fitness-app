@@ -316,7 +316,7 @@ function SortableWidget({ id, selected, onSelect, width = '100%', children }) {
   );
 }
 
-function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMode = false, onExitEdit = () => {} }) {
+function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMode = false, onExitEdit = () => {} }) {
   const [calories, setCalories] = useState(0);
   const [protein, setProtein] = useState(0);
   const [carbs, setCarbs] = useState(0);
@@ -440,7 +440,12 @@ function Dashboard({ profileName, calorieGoal, proteinGoal, carbsGoal, fatsGoal,
 
   const hour = new Date().getHours();
   const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-  const greeting = `Good ${timeOfDay}, ${profileName}`;
+  // Display name: the first name set at signup (user metadata), else the email's
+  // local part, else a neutral fallback.
+  const metaName = user?.user_metadata?.first_name;
+  const emailPrefix = user?.email ? user.email.split('@')[0] : '';
+  const displayName = metaName || emailPrefix || 'there';
+  const greeting = `Good ${timeOfDay}, ${displayName}`;
 
   const remaining = Math.max(calorieGoal - calories, 0);
 

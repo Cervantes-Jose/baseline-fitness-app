@@ -19,6 +19,7 @@ function ButtonSpinner() {
 // there is no authenticated user. No bottom tab bar here.
 export default function AuthScreen({ onAuth = () => {} }) {
   const [view, setView] = useState('login'); // login | signup | forgot | reset
+  const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -42,6 +43,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
     setError('');
     setSuccess('');
     setResetSent(false);
+    setFirstName('');
     setPassword('');
     setConfirmPassword('');
   };
@@ -57,10 +59,19 @@ export default function AuthScreen({ onAuth = () => {} }) {
 
   const handleSignUp = async () => {
     setError('');
+    if (!firstName.trim()) { setError('Please enter your name'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          first_name: firstName,
+        },
+      },
+    });
     setLoading(false);
     if (error) { setError(error.message); return; }
     onAuth(data.user);
@@ -142,6 +153,19 @@ export default function AuthScreen({ onAuth = () => {} }) {
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>
             Set New Password
           </h2>
+        )}
+
+        {view === 'signup' && (
+          <input
+            className="input"
+            type="text"
+            autoCapitalize="words"
+            autoComplete="given-name"
+            placeholder="First Name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            disabled={loading}
+          />
         )}
 
         {view !== 'reset' && (

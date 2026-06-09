@@ -148,11 +148,15 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
     toastTimer.current = setTimeout(() => setToast(''), 1800);
   };
 
-  // Display name = the part of the email before "@", capitalized. Falls back to "User".
+  // Display name = the first name set at signup (user metadata) if present, else
+  // the part of the email before "@", capitalized. Falls back to "User".
+  const metaName = user?.user_metadata?.first_name;
   const emailLocalPart = user?.email ? user.email.split('@')[0] : '';
-  const displayName = emailLocalPart
-    ? emailLocalPart.charAt(0).toUpperCase() + emailLocalPart.slice(1)
-    : 'User';
+  const displayName = metaName
+    ? metaName
+    : emailLocalPart
+      ? emailLocalPart.charAt(0).toUpperCase() + emailLocalPart.slice(1)
+      : 'User';
 
   // "Baseline member since <Month Year>" from the account creation date, or just
   // "Baseline member" when no creation date is available.
