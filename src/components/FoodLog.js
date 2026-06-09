@@ -444,6 +444,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [showScanner, setShowScanner] = useState(false);
   const [scanning, setScanning] = useState(false);   // looking up a found barcode
   const [scannerError, setScannerError] = useState('');   // on-screen camera error (mobile debug)
+  // Flashlight/torch — only some devices expose it (Android Chrome yes, iOS Safari no).
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const codeReaderRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -1122,6 +1125,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           }
         }
       );
+
+      // The stream is now attached to the video element. Check whether the camera
+      // track can drive the torch; if so, reveal the flashlight toggle.
+      const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.() || {};
+      setTorchSupported(!!caps.torch);
+      setTorchOn(false);
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Camera error full:', err);
@@ -1131,12 +1141,29 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     }
   };
 
+  // Toggle the camera torch via the live video track. The track turns the light off
+  // on its own when the stream stops, so we just track on/off state here.
+  const toggleTorch = async () => {
+    const track = videoRef.current?.srcObject?.getVideoTracks?.()[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorchOn(next);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Torch toggle failed:', err);
+    }
+  };
+
   const stopScanner = () => {
     if (codeReaderRef.current) {
       codeReaderRef.current.reset();
       codeReaderRef.current = null;
     }
     setScannerError('');
+    setTorchOn(false);
+    setTorchSupported(false);
     setShowScanner(false);
   };
 
@@ -1962,6 +1989,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       {showScanner && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'black', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <button onClick={stopScanner} aria-label="Close scanner" style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 28, cursor: 'pointer', zIndex: 2 }}>×</button>
+          {torchSupported && (
+            <button onClick={toggleTorch} aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+              style={{ position: 'absolute', top: 20, left: 20, zIndex: 2, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: torchOn ? '#FACC15' : 'rgba(255,255,255,0.18)' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={torchOn ? '#1F2937' : '#fff'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </button>
+          )}
           <video ref={videoRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           {/* Viewfinder overlay */}
           <div style={{ position: 'relative', zIndex: 1, width: 260, height: 260, border: '2px solid white', borderRadius: 16, overflow: 'hidden' }}>
