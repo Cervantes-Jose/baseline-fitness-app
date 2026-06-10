@@ -61,26 +61,6 @@ function Section({ title, children }) {
   );
 }
 
-// Imperial / Metric segmented toggle, shown inline on the Units row.
-function UnitToggle({ metricSystem, setMetricSystem }) {
-  return (
-    <div style={{ display: 'inline-flex', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 2 }}>
-      {[{ id: 'imperial', label: 'Imperial' }, { id: 'metric', label: 'Metric' }].map(o => (
-        <span key={o.id}
-          onClick={(e) => { e.stopPropagation(); setMetricSystem(o.id); }}
-          style={{
-            padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            background: metricSystem === o.id ? 'var(--accent)' : 'transparent',
-            color: metricSystem === o.id ? '#fff' : 'var(--text-muted)',
-            transition: 'background 0.15s, color 0.15s',
-          }}>
-          {o.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 // ─── THEME BOTTOM SHEET ─────────────────────────────────────
 function ThemeSheet({ open, onClose, theme, setTheme }) {
   const [mounted, setMounted] = useState(open);
@@ -135,7 +115,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenEditDashboard = () => {}, user, theme, setTheme, metricSystem, setMetricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const toastTimer = useRef(null);
@@ -187,14 +167,19 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
       {/* ACCOUNT */}
       <Section title="Account">
         <Row icon={ICONS.person} label="Account Information" onClick={onOpenAccount} />
-        <Row icon={ICONS.crown} label="Subscription" onClick={comingSoon} />
+        <Row icon={ICONS.crown} label="Subscription" onClick={onOpenSubscription} />
         <Row icon={ICONS.download} label="Data & Export" onClick={comingSoon} isLast />
       </Section>
 
       {/* PREFERENCES */}
       <Section title="Preferences">
-        <Row icon={ICONS.ruler} label="Units" right={<UnitToggle metricSystem={metricSystem} setMetricSystem={setMetricSystem} />} />
-        <Row icon={ICONS.target} label="Nutrition Targets" onClick={onOpenGoals} />
+        <Row icon={ICONS.ruler} label="Units" onClick={onOpenUnits} right={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15, color: 'var(--text-secondary)' }}>{metricSystem === 'metric' ? 'Metric' : 'Imperial'}</span>
+            <Chevron />
+          </span>
+        } />
+        <Row icon={ICONS.target} label="Goals" onClick={onOpenGoals} />
         <Row icon={ICONS.dumbbell} label="Workout Preferences" onClick={comingSoon} />
         <Row icon={ICONS.appearance} label="App Appearance" onClick={() => setThemeOpen(true)} />
         <Row icon={ICONS.grid} label="Edit Dashboard" onClick={onOpenEditDashboard} isLast />

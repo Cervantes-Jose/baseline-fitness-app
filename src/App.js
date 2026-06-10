@@ -7,6 +7,8 @@ import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
 import Profile from './components/Profile';
 import AccountInformation from './components/AccountInformation';
+import Subscription from './components/Subscription';
+import Units from './components/Units';
 import AuthScreen from './components/AuthScreen';
 import { supabase } from './supabaseClient';
 
@@ -28,6 +30,8 @@ function getHeaderTitle(activeTab) {
     'profile': 'Profile',
     'profile-goals': 'Goals',
     'profile-account': 'Account Information',
+    'profile-subscription': 'Subscription',
+    'profile-units': 'Units',
   };
   return titles[activeTab] || 'Fitness Tracker';
 }
@@ -265,8 +269,10 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
       case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} user={user} metricSystem={metricSystem} />;
+      case 'profile-subscription': return <Subscription onBack={() => setActiveTab('profile')} />;
+      case 'profile-units': return <Units onBack={() => setActiveTab('profile')} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
@@ -377,7 +383,7 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-account' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-units' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>

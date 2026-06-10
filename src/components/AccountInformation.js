@@ -15,19 +15,6 @@ const Chevron = () => (
   </svg>
 );
 
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '16px 20px 8px', margin: 0 }}>
-        {title}
-      </p>
-      <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', overflow: 'hidden' }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 // label + current value + chevron (taps to edit). Value greys out as a placeholder
 // when unset.
 function ValueRow({ label, value, placeholder, onClick, isLast, readOnly }) {
@@ -126,6 +113,9 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
   // gender/dob/height come from this user's `profiles` row; name + email come from auth.
   const [profile, setProfile] = useState({ gender: '', dob: '', height: '' });
   const [editing, setEditing] = useState(null);
+  // View mode by default: rows are locked (no chevrons, not tappable). The Edit
+  // Profile button flips this on so fields become editable.
+  const [editMode, setEditMode] = useState(false);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -199,6 +189,10 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
   const dobDisplay = profile.dob
     ? new Date(profile.dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : '';
+  // Read-only: when the account was created, e.g. "June 2026". Never editable.
+  const joinedDisplay = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : '';
 
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
@@ -208,32 +202,46 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
         Profile
       </button>
 
-      {/* PROFILE */}
-      <Section title="Profile">
-        <div onClick={photoComingSoon} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+      {/* Centered, enlarged avatar with a camera badge for changing the photo.
+          Photo upload is deferred (needs storage), so the badge toasts for now. */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 24px' }}>
+        <div style={{ position: 'relative' }}>
+          <div style={{ width: 96, height: 96, borderRadius: '50%', background: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
               <circle cx="12" cy="8" r="4" />
               <path d="M4 21c0-4 4-6.5 8-6.5s8 2.5 8 6.5" strokeLinecap="round" />
             </svg>
           </div>
-          <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Profile Photo</span>
-          <Chevron />
+          <div onClick={photoComingSoon} style={{ position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: '50%', background: 'var(--accent)', border: '3px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+              <path d="M4 8h3l1.5-2h7L17 8h3v11H4z" strokeLinejoin="round" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+          </div>
         </div>
-        <ValueRow label="Name" value={firstName} placeholder="Your name"
-          onClick={() => setEditing({ key: 'name', label: 'Name', value: firstName, placeholder: 'Your name' })} />
-        <ValueRow label="Email" value={email} placeholder="No email" readOnly isLast />
-      </Section>
+      </div>
 
-      {/* PERSONAL */}
-      <Section title="Personal">
-        <ValueRow label="Gender" value={profile.gender}
-          onClick={() => setEditing({ key: 'gender', label: 'Gender', value: profile.gender, options: GENDER_OPTIONS })} />
-        <ValueRow label="Date of Birth" value={dobDisplay}
+      {/* All fields live on a single tile (mockup order). Email + Joined stay
+          read-only in every mode; the rest unlock when Edit Profile is on. */}
+      <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', overflow: 'hidden' }}>
+        <ValueRow label="Name" value={firstName} placeholder="Your name" readOnly={!editMode}
+          onClick={() => setEditing({ key: 'name', label: 'Name', value: firstName, placeholder: 'Your name' })} />
+        <ValueRow label="Email" value={email} placeholder="No email" readOnly />
+        <ValueRow label="Date of Birth" value={dobDisplay} readOnly={!editMode}
           onClick={() => setEditing({ key: 'dob', label: 'Date of Birth', value: profile.dob, inputType: 'date' })} />
-        <ValueRow label="Height" value={profile.height ? `${profile.height} ${heightUnit}` : ''} isLast
+        <ValueRow label="Gender" value={profile.gender} readOnly={!editMode}
+          onClick={() => setEditing({ key: 'gender', label: 'Gender', value: profile.gender, options: GENDER_OPTIONS })} />
+        <ValueRow label="Height" value={profile.height ? `${profile.height} ${heightUnit}` : ''} readOnly={!editMode}
           onClick={() => setEditing({ key: 'height', label: `Height (${heightUnit})`, value: profile.height, inputType: 'number', inputMode: 'decimal', placeholder: heightUnit })} />
-      </Section>
+        <ValueRow label="Joined" value={joinedDisplay} placeholder="—" readOnly isLast />
+      </div>
+
+      {/* Edit Profile toggles the rows between locked (view) and editable. */}
+      <div style={{ padding: '8px 16px 0' }}>
+        <button onClick={() => setEditMode(e => !e)} className="btn-primary">
+          {editMode ? 'Done' : 'Edit Profile'}
+        </button>
+      </div>
 
       <EditSheet field={editing} onClose={() => setEditing(null)} onSave={saveField} />
 
