@@ -168,7 +168,7 @@ function MeasurementCalendar({ selected, onSelect, onClose }) {
   );
 }
 
-const DEFAULT_MEASUREMENT_NAMES = [
+export const DEFAULT_MEASUREMENT_NAMES = [
   'Weight', 'Body Fat', 'Neck', 'Chest', 'Left Bicep', 'Right Bicep',
   'Stomach', 'Hips', 'Left Thigh', 'Right Thigh',
 ];
@@ -177,7 +177,7 @@ const DEFAULT_MEASUREMENT_NAMES = [
 // default even when the stored defaultMeasurementIds list is missing/stale.
 const DEFAULT_MEASUREMENT_NAME_SET = new Set(DEFAULT_MEASUREMENT_NAMES.map(n => n.toLowerCase()));
 
-function getDefaultUnit(name, metricSystem) {
+export function getDefaultUnit(name, metricSystem) {
   const lower = (name || '').toLowerCase();
   if (lower === 'body fat') return '%';
   if (lower === 'weight') return metricSystem === 'metric' ? 'kg' : 'lbs';

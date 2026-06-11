@@ -138,6 +138,19 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
     setMacroDraft(prev => ({ ...prev, [`${m.key}P`]: p, [`${m.key}G`]: g }));
   };
 
+  // ± steppers (grams ±5, percent ±1) read the latest value functionally so fast/held
+  // taps keep counting, and keep grams ⇄ percent in sync.
+  const stepGrams = (m, delta) => setMacroDraft(prev => {
+    const g = Math.max(0, (Number(prev[`${m.key}G`]) || 0) + delta);
+    const p = draft.calorie_goal > 0 ? Math.round(g * m.factor / draft.calorie_goal * 100) : 0;
+    return { ...prev, [`${m.key}G`]: String(g), [`${m.key}P`]: String(p) };
+  });
+  const stepPct = (m, delta) => setMacroDraft(prev => {
+    const p = Math.max(0, (Number(prev[`${m.key}P`]) || 0) + delta);
+    const g = draft.calorie_goal > 0 ? Math.round(p * draft.calorie_goal / m.factor / 100) : 0;
+    return { ...prev, [`${m.key}P`]: String(p), [`${m.key}G`]: String(g) };
+  });
+
   // ─── Math check ───
   const impliedCal =
     (Number(macroDraft.proteinG) || 0) * 4 +
@@ -148,11 +161,13 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Loading…</p>;
 
-  const calBtn = {
-    width: 52, height: 52, borderRadius: 14, background: 'var(--accent-light)', border: 'none',
-    cursor: 'pointer', color: 'var(--accent)', fontSize: 28, lineHeight: 1,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  // Matches the rest-timer steppers in the routine editor: clear inside, accent border.
+  const calStep = {
+    width: 38, height: 38, borderRadius: 10, border: '1.5px solid var(--accent)',
+    background: 'var(--card)', color: 'var(--accent)', cursor: 'pointer', fontSize: 24,
+    fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   };
+  const macroStep = { ...calStep, width: 26, height: 26, borderRadius: 8, fontSize: 18 };
 
   return (
     <>
@@ -160,28 +175,25 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
       <div>
         <p className="section-title" style={{ margin: '0 4px 8px' }}>Daily Calories</p>
         <div className="card">
-          {editMode ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <button style={calBtn} onClick={() => adjustCalorie(-50)}>−</button>
-              {calInputMode ? (
+          {/* Same size in view + edit — edit just adds the ± flanking the number */}
+          <div style={{ padding: '8px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+              {editMode && <button style={calStep} onClick={() => adjustCalorie(-50)}>−</button>}
+              {editMode && calInputMode ? (
                 <input type="number" inputMode="numeric" value={calInputValue} autoFocus
                   onChange={e => setCalInputValue(e.target.value)} onBlur={commitCalInput}
                   onKeyDown={e => e.key === 'Enter' && commitCalInput()}
-                  style={{ flex: 1, textAlign: 'center', fontSize: 38, fontWeight: 700, border: '2px solid var(--accent)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text-primary)', padding: '8px 4px', outline: 'none' }} />
+                  style={{ width: 150, textAlign: 'center', fontSize: 46, fontWeight: 700, border: 'none', borderBottom: '2px solid var(--accent)', background: 'transparent', color: 'var(--text-primary)', letterSpacing: '-1px', padding: 0, outline: 'none' }} />
               ) : (
-                <div onClick={() => { setCalInputValue(String(draft.calorie_goal)); setCalInputMode(true); }} style={{ flex: 1, textAlign: 'center', cursor: 'text' }}>
-                  <div style={{ fontSize: 38, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-1px', lineHeight: 1 }}>{draft.calorie_goal.toLocaleString()}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>kcal / day</div>
+                <div onClick={editMode ? () => { setCalInputValue(String(draft.calorie_goal)); setCalInputMode(true); } : undefined}
+                  style={{ fontSize: 46, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-1px', lineHeight: 1, cursor: editMode ? 'text' : 'default', borderBottom: editMode ? '2px solid var(--accent)' : 'none', paddingBottom: editMode ? 3 : 0 }}>
+                  {draft.calorie_goal.toLocaleString()}
                 </div>
               )}
-              <button style={calBtn} onClick={() => adjustCalorie(50)}>+</button>
+              {editMode && <button style={calStep} onClick={() => adjustCalorie(50)}>+</button>}
             </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '8px 0' }}>
-              <div style={{ fontSize: 46, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-1px', lineHeight: 1 }}>{draft.calorie_goal.toLocaleString()}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>kcal / day</div>
-            </div>
-          )}
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>kcal / day</div>
+          </div>
         </div>
       </div>
 
@@ -198,8 +210,10 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
             // Bar = today's consumed share of the goal (live goal while editing).
             const curGoal = editMode ? (Number(gStr) || 0) : goalG;
             const barPct = curGoal > 0 ? Math.min(c / curGoal * 100, 100) : 0;
-            // Inline editable number — same size as the static text, just made editable.
-            const editNum = (w) => ({ width: w, textAlign: 'center', fontSize: 13, fontWeight: 700, color: numColor, border: 'none', borderBottom: `1.5px solid ${numColor}`, background: 'transparent', outline: 'none', padding: '0 0 1px' });
+            // Editable number — black text, slightly enlarged, with a blue underline that
+            // signals it's editable (both go red when the macro math doesn't add up).
+            const editNum = (w) => ({ width: w, textAlign: 'center', fontSize: 18, fontWeight: 800, color: mathOff ? '#EF4444' : 'var(--text-primary)', border: 'none', borderBottom: `2px solid ${mathOff ? '#EF4444' : 'var(--accent)'}`, background: 'transparent', outline: 'none', padding: '0 0 2px' });
+            const unitStyle = { fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginLeft: 2 };
 
             return (
               <div key={m.key}>
@@ -207,27 +221,39 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
                   {/* Name */}
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{m.label}</div>
 
-                  {/* Measurement line — the % aligns here with the macro total */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
-                    {editMode ? (
-                      <>
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                          {c}g /{' '}
-                          <input type="number" inputMode="numeric" value={gStr} onChange={e => setGrams(m, e.target.value)} style={editNum(44)} />
-                          <span style={{ color: numColor, fontWeight: 700 }}>g</span>
-                        </span>
-                        <span style={{ fontSize: 13 }}>
-                          <input type="number" inputMode="numeric" value={pStr} onChange={e => setPct(m, e.target.value)} style={editNum(34)} />
-                          <span style={{ color: numColor, fontWeight: 700 }}>%</span>
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{c}g / {goalG}g</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: m.color }}>{goalG > 0 ? Math.round(c / goalG * 100) : 0}%</span>
-                      </>
-                    )}
-                  </div>
+                  {/* Measurement line. View: "consumed / total" + macro-of-calories %.
+                      Edit: consumed "0g /" stays put on the left; the editable total + %
+                      nudge toward center with ± steppers. */}
+                  {!editMode ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
+                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{c}g / {goalG}g</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: m.color }}>{draft.calorie_goal > 0 ? Math.round(goalG * m.factor / draft.calorie_goal * 100) : 0}%</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
+                      <span style={{ fontSize: 13, color: 'var(--text-secondary)', flexShrink: 0 }}>{c}g /</span>
+                      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 22, alignItems: 'center' }}>
+                        {/* grams ±5 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button style={macroStep} onClick={() => stepGrams(m, -5)}>−</button>
+                          <span style={{ display: 'inline-flex', alignItems: 'baseline' }}>
+                            <input type="number" inputMode="numeric" value={gStr} onChange={e => setGrams(m, e.target.value)} style={editNum(56)} />
+                            <span style={unitStyle}>g</span>
+                          </span>
+                          <button style={macroStep} onClick={() => stepGrams(m, 5)}>+</button>
+                        </div>
+                        {/* percent ±1 */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button style={macroStep} onClick={() => stepPct(m, -1)}>−</button>
+                          <span style={{ display: 'inline-flex', alignItems: 'baseline' }}>
+                            <input type="number" inputMode="numeric" value={pStr} onChange={e => setPct(m, e.target.value)} style={editNum(44)} />
+                            <span style={unitStyle}>%</span>
+                          </span>
+                          <button style={macroStep} onClick={() => stepPct(m, 1)}>+</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Bar — track is var(--border) so the empty state stays visible */}
                   <div style={{ height: 7, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', marginTop: 12 }}>

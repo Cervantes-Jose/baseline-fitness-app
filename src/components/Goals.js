@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import NutritionGoals from './NutritionGoals';
+import BodyGoals from './BodyGoals';
 
 // Goals shell: shared header + Nutrition / Body tab switcher. Each tab owns its own
-// data and Edit/Save flow. Body tab is built in a later phase.
-function Goals({ onGoalsUpdate = () => {}, onBack = () => {} }) {
+// data and Edit/Save flow.
+function Goals({ onGoalsUpdate = () => {}, onBack = () => {}, metricSystem = 'imperial' }) {
   const [tab, setTab] = useState('nutrition');
 
   // Individual rounded pills matching the Workout tabs (inactive = light grey, active
@@ -46,9 +47,7 @@ function Goals({ onGoalsUpdate = () => {}, onBack = () => {} }) {
       {tab === 'nutrition' ? (
         <NutritionGoals onGoalsUpdate={onGoalsUpdate} />
       ) : (
-        <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-          Body goals coming soon.
-        </div>
+        <BodyGoals metricSystem={metricSystem} />
       )}
     </div>
   );
