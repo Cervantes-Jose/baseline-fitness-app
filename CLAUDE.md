@@ -11,6 +11,12 @@ npm test         # Jest/React Testing Library (watch mode)
 npm test -- --watchAll=false  # single run
 ```
 
+## Verifying changes (do not deviate)
+
+- **Never use the Claude Preview tool** (or any browser-automation/preview MCP). I run `npm start` locally and verify UI changes myself in the browser — do not start, attach to, or screenshot a preview server.
+- To check for compile/lint errors, run `npm run build` only when needed (e.g. before saying a change is done, or when a change might break the build). CI treats warnings as errors, so prefer `CI=true npm run build`.
+- Describe what changed and what to look at; leave the visual confirmation to me.
+
 ## Coding Standards (follow every session without being reminded)
 
 1. **Never rewrite whole files** — make targeted edits to specific sections only

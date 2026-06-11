@@ -4,6 +4,7 @@ import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@d
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
+import { goalTrend } from './goalColor';
 
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
 // `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
@@ -114,7 +115,7 @@ function LineChart({ data, color, height = 80 }) {
 }
 
 // ─── MEASUREMENT CHART SECTION ──────────────────────────────
-function MeasurementSection({ title, measurementName, color, unit: unitProp = '' }) {
+function MeasurementSection({ title, measurementName, color, unit: unitProp = '', goal = null }) {
   const [range, setRange] = useState('7D');
   const [entries, setEntries] = useState([]);
 
@@ -165,8 +166,9 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
   const showTrend = first !== null && daysSinceFirst >= 3;
 
   const diff = showTrend ? (latest - first) : null;
-  const improving = diff !== null && diff < 0;
-  const worsening = diff !== null && diff > 0;
+  // Direction of the arrow is just the sign of the change; the color is whether that
+  // change moves toward the goal (green) or away (red) — neutral when no goal is set.
+  const trend = goalTrend(diff, latest, goal);
 
   return (
     <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', marginBottom: 0 }}>
@@ -190,8 +192,8 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
             {latest} <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>{unit}</span>
           </div>
           {diff !== null && (
-            <div style={{ fontSize: 12, color: improving ? '#22C55E' : worsening ? '#EF4444' : 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>
-              {improving ? '▼' : worsening ? '▲' : '–'} {Math.abs(diff).toFixed(1)} {unit} vs {range === '7D' ? '7 days' : '14 days'} ago
+            <div style={{ fontSize: 12, color: trend.color, marginBottom: 8, fontWeight: 600 }}>
+              {diff < 0 ? '▼' : diff > 0 ? '▲' : '–'} {Math.abs(diff).toFixed(1)} {unit} vs {range === '7D' ? '7 days' : '14 days'} ago
             </div>
           )}
           <LineChart data={entries} color={color} height={72} />
@@ -360,7 +362,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      supabase.from('measurements').select('id, name').eq('user_id', uid).order('created_at', { ascending: true })
+      supabase.from('measurements').select('id, name, goal').eq('user_id', uid).order('created_at', { ascending: true })
         .then(({ data }) => { if (data) setMeasurements(data); });
     })();
   }, []);
@@ -623,7 +625,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const measurementItems = measurements.map((m, i) => ({
     id: widgetIdForMeasurement(m.name, m.id),
     label: m.name,
-    node: <MeasurementSection title={m.name} measurementName={m.name} color={MEAS_COLORS[i % MEAS_COLORS.length]} />,
+    node: <MeasurementSection title={m.name} measurementName={m.name} color={MEAS_COLORS[i % MEAS_COLORS.length]} goal={m.goal} />,
   }));
   measurementItems.forEach(({ id, node }) => { widgetMap[id] = node; });
 

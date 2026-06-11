@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_MEASUREMENT_NAMES, getDefaultUnit } from './Measurements';
+import { GOOD, BAD } from './goalColor';
 
 // A measurement's `goal` (numeric, nullable) lives on the `measurements` row — it's
 // user-owned target data, covered by the table's owner RLS policy. Weight/Body Fat are
@@ -127,6 +128,12 @@ useEffect(() => { load(); }, []);
           const goal = Number(goalFor(r));
           const prog = progressOf(r.start, r.current, goal);
           const toGo = r.current != null ? Math.abs(goal - r.current) : null;
+          // Direction: green while progressing toward the goal; red if the latest value
+          // has moved away from the goal (opposite side of where we started).
+          const movingAway = r.start != null && r.current != null
+            && Math.sign(r.current - r.start) !== 0 && Math.sign(goal - r.start) !== 0
+            && Math.sign(r.current - r.start) !== Math.sign(goal - r.start);
+          const barColor = movingAway ? BAD : GOOD;
           return (
             <div key={r.id} className="card-flat">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -168,10 +175,12 @@ useEffect(() => { load(); }, []);
               </div>
 
               <div style={{ height: 7, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', marginTop: 12 }}>
-                <div style={{ width: `${prog * 100}%`, height: '100%', borderRadius: 4, background: 'var(--accent)', transition: 'width 0.4s ease' }} />
+                <div style={{ width: `${prog * 100}%`, height: '100%', borderRadius: 4, background: barColor, transition: 'width 0.4s ease, background 0.3s ease' }} />
               </div>
               {toGo != null && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>{fmt(toGo)} {r.unit} to go</div>
+                <div style={{ fontSize: 12, color: movingAway ? BAD : 'var(--text-muted)', marginTop: 8, fontWeight: movingAway ? 600 : 400 }}>
+                  {movingAway ? `Moving away — ${fmt(toGo)} ${r.unit} from goal` : `${fmt(toGo)} ${r.unit} to go`}
+                </div>
               )}
             </div>
           );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { goalTrend } from './goalColor';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -603,6 +604,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     const allEntries = [...activeMeasurement.entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
     const descEntries = [...allEntries].reverse();
     const latestEntry = allEntries[allEntries.length - 1] || null;
+    const goal = activeMeasurement.goal == null || activeMeasurement.goal === '' ? null : Number(activeMeasurement.goal);
 
     const days = range === '7D' ? 7 : 14;
     const since = new Date();
@@ -733,18 +735,39 @@ function Measurements({ metricSystem = 'imperial' }) {
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '24px 0 8px' }}>Log your first entry to see the trend</p>
           ) : (
             <>
-              <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1.1, marginTop: '12px' }}>
-                {latestEntry.value}{latestEntry.unit ? <span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
-              </div>
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
-              {showDelta && (
-                <div style={{ marginTop: '10px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(59,130,246,0.12)', color: BLUE, fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
-                    {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}{latestEntry.unit ? <span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
-                  </span>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginTop: '12px' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1.1 }}>
+                    {latestEntry.value}{latestEntry.unit ? <span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
+                  {showDelta && (() => {
+                    const trend = goalTrend(diff, Number(latestEntry.value), goal);
+                    return (
+                      <div style={{ marginTop: '10px' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: trend.soft, color: trend.color, fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
+                          {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}{latestEntry.unit ? <span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
+                        </span>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
+                      </div>
+                    );
+                  })()}
                 </div>
-              )}
+                {goal != null && (() => {
+                  const toGo = Math.abs(goal - Number(latestEntry.value));
+                  return (
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <p style={sectionLabel}>Goal</p>
+                      <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent)', lineHeight: 1.1, marginTop: '6px' }}>
+                        {fmtNum(goal)}{latestEntry.unit ? <span style={{ fontSize: '0.6em', fontWeight: '600', marginLeft: '2px' }}>{latestEntry.unit}</span> : ''}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600 }}>
+                        {toGo === 0 ? 'At goal' : `${fmtNum(toGo)}${latestEntry.unit ? ' ' + latestEntry.unit : ''} to go`}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
               {rangeEntries.length > 0
                 ? <DetailChart entries={rangeEntries} color={color} />
                 : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>No entries in the last {days} days</p>
