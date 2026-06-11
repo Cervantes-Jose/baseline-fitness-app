@@ -28,7 +28,8 @@ export default function BodyGoals({ metricSystem = 'imperial' }) {
   const [showAdd, setShowAdd] = useState(false);
   const [defaultIds, setDefaultIds] = useState(() => new Set());
 
-  useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => { load(); }, []);
 
   const load = async () => {
     const { data: { session } } = await supabase.auth.getSession();
