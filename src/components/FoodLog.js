@@ -526,7 +526,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       return;
     }
     clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => searchFoods(query), 400);
+    // 600ms (not less): USDA calls take ~700ms, so a shorter delay lets the next
+    // keystroke abort an in-flight request (logged as a 500) and burns an extra
+    // rate-limit count per pause. Longer debounce = fewer aborts + less count burn.
+    searchDebounceRef.current = setTimeout(() => searchFoods(query), 600);
     return () => clearTimeout(searchDebounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, showAddFoodScreen]);
