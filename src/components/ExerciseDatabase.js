@@ -251,7 +251,7 @@ function ExerciseDatabase() {
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('custom_exercises').update({ name: newName }).eq('id', renameTarget.id).eq('user_id', uid);
-    if (error) { console.error('renameCustom error:', error); return; }
+    if (error) { return; }
     await supabase.from('exercises').update({ name: newName }).eq('name', oldName).eq('user_id', uid);
     await supabase.from('session_exercises').update({ exercise_name: newName }).eq('exercise_name', oldName).eq('user_id', uid);
     setCustomExercises(prev => prev.map(e => e.id === renameTarget.id ? { ...e, name: newName } : e));
@@ -299,7 +299,6 @@ function ExerciseDatabase() {
       .insert([{ name: newName.trim(), category: newCategory, user_id: uid }])
       .select().single();
     if (error) {
-      console.error('createCustom error:', error);
       return;
     }
     if (data) {

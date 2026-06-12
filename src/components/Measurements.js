@@ -299,7 +299,7 @@ function Measurements({ metricSystem = 'imperial' }) {
       .eq('user_id', uid)
       .order('created_at', { ascending: true });
 
-    if (measurementError) { console.error(measurementError); setLoading(false); return; }
+    if (measurementError) { setLoading(false); return; }
 
     // Seed-tracking is per-user: a stale global key must never block a new account's
     // defaults. Seed whenever this user has no measurements of their own yet.
@@ -333,7 +333,7 @@ function Measurements({ metricSystem = 'imperial' }) {
       .eq('user_id', uid)
       .order('created_at', { ascending: true });
 
-    if (entryError) { console.error(entryError); setLoading(false); return; }
+    if (entryError) { setLoading(false); return; }
 
     const measurementsWithEntries = measurementData.map(m => ({
       ...m,
@@ -355,7 +355,7 @@ function Measurements({ metricSystem = 'imperial' }) {
       .insert([{ name: '', user_id: uid }])
       .select()
       .single();
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     const m = { ...data, entries: [] };
     setMeasurements(prev => [...prev, m]);
     openMeasurement(m);
@@ -389,7 +389,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     const uid = session?.user?.id;
     if (!uid) return;
     const { data, error } = await supabase.from('measurements').insert([{ name: `${m.name} (copy)`, user_id: uid }]).select().single();
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     setMeasurements(prev => [...prev, { ...data, entries: [] }]);
     setMenuOpen(null);
   };
@@ -410,7 +410,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('measurements').update({ name: renameValue.trim() }).eq('id', renamingMeasurement.id).eq('user_id', uid);
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     setMeasurements(prev => prev.map(m => m.id === renamingMeasurement.id ? { ...m, name: renameValue.trim() } : m));
     setRenamingMeasurement(null);
     setRenameValue('');
@@ -434,7 +434,7 @@ function Measurements({ metricSystem = 'imperial' }) {
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id).eq('user_id', uid);
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: editValue } : e);
     setActiveMeasurement(prev => ({ ...prev, entries: updater(prev.entries) }));
     setMeasurements(prev => prev.map(m =>
@@ -461,7 +461,7 @@ function Measurements({ metricSystem = 'imperial' }) {
       .select()
       .single();
 
-    if (error) { console.error(error); return; }
+    if (error) { return; }
 
     const updated = measurements.map(m =>
       m.id === activeMeasurement.id ? { ...m, entries: [...m.entries, data] } : m

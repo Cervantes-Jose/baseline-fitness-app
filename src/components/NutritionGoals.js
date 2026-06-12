@@ -41,7 +41,7 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
     const { data, error } = await supabase
       .from('user_goals').select('*').eq('user_id', uid)
       .order('created_at', { ascending: false }).limit(1);
-    if (error) { console.error(error); setLoading(false); return; }
+    if (error) { setLoading(false); return; }
     if (data && data.length > 0) {
       const row = data[0];
       setDraft({
@@ -108,7 +108,7 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
       error = insErr;
       if (data) setRowId(data.id);
     }
-    if (error) { console.error(error); setSaving(false); return; }
+    if (error) { setSaving(false); return; }
     setDraft(next);
     onGoalsUpdate(next);
     setEditMode(false);

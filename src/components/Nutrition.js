@@ -243,7 +243,7 @@ function Nutrition({ selectedDate }) {
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
 
-    if (error) { console.error(error); setLoading(false); return; }
+    if (error) { setLoading(false); return; }
 
     const within = (data || []).filter(r => {
       const t = parseEntryDate(r.date);

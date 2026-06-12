@@ -91,8 +91,7 @@ useEffect(() => { load(); }, []);
       const dv = (d === '' || d == null) ? null : Number(d);
       const orig = r.goal == null ? null : Number(r.goal);
       if (dv !== orig) {
-        const { error } = await supabase.from('measurements').update({ goal: dv }).eq('id', r.id).eq('user_id', uid);
-        if (error) console.error(error);
+        await supabase.from('measurements').update({ goal: dv }).eq('id', r.id).eq('user_id', uid);
       }
     }
     setEditMode(false);

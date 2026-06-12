@@ -545,8 +545,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       .eq('user_id', uid)
       .eq('date', dateStr)
       .order('created_at', { ascending: true });
-    // eslint-disable-next-line no-console
-    if (error) { console.error(error); setLoading(false); return; }
+    if (error) { setLoading(false); return; }
     const grouped = {};
     data.forEach(entry => {
       if (!grouped[entry.hour]) grouped[entry.hour] = [];
@@ -683,8 +682,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { error } = mealDraft.id
       ? await supabase.from('meals').update(payload).eq('id', mealDraft.id).eq('user_id', uid)
       : await supabase.from('meals').insert([{ ...payload, user_id: uid }]);
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to save meal:', error); return; }
+    if (error) { return; }
     await loadMeals();
     closeMealBuilder();
     showToast(mealDraft.id ? 'Meal updated' : 'Meal saved', null, null);
@@ -697,8 +695,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setMeals(prev => prev.filter(m => m.id !== meal.id));
     closeMealBuilder();
     const { error } = await supabase.from('meals').delete().eq('id', meal.id).eq('user_id', uid);
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to delete meal:', error); loadMeals(); }
+    if (error) { loadMeals(); }
   };
 
   // Log a saved meal: open the Add Food sheet straight into its detail at one serving.
@@ -719,8 +716,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     const payload = { name: food.name, is_custom: !!food.isCustom, food, user_id: uid };
     const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to add favorite:', error); return; }
+    if (error) { return; }
     setFavorites(prev => [{ id: data.id, name: data.name, isCustom: data.is_custom, food: data.food }, ...prev]);
   };
 
@@ -729,9 +725,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const uid = session?.user?.id;
     if (!uid) return;
     setFavorites(prev => prev.filter(f => f.name !== name));
-    const { error } = await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
-    // eslint-disable-next-line no-console
-    if (error) console.error('Failed to remove favorite:', error);
+    await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
   };
 
   const toggleFavorite = (food) => {
@@ -793,8 +787,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { data: row, error } = e.id
       ? await supabase.from('custom_foods').update(payload).eq('id', e.id).eq('user_id', uid).select().single()
       : await supabase.from('custom_foods').insert([{ ...payload, user_id: uid }]).select().single();
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to save custom food:', error); return; }
+    if (error) { return; }
 
     const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
     setCustomFoods(prev => e.id ? prev.map(f => (f.id === e.id ? food : f)) : [food, ...prev]);
@@ -804,9 +797,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       addFavorite(food);
     } else if (isFavorite(name)) {
       setFavorites(prev => prev.map(f => (f.name === name ? { ...f, food } : f)));
-      supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid)
-        // eslint-disable-next-line no-console
-        .then(({ error }) => { if (error) console.error('Failed to update favorite:', error); });
+      supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid);
     }
 
     // Opened from the main Custom Foods tab: just save to the library and return to
@@ -869,14 +860,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
     const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id).eq('user_id', uid);
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to rename custom food:', error); return; }
+    if (error) { return; }
     if (isFavorite(food.name)) {
       const snap = { ...food, name: newName };
       setFavorites(prev => prev.map(fv => (fv.name === food.name ? { ...fv, name: newName, food: snap } : fv)));
-      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name).eq('user_id', uid)
-        // eslint-disable-next-line no-console
-        .then(({ error }) => { if (error) console.error('Failed to sync favorite name:', error); });
+      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name).eq('user_id', uid);
     }
   };
 
@@ -912,8 +900,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setSearchResults(Array.isArray(data) ? data : (data.foods || []));
     } catch (err) {
       if (err.name === 'AbortError') return;
-      // eslint-disable-next-line no-console
-      console.error('Food search error:', err);
       setSearchError('Search unavailable');
       setSearchResults(null);
     } finally {
@@ -976,8 +962,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     });
     exitSelectMode();
     const { error } = await supabase.from('food_entries').delete().eq('user_id', uid).in('id', ids);
-    // eslint-disable-next-line no-console
-    if (error) { console.error(error); loadFoods(); }
+    if (error) { loadFoods(); }
   };
 
   // Copy the selected foods to the tapped hour on the currently-shown date.
@@ -993,8 +978,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const count = inserts.length;
     exitSelectMode();
     const { error } = await supabase.from('food_entries').insert(inserts);
-    // eslint-disable-next-line no-console
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     loadFoods();
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
@@ -1009,8 +993,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).eq('user_id', uid).in('id', ids);
-    // eslint-disable-next-line no-console
-    if (error) { console.error(error); loadFoods(); return; }
+    if (error) { loadFoods(); return; }
     loadFoods();
     showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
@@ -1075,8 +1058,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const fields = buildLoggedFields(food, serving, unit, servings, macros);
     const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
     const { error } = await supabase.from('food_entries').update(update).eq('id', e.id).eq('user_id', uid);
-    // eslint-disable-next-line no-console
-    if (error) { console.error('Failed to update entry:', error); return; }
+    if (error) { return; }
     setEditingEntry(null);
     closeAddFood();
     loadFoods();
@@ -1146,8 +1128,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setTorchSupported(!!caps.torch);
       setTorchOn(false);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Camera error full:', err);
       setScannerError(err.message || err.toString() || 'Unknown error');
       // Keep the overlay open so the on-screen error is visible (close via the × button).
       showToast('Camera not available', null, null);
@@ -1163,9 +1143,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     try {
       await track.applyConstraints({ advanced: [{ torch: next }] });
       setTorchOn(next);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Torch toggle failed:', err);
+    } catch {
+      // torch unsupported on this device — ignore
     }
   };
 
@@ -1214,9 +1193,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
       setScanning(false);
       openDetail(food);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Barcode lookup error:', err);
+    } catch {
       showToast('Could not look up product', null, null);
       setScanning(false);
     }
@@ -1284,9 +1261,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       const uid = session?.user?.id;
       if (!uid) return;
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
-      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid)
-        // eslint-disable-next-line no-console
-        .then(({ error }) => { if (error) console.error('Failed to persist serving:', error); });
+      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid);
     } else {
       setRecentFoodList(prev => {
         if (prev.some(f => f.name === food.name)) {
@@ -1318,8 +1293,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ...buildLoggedFields(food, serving, unit, servings ?? 1, adjustedMacros),
     }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
-    // eslint-disable-next-line no-console
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     const newFoods = { ...foods };
     data.forEach(entry => {
       if (!newFoods[entry.hour]) newFoods[entry.hour] = [];

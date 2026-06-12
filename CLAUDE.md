@@ -120,7 +120,7 @@ Never store subscription status or rate limits on the same table as user-editabl
 
 ## Pre-deployment Checklist (complete before app goes public)
 
-- [ ] Remove all console.log statements
+- [x] Remove all console.log/console.error statements
 - [ ] Supabase RLS audit using scenarios above
 - [ ] Auth added and tested
 - [ ] No API keys or secrets in frontend code

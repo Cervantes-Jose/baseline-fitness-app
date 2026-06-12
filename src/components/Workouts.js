@@ -634,8 +634,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { error } = await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId).eq('user_id', uid);
-    if (error) console.error(error);
+    await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId).eq('user_id', uid);
   };
 
   // Write a new rest-timer array into both state and ref, then persist.
@@ -697,11 +696,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data: routineData, error: routineError } = await supabase
       .from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true });
-    if (routineError) { console.error(routineError); setLoading(false); return; }
+    if (routineError) { setLoading(false); return; }
 
     const { data: exerciseData, error: exerciseError } = await supabase
       .from('exercises').select('*').eq('user_id', uid).order('position', { ascending: true });
-    if (exerciseError) { console.error(exerciseError); setLoading(false); return; }
+    if (exerciseError) { setLoading(false); return; }
 
     const { data: sessionExData } = await supabase
       .from('session_exercises')
@@ -762,7 +761,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data: sessions, error } = await supabase
       .from('workout_sessions').select('*, session_exercises(*)').eq('user_id', uid).order('created_at', { ascending: false });
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     setHistory(sessions.map(s => ({
       id: s.id, date: s.date, routineName: s.routine_name,
       exercises: s.session_exercises.map(e => ({ name: e.exercise_name, sets: Array.isArray(e.sets) ? e.sets : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []) }))
@@ -830,7 +829,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data, error } = await supabase.from('routines')
       .insert([{ name: newRoutineName.trim(), user_id: uid }]).select().single();
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     setRoutines([...routines, { ...data, exercises: [] }]);
     setNewRoutineName('');
     setShowCreateModal(false);
@@ -865,7 +864,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { error } = await supabase.from('routines')
       .update({ name: renameValue.trim() }).eq('id', renamingRoutine.id).eq('user_id', uid);
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     setRoutines(routines.map(r => r.id === renamingRoutine.id ? { ...r, name: renameValue.trim() } : r));
     setRenamingRoutine(null);
     setRenameValue('');
@@ -878,11 +877,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data: newRoutine, error: routineError } = await supabase.from('routines')
       .insert([{ name: `${routine.name} (copy)`, user_id: uid }]).select().single();
-    if (routineError) { console.error(routineError); return; }
+    if (routineError) { return; }
     if (routine.exercises.length > 0) {
       const { data: newExercises, error: exError } = await supabase.from('exercises')
         .insert(routine.exercises.map((ex, idx) => ({ routine_id: newRoutine.id, name: ex.name, position: idx, rest_timers: ex.rest_timers || [], user_id: uid }))).select();
-      if (exError) { console.error(exError); return; }
+      if (exError) { return; }
       setRoutines([...routines, { ...newRoutine, exercises: newExercises.map(e => ({ ...e, lastSession: null })) }]);
     } else {
       setRoutines([...routines, { ...newRoutine, exercises: [] }]);
@@ -1016,7 +1015,7 @@ const updateSet = (exId, setIdx, field, value) => {
       .from('workout_sessions')
       .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString(), duration: workoutSeconds, user_id: uid }])
       .select().single();
-    if (sessionError) { console.error(sessionError); return; }
+    if (sessionError) { return; }
 
     const exerciseInserts = activeRoutine.exercises.map(ex => ({
       session_id: sessionRow.id,
@@ -1026,7 +1025,7 @@ const updateSet = (exId, setIdx, field, value) => {
     }));
 
     const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
-    if (exError) { console.error(exError); return; }
+    if (exError) { return; }
 
     await loadHistory();
     await loadRoutines();
@@ -1091,7 +1090,7 @@ const updateSet = (exId, setIdx, field, value) => {
     if (!uid) return;
     const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx, user_id: uid, category: NAME_TO_CATEGORY[name] || null }));
     const { data, error } = await supabase.from('exercises').insert(inserts).select();
-    if (error) { console.error(error); return; }
+    if (error) { return; }
     const newExs = data.map(ex => ({ ...ex, lastSession: null }));
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, ...newExs] } : r));
     setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, ...newExs] }));

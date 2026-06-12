@@ -138,7 +138,7 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
         .eq('user_id', uid)
         .maybeSingle();
       if (cancelled) return;
-      if (error) { console.error(error); return; }
+      if (error) { return; }
       if (data) {
         setProfile({
           gender: data.gender || '',
@@ -168,7 +168,7 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
       dob: next.dob || null,
       height: next.height === '' ? null : Number(next.height),
     }, { onConflict: 'user_id' });
-    if (error) { console.error(error); showToast('Could not save'); }
+    if (error) { showToast('Could not save'); }
   };
 
   // Name lives in auth user_metadata. App.user refreshes via the onAuthStateChange
@@ -177,7 +177,7 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
     const v = (value || '').trim();
     if (!v) return;
     const { error } = await supabase.auth.updateUser({ data: { first_name: v } });
-    if (error) { console.error(error); showToast('Could not save name'); }
+    if (error) { showToast('Could not save name'); }
   };
 
   const saveField = (key, value) => {
