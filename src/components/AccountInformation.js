@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
+import DeleteAccountModal from './DeleteAccountModal';
 
 // Account fields are per-user: Name lives in Supabase auth user_metadata
 // (`first_name`), Email is the read-only auth login email, and Gender/DOB/Height
@@ -116,6 +117,7 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
   // View mode by default: rows are locked (no chevrons, not tappable). The Edit
   // Profile button flips this on so fields become editable.
   const [editMode, setEditMode] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -243,7 +245,24 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
         </button>
       </div>
 
+      {/* Danger zone — permanent account deletion (handled server-side) */}
+      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#EF4444', padding: '28px 20px 8px', margin: 0 }}>
+        Danger Zone
+      </p>
+      <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)' }}>
+        <button
+          onClick={() => setDeleteOpen(true)}
+          style={{
+            display: 'block', width: '100%', padding: '15px 0', background: 'transparent',
+            border: 'none', color: '#EF4444', fontSize: 15, fontWeight: 700, textAlign: 'center', cursor: 'pointer',
+          }}
+        >
+          Delete Account
+        </button>
+      </div>
+
       <EditSheet field={editing} onClose={() => setEditing(null)} onSave={saveField} />
+      <DeleteAccountModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)', background: 'var(--text-primary)', color: 'var(--card)', padding: '10px 18px', borderRadius: 20, fontSize: 14, fontWeight: 600, zIndex: 800, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>

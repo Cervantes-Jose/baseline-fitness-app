@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
-import DeleteAccountModal from './DeleteAccountModal';
 
 // ─── ICONS ──────────────────────────────────────────────────
 // All row icons inherit color from their IconBox (accent), 18px, stroke style.
@@ -119,7 +118,6 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const toastTimer = useRef(null);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
@@ -207,20 +205,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
         Sign Out
       </button>
 
-      {/* Danger zone — permanent account deletion (handled server-side) */}
-      <button
-        onClick={() => setDeleteOpen(true)}
-        style={{
-          display: 'block', width: 'calc(100% - 32px)', margin: '12px 16px 0',
-          padding: '14px', background: 'transparent', border: 'none',
-          color: 'var(--text-muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-        }}
-      >
-        Delete Account
-      </button>
-
       <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} theme={theme} setTheme={setTheme} />
-      <DeleteAccountModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
 
       {/* Coming-soon toast */}
       {toast && (
