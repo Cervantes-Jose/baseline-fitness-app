@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Baseline Fitness</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #5b9cf6;
+      --accent-soft: rgba(91, 156, 246, 0.1);
+      --text: #e8eaf0;
+      --text-muted: #8b8fa8;
+      --text-dim: #5a5d70;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 60px 24px 100px;
+    }
+
+    .header {
+      margin-bottom: 56px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .brand-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .meta {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .section {
+      margin-bottom: 48px;
+    }
+
+    .section-number {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 650;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .card p {
+      font-size: 14px;
+      margin-bottom: 0;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0;
+    }
+
+    ul li {
+      color: var(--text-muted);
+      font-size: 15px;
+      padding: 6px 0 6px 20px;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+    }
+
+    ul li:last-child { border-bottom: none; }
+
+    ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.6;
+    }
+
+    .not-collected {
+      background: var(--accent-soft);
+      border: 1px solid rgba(91, 156, 246, 0.2);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .not-collected .label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .not-collected ul li {
+      border-bottom-color: rgba(91, 156, 246, 0.1);
+      font-size: 14px;
+    }
+
+    .third-party-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .third-party-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .third-party-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .third-party-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .third-party-link {
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0.8;
+    }
+
+    .third-party-link:hover { opacity: 1; }
+
+    .highlight-box {
+      border-left: 2px solid var(--accent);
+      padding: 14px 20px;
+      margin: 16px 0;
+      background: var(--surface);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .highlight-box p {
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .contact-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-top: 16px;
+    }
+
+    .contact-block a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .contact-block a:hover { text-decoration: underline; }
+
+    .contact-block p {
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 48px 0;
+    }
+
+    .footer {
+      font-size: 13px;
+      color: var(--text-dim);
+      text-align: center;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0.8;
+    }
+
+    @media (max-width: 480px) {
+      .page { padding: 40px 20px 80px; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="header">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        Baseline Studios
+      </div>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Effective June 12, 2026 &nbsp;·&nbsp; Last updated June 12, 2026</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">01</div>
+      <h2>Who We Are</h2>
+      <p>Baseline Fitness is operated by Baseline Studios, based in Georgia, United States. If you have questions about this Privacy Policy, contact us at <a href="mailto:baselinestudios.dev@gmail.com" style="color: var(--accent); text-decoration: none;">baselinestudios.dev@gmail.com</a>.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">02</div>
+      <h2>What Data We Collect</h2>
+      <p>When you create an account and use Baseline Fitness, we collect only what you enter yourself.</p>
+
+      <div class="card">
+        <div class="card-title">Account Information</div>
+        <ul>
+          <li>Email address</li>
+          <li>Full name</li>
+          <li>Gender, date of birth, and height (optional)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Fitness and Health Data</div>
+        <ul>
+          <li>Food entries including calories, macros, and meal times</li>
+          <li>Workout routines, exercises, sets, reps, and weight logged</li>
+          <li>Body measurements including weight, body fat, and custom measurements</li>
+          <li>Nutrition and body composition goals you set</li>
+        </ul>
+      </div>
+
+      <div class="not-collected">
+        <div class="label">We do not collect</div>
+        <ul>
+          <li>Location data</li>
+          <li>Device identifiers</li>
+          <li>Advertising identifiers</li>
+          <li>Samsung Health or Apple Health data</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-number">03</div>
+      <h2>How We Use Your Data</h2>
+      <p>We use your data solely to provide the Baseline Fitness service to you.</p>
+      <ul>
+        <li>To display your food, workout, and measurement history</li>
+        <li>To calculate progress toward your goals</li>
+        <li>To sync your data across devices when you sign in</li>
+        <li>To send password reset emails when requested</li>
+      </ul>
+      <div class="highlight-box">
+        <p>We do not use your data for advertising, marketing, or any purpose beyond operating the app. We do not sell your data to anyone.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-number">04</div>
+      <h2>How Your Data Is Stored</h2>
+      <p>Your data is stored securely using Supabase, a PostgreSQL database platform. All data is protected by Row Level Security — your data is only accessible to your account and cannot be accessed by other users. Supabase stores data on servers in the United States.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">05</div>
+      <h2>Third Party Services</h2>
+      <p>Baseline Fitness uses the following third party services to operate.</p>
+      <div class="third-party-list">
+        <div class="third-party-item">
+          <span class="third-party-name">Supabase</span>
+          <p class="third-party-desc">Database and authentication. Stores your account and fitness data securely.</p>
+          <a href="https://supabase.com/privacy" class="third-party-link" target="_blank">supabase.com/privacy</a>
+        </div>
+        <div class="third-party-item">
+          <span class="third-party-name">USDA FoodData Central</span>
+          <p class="third-party-desc">Food nutrition data. When you search for a food, your search query is routed through our secure server. No personal information is sent to USDA.</p>
+        </div>
+        <div class="third-party-item">
+          <span class="third-party-name">Vercel</span>
+          <p class="third-party-desc">App hosting. Serves the application.</p>
+          <a href="https://vercel.com/legal/privacy-policy" class="third-party-link" target="_blank">vercel.com/legal/privacy-policy</a>
+        </div>
+        <div class="third-party-item">
+          <span class="third-party-name">Google Play Store</span>
+          <p class="third-party-desc">App distribution. Subject to Google's privacy policy.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-number">06</div>
+      <h2>Data Retention</h2>
+      <p>Your data is retained as long as your account exists. If you delete your account, all of your data is permanently and immediately deleted — food entries, workout history, measurements, goals, and account information. This cannot be undone.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">07</div>
+      <h2>Your Rights</h2>
+      <ul>
+        <li>Access your data at any time within the app</li>
+        <li>Export your data from Settings</li>
+        <li>Delete your account and all data from Settings → Account Information → Danger Zone</li>
+        <li>Correct any information by editing it directly in the app</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-number">08</div>
+      <h2>Children's Privacy</h2>
+      <p>Baseline Fitness is not intended for users under the age of 13. We do not knowingly collect data from children under 13. If you believe a child has provided us with personal information, contact us and we will delete it.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">09</div>
+      <h2>Changes to This Policy</h2>
+      <p>If we make material changes to this Privacy Policy we will update the effective date at the top of this document. Continued use of the app after changes constitutes acceptance.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">10</div>
+      <h2>Contact</h2>
+      <div class="contact-block">
+        <p>For privacy questions or concerns:</p>
+        <p><a href="mailto:baselinestudios.dev@gmail.com">baselinestudios.dev@gmail.com</a></p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;">Baseline Studios — Georgia, United States</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Baseline Fitness &nbsp;·&nbsp; <a href="terms.html">Terms of Service</a> &nbsp;·&nbsp; baselinestudios.dev@gmail.com</p>
+    </div>
+
+  </div>
+</body>
+</html>

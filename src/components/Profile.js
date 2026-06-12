@@ -115,7 +115,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, user, theme, setTheme, metricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const toastTimer = useRef(null);
@@ -188,8 +188,8 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
       {/* SUPPORT */}
       <Section title="Support">
         <Row icon={ICONS.question} label="Help Center" onClick={comingSoon} />
-        <Row icon={ICONS.shield} label="Data Policy" onClick={comingSoon} />
-        <Row icon={ICONS.document} label="Terms of Service" onClick={comingSoon} />
+        <Row icon={ICONS.shield} label="Privacy Policy" onClick={onOpenPrivacy} />
+        <Row icon={ICONS.document} label="Terms of Service" onClick={onOpenTerms} />
         <Row icon={ICONS.chat} label="Feedback" onClick={comingSoon} isLast />
       </Section>
 

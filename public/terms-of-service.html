@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms of Service — Baseline Fitness</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #5b9cf6;
+      --accent-soft: rgba(91, 156, 246, 0.1);
+      --text: #e8eaf0;
+      --text-muted: #8b8fa8;
+      --text-dim: #5a5d70;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 60px 24px 100px;
+    }
+
+    .header {
+      margin-bottom: 56px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .brand-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .meta {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .section {
+      margin-bottom: 48px;
+    }
+
+    .section-number {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 650;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    p:last-child { margin-bottom: 0; }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0;
+    }
+
+    ul li {
+      color: var(--text-muted);
+      font-size: 15px;
+      padding: 6px 0 6px 20px;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+    }
+
+    ul li:last-child { border-bottom: none; }
+
+    ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.6;
+    }
+
+    .highlight-box {
+      border-left: 2px solid var(--accent);
+      padding: 14px 20px;
+      margin: 16px 0;
+      background: var(--surface);
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .highlight-box p {
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .warning-box {
+      background: rgba(246, 150, 91, 0.08);
+      border: 1px solid rgba(246, 150, 91, 0.2);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .warning-box .label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #f6965b;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .warning-box p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .contact-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-top: 16px;
+    }
+
+    .contact-block a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .contact-block a:hover { text-decoration: underline; }
+
+    .contact-block p {
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .footer {
+      font-size: 13px;
+      color: var(--text-dim);
+      text-align: center;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0.8;
+    }
+
+    @media (max-width: 480px) {
+      .page { padding: 40px 20px 80px; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="header">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        Baseline Studios
+      </div>
+      <h1>Terms of Service</h1>
+      <p class="meta">Effective June 12, 2026 &nbsp;·&nbsp; Last updated June 12, 2026</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">01</div>
+      <h2>Acceptance of Terms</h2>
+      <p>By creating an account or using Baseline Fitness, you agree to these Terms of Service. If you do not agree, do not use the app.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">02</div>
+      <h2>Who Can Use Baseline Fitness</h2>
+      <p>You must be at least 13 years old to use Baseline Fitness. By using the app you confirm you meet this requirement.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">03</div>
+      <h2>Your Account</h2>
+      <p>You are responsible for maintaining the security of your account credentials. Do not share your password. You are responsible for all activity that occurs under your account.</p>
+      <p>If you believe your account has been compromised, contact us immediately at <a href="mailto:baselinestudios.dev@gmail.com" style="color: var(--accent); text-decoration: none;">baselinestudios.dev@gmail.com</a>.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">04</div>
+      <h2>What Baseline Fitness Is</h2>
+      <p>Baseline Fitness is a personal fitness tracking tool designed to help you log food, workouts, and body measurements for your own reference.</p>
+
+      <div class="warning-box">
+        <div class="label">Important</div>
+        <p>Baseline Fitness is not a medical device and is not a substitute for professional medical, nutritional, or fitness advice. Do not use it to diagnose, treat, or manage any medical condition. Always consult a qualified healthcare professional before making significant changes to your diet or exercise routine.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-number">05</div>
+      <h2>Your Data</h2>
+      <p>You own your fitness data. Baseline Studios does not claim any rights to the data you enter into Baseline Fitness. See our <a href="privacy-policy.html" style="color: var(--accent); text-decoration: none;">Privacy Policy</a> for details on how your data is stored and protected.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">06</div>
+      <h2>Acceptable Use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Use the app for any unlawful purpose</li>
+        <li>Attempt to gain unauthorized access to the service or other users' data</li>
+        <li>Reverse engineer, scrape, or abuse the app or its APIs</li>
+        <li>Use automated scripts or bots to interact with the service</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-number">07</div>
+      <h2>Service Availability</h2>
+      <p>We aim to keep Baseline Fitness available at all times but do not guarantee uninterrupted access. The service may be temporarily unavailable due to maintenance, updates, or circumstances outside our control.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">08</div>
+      <h2>Changes to the Service</h2>
+      <p>We reserve the right to modify, suspend, or discontinue any part of Baseline Fitness at any time. We will make reasonable efforts to notify users of significant changes.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">09</div>
+      <h2>Disclaimer of Warranties</h2>
+      <p>Baseline Fitness is provided as-is without warranties of any kind, express or implied. We do not warrant that the app will be error-free or that nutrition data from third party sources is complete or accurate.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">10</div>
+      <h2>Limitation of Liability</h2>
+      <p>To the maximum extent permitted by law, Baseline Studios shall not be liable for any indirect, incidental, or consequential damages arising from your use of Baseline Fitness.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">11</div>
+      <h2>Changes to These Terms</h2>
+      <p>We may update these Terms of Service from time to time. The effective date at the top of this document will reflect the most recent version. Continued use of the app after changes constitutes acceptance.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">12</div>
+      <h2>Governing Law</h2>
+      <p>These Terms are governed by the laws of the State of Georgia, United States.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-number">13</div>
+      <h2>Contact</h2>
+      <div class="contact-block">
+        <p>Questions about these Terms:</p>
+        <p><a href="mailto:baselinestudios.dev@gmail.com">baselinestudios.dev@gmail.com</a></p>
+        <p style="color: var(--text-dim); font-size: 14px; margin-top: 8px;">Baseline Studios — Georgia, United States</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Baseline Fitness &nbsp;·&nbsp; <a href="privacy-policy.html">Privacy Policy</a> &nbsp;·&nbsp; baselinestudios.dev@gmail.com</p>
+    </div>
+
+  </div>
+</body>
+</html>
