@@ -8,17 +8,8 @@ const CONTACT_EMAIL = 'baselinestudios.dev@gmail.com';
 const H = ({ children, first }) => (
   <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: first ? '0 0 6px' : '22px 0 6px' }}>{children}</h2>
 );
-const Sub = ({ children }) => (
-  <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '12px 0 4px' }}>{children}</h3>
-);
 const P = ({ children }) => (
   <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: '0 0 6px' }}>{children}</p>
-);
-const UL = ({ children }) => (
-  <ul style={{ margin: '0 0 6px', paddingLeft: 20 }}>{children}</ul>
-);
-const LI = ({ children }) => (
-  <li style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: '0 0 2px' }}>{children}</li>
 );
 const Email = () => (
   <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{CONTACT_EMAIL}</a>
@@ -34,6 +25,7 @@ export default function PrivacyPolicy({ onBack = () => {} }) {
       </button>
 
       <div className="card-flat" style={{ margin: '0 16px', padding: 20 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 2px' }}>Effective date: {EFFECTIVE_DATE}</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>Last updated: {LAST_UPDATED}</p>
 
         <H first>Overview</H>
@@ -58,7 +50,7 @@ export default function PrivacyPolicy({ onBack = () => {} }) {
         <P>We may update this policy from time to time. Material changes will be reflected by the "Last updated" date above.</P>
 
         <H>Contact</H>
-        <P>If you have questions about this Privacy Policy, contact us at [your-support-email].</P>
+        <P>If you have questions about this Privacy Policy, contact us at <Email />.</P>
       </div>
     </div>
   );
