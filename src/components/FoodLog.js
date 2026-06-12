@@ -890,10 +890,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setSearchLoading(true);
     setSearchError(null);
     try {
+      // Send the user's JWT (not the public anon key) so the function can
+      // identify the account and apply per-user rate limits server-side.
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setSearchError('Search unavailable'); setSearchResults(null); return; }
       const res = await fetch(
         `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
-        { headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey }, signal: searchAbortRef.current.signal }
+        { headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey }, signal: searchAbortRef.current.signal }
       );
+      if (res.status === 429) {
+        setSearchError('Too many searches — please slow down and try again in a moment.');
+        setSearchResults(null);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSearchResults(Array.isArray(data) ? data : (data.foods || []));
