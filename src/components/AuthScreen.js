@@ -185,8 +185,8 @@ export default function AuthScreen({ onAuth = () => {} }) {
       <div style={{ position: 'absolute', top: 56, left: 24, right: 24, textAlign: 'left' }}>
         <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-1px', margin: 0, lineHeight: 1.1 }}>
           {view === 'login' && <span style={{ display: 'block' }}>Welcome to</span>}
-          {view === 'signup' && <span style={{ display: 'block' }}>Join</span>}
-          <span style={{ display: 'block', color: 'var(--accent)' }}>Baseline Fitness</span>
+          {view === 'signup' && <span>Join </span>}
+          <span style={{ display: view === 'signup' ? 'inline' : 'block', color: 'var(--accent)' }}>Baseline Fitness</span>
         </h1>
         <p style={{ fontSize: 16, color: 'var(--text-muted)', marginTop: 12 }}>
           {view === 'login'
@@ -200,7 +200,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
       {/* Form card */}
       <form
         onSubmit={onSubmit}
-        style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 20 }}
+        style={{ width: '100%', maxWidth: 420, marginTop: 72, display: 'flex', flexDirection: 'column', gap: 20 }}
       >
         {view === 'reset' && (
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>
