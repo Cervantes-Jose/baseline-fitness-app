@@ -83,13 +83,21 @@ export const parseMicros = (food, scale) => {
     });
 };
 
-// Build the serving/unit/snapshot stored on a logged food_entries row so it can be
-// reopened in the detail screen and re-scaled. Normalized to grams so custom + USDA foods
-// behave uniformly: snapshot.servingSize === stored serving ⇒ scaleOf === 1 ⇒ the stored
-// (already-adjusted) macros reproduce exactly, and changing the serving scales them.
+// Build the serving/unit/servings/snapshot stored on a logged food_entries row so it can
+// be reopened in the detail screen and re-scaled. The snapshot's macros + nutrients are
+// the *total* (× servings) — Nutrition.js sums snapshot.nutrients as the row's total, and
+// snapshot.servingSize is the total grams. We additionally persist the *original* serving,
+// unit, and servings count so reopening shows the real breakdown (e.g. "50 g × 3") instead
+// of collapsing to "150 g × 1".
+//
+// Reproduction holds because, for any non-`serving` unit, gramsPerServing × count === total
+// grams, so scaleOf(snapshot, serving, unit) × count === 1 and the stored total reproduces.
+// The `serving` unit is the only one that re-multiplies by the snapshot base, so we collapse
+// it to its gram equivalent on store (display falls back to grams for that case only).
 export const buildLoggedFields = (food, serving, unit, servings, macros) => {
   const count = Number(servings) || 0;
-  const grams = Math.round(servingToGrams(serving, unit, baseGramsOf(food)) * count) || 0;
+  const perServingGrams = Math.round(servingToGrams(serving, unit, baseGramsOf(food))) || 0;
+  const grams = Math.round(perServingGrams * count) || 0;
   let nutrients;
   if (food.isCustom && food.micros) {
     nutrients = CUSTOM_MICRO_FIELDS
@@ -106,7 +114,11 @@ export const buildLoggedFields = (food, serving, unit, servings, macros) => {
     servingSizeUnit: 'g',
     nutrients,
   };
-  return { serving: grams, unit: 'g', food: snapshot };
+  // 'serving' unit can't be re-scaled against the gram-normalized snapshot, so store its
+  // gram equivalent; every other unit is preserved as the user entered it.
+  const storeServing = unit === 'serving' ? perServingGrams : (Number(serving) || 0);
+  const storeUnit = unit === 'serving' ? 'g' : unit;
+  return { serving: storeServing, unit: storeUnit, servings: count, food: snapshot };
 };
 
 // ─── MEAL HELPERS ────────────────────────────────────────────

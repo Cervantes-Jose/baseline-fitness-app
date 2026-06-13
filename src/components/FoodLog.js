@@ -425,6 +425,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in Add Food
   const [searchQuery, setSearchQuery] = useState('');
   const [recentFoodList, setRecentFoodList] = useState([]);
+  // Last portion (serving/unit/servings) used for each food, keyed by name. Lets re-adding
+  // or editing a food default to what you last entered instead of the food's base serving.
+  const [lastPortions, setLastPortions] = useState({});
   // Which list the Add Food sheet shows when not actively searching.
   const [addFoodTab, setAddFoodTab] = useState('recent');   // 'recent' | 'favorites' | 'meals' | 'custom'
 
@@ -503,7 +506,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => { loadFoods(); }, [date]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); }, []);
+  useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); loadLastPortions(); }, []);
 
   // Leave the Custom Foods quick-edit mode when navigating away from that tab.
   useEffect(() => {
@@ -511,7 +514,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   }, [activeFilter, customEditMode]);
 
   useEffect(() => {
-    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); }
+    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); loadLastPortions(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
 
@@ -583,6 +586,34 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       if (!seen.has(p.name)) { seen.add(p.name); recent.push(p); }
     }
     setRecentFoodList(recent);
+  };
+
+  // Build the "last portion per food" map from logged entries (newest first, first hit
+  // per name wins). Lets openDetail/openCustomDetail default to your most recent portion.
+  const loadLastPortions = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const { data } = await supabase
+      .from('food_entries')
+      .select('name, serving, unit, servings, created_at')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (!data) return;
+    const map = {};
+    for (const e of data) {
+      if (e.name == null || map[e.name] || e.serving == null) continue;
+      map[e.name] = { serving: Number(e.serving), unit: e.unit || 'g', servings: Number(e.servings) || 1 };
+    }
+    setLastPortions(map);
+  };
+
+  // Record the portion just logged/edited so the next open defaults to it (in-memory; the
+  // DB row is the source of truth and rebuilds this on reload).
+  const rememberPortion = (name, serving, unit, servings) => {
+    if (!name) return;
+    setLastPortions(prev => ({ ...prev, [name]: { serving: Number(serving) || 0, unit, servings: Number(servings) || 1 } }));
   };
 
   const loadCustomFoods = async () => {
@@ -751,10 +782,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       fats: existing ? String(food.fats ?? '') : '',
       micros: microStrings,
     });
-    const { serving, unit } = defaultServingOf(food || {});
+    // Existing custom foods default to the last portion logged; new ones to base serving.
+    const last = existing ? lastPortions[food?.name] : null;
+    const { serving, unit } = last || defaultServingOf(food || {});
     setDetailServing(String(serving));
     setDetailUnit(unit);
-    setDetailServings('1');
+    setDetailServings(String(last?.servings || 1));
     setCustomEditing(!existing || startEditing);   // new foods start editable
     setDetailFood(existing ? food : { name: 'Custom Food', isCustom: true });
   };
@@ -972,7 +1005,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     const inserts = selectedEntries.map(e => ({
       name: e.name, calories: e.calories, protein: e.protein, carbs: e.carbs, fats: e.fats,
-      hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null, food: e.food ?? null,
+      hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null, servings: e.servings ?? null, food: e.food ?? null,
       user_id: uid,
     }));
     const count = inserts.length;
@@ -1031,6 +1064,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     };
     const serving = String(entry.serving != null ? entry.serving : (snap.servingSize || 100));
     const unit = entry.unit || 'g';
+    // Older rows (logged before servings was stored) collapse to 1; the snapshot already
+    // bakes the count into its total, so 1 reproduces them correctly.
+    const servings = String(entry.servings != null ? entry.servings : 1);
     setAddFoodHour(entry.hour);
     setAddFoodDragY(0);
     setShowAddFoodScreen(true);
@@ -1038,8 +1074,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCustomEditing(false);
     setDetailServing(serving);
     setDetailUnit(unit);
-    setDetailServings('1');
-    setEditingEntry({ id: entry.id, hour: entry.hour, origServing: serving, origUnit: unit, origServings: '1' });
+    setDetailServings(servings);
+    setEditingEntry({ id: entry.id, hour: entry.hour, origServing: serving, origUnit: unit, origServings: servings });
     setDetailFood(snap);
   };
 
@@ -1059,6 +1095,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
     const { error } = await supabase.from('food_entries').update(update).eq('id', e.id).eq('user_id', uid);
     if (error) { return; }
+    rememberPortion(food.name, fields.serving, fields.unit, fields.servings);
     setEditingEntry(null);
     closeAddFood();
     loadFoods();
@@ -1220,17 +1257,22 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCheckedFoods(prev => {
       const next = { ...prev };
       if (next[food.name]) { delete next[food.name]; return next; }
-      const { serving, unit } = defaultServingOf(food);
-      next[food.name] = { food, serving, unit, servings: 1, adjustedMacros: computeMacros(food, serving, unit) };
+      const last = lastPortions[food.name];
+      const { serving, unit } = last || defaultServingOf(food);
+      const servings = last?.servings || 1;
+      next[food.name] = { food, serving, unit, servings, adjustedMacros: computeMacros(food, serving, unit, servings) };
       return next;
     });
   };
 
   const openDetail = (food) => {
-    const { serving, unit } = defaultServingOf(food);
+    // Default to the last portion used for this food; fall back to its base serving.
+    // Meals keep their own per-serving basis, so don't override them.
+    const last = !food?.isMeal ? lastPortions[food?.name] : null;
+    const { serving, unit } = last || defaultServingOf(food);
     setDetailServing(String(serving));
     setDetailUnit(unit);
-    setDetailServings('1');
+    setDetailServings(String(last?.servings || 1));
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(food);
@@ -1298,6 +1340,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     data.forEach(entry => {
       if (!newFoods[entry.hour]) newFoods[entry.hour] = [];
       newFoods[entry.hour].push(entry);
+      // Remember each logged portion (matches what loadLastPortions reads back).
+      rememberPortion(entry.name, entry.serving, entry.unit, entry.servings);
     });
     setFoods(newFoods);
     closeAddFood();
