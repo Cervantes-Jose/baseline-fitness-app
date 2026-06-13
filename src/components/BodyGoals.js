@@ -62,7 +62,14 @@ useEffect(() => { load(); }, []);
 
   const isCustom = (r) => !(defaultIds.has(r.id) || DEFAULT_NAME_SET.has((r.name || '').toLowerCase()));
   const goalFor = (r) => (editMode ? draftGoals[r.id] : r.goal);
-  const hasGoal = (r) => { const g = goalFor(r); return g != null && g !== ''; };
+  // While editing, a blank field ('') keeps the card visible — you're mid-typing, not
+  // removing it. Only the explicit Remove (X → null) drops a goal. In read mode, blank/none
+  // means no goal.
+  const hasGoal = (r) => {
+    const g = goalFor(r);
+    if (editMode) return g !== null && g !== undefined;
+    return g != null && g !== '';
+  };
 
   const enterEdit = () => {
     const seed = {};
@@ -88,8 +95,10 @@ useEffect(() => { load(); }, []);
     // Persist only the goals that actually changed.
     for (const r of rows) {
       const d = draftGoals[r.id];
-      const dv = (d === '' || d == null) ? null : Number(d);
       const orig = r.goal == null ? null : Number(r.goal);
+      // null = removed via the X button; '' / undefined = left blank, so keep the existing
+      // goal rather than deleting it; otherwise the entered number.
+      const dv = d === null ? null : (d === '' || d === undefined ? orig : Number(d));
       if (dv !== orig) {
         await supabase.from('measurements').update({ goal: dv }).eq('id', r.id).eq('user_id', uid);
       }

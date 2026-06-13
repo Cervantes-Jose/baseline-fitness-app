@@ -17,18 +17,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Palette for the routine accent bar (matches the Measurements color set).
-const CHART_COLORS = ['#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#EF4444', '#06B6D4', '#EC4899'];
-
-// Pick a stable, random-looking color per routine by hashing its id so it
-// doesn't flicker between renders the way Math.random() would.
-const routineColor = (id) => {
-  const str = String(id);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-  return CHART_COLORS[hash % CHART_COLORS.length];
-};
-
 // Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
 // once; if a name appears in multiple categories it's attributed to the first
 // (canonical CATEGORIES order). Categories aren't stored on the `exercises` table,
@@ -59,6 +47,15 @@ function formatHMS(seconds) {
   const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
   return `${h}:${m}:${s}`;
+}
+
+// Compact average workout length for the routine card, e.g. "~28 min avg" (or "~1 hr 5 min avg").
+function avgTimeText(seconds) {
+  const mins = Math.round(seconds / 60);
+  if (mins < 1) return '~<1 min avg';
+  if (mins < 60) return `~${mins} min avg`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m === 0 ? `~${h} hr avg` : `~${h} hr ${m} min avg`;
 }
 
 // Rest timers are stored as seconds; displayed/edited as m:ss.
@@ -530,12 +527,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [sessionLog, setSessionLog] = useState(savedLog?.sessionLog || activeWorkout?.sessionLog || {});
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
-  const [renamingRoutine, setRenamingRoutine] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const sessionLogRef = useRef(sessionLog);
+  // Guards finishWorkout against double-submit (rapid taps / doubled events) which would
+  // otherwise insert the same session twice. Synchronous ref so it blocks within one tick.
+  const finishingRef = useRef(false);
   // Rest timers keyed by exercise id: array where index i = rest (seconds) after set i, or null/undefined for no timer.
   const [restTimers, setRestTimers] = useState(savedLog?.restTimers || {});
   const restTimersRef = useRef(restTimers);
@@ -552,10 +548,15 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [calendarDayModal, setCalendarDayModal] = useState(null);
   const [showShortWorkoutModal, setShowShortWorkoutModal] = useState(false);
   const [routineEditMode, setRoutineEditMode] = useState(false);
+  // Routines ticked in edit mode (the tile stays the same; a bottom action bar acts on these).
   const [selectedRoutines, setSelectedRoutines] = useState(new Set());
+  // { id, value } while the rename modal is open, else null.
+  const [renameModal, setRenameModal] = useState(null);
   const [exerciseEditMode, setExerciseEditMode] = useState(false);
   const [selectedExercises, setSelectedExercises] = useState(new Set());
   const [lastPerformed, setLastPerformed] = useState({});
+  // Average completed-workout duration (seconds) per routine id — more sessions = more accurate.
+  const [avgDuration, setAvgDuration] = useState({});
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [exercisePickerSearch, setExercisePickerSearch] = useState('');
@@ -735,6 +736,21 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     }
     setLastPerformed(lastPerformedMap);
 
+    // Average workout length per routine, from one row per session (not the per-exercise join).
+    const { data: sessionData } = await supabase
+      .from('workout_sessions').select('routine_id, duration').eq('user_id', uid);
+    const durAgg = {};   // routine_id -> { total, count }
+    (sessionData || []).forEach(s => {
+      if (s.routine_id == null || s.duration == null) return;
+      const a = durAgg[s.routine_id] || { total: 0, count: 0 };
+      a.total += Number(s.duration) || 0;
+      a.count += 1;
+      durAgg[s.routine_id] = a;
+    });
+    const avgMap = {};
+    Object.entries(durAgg).forEach(([rid, { total, count }]) => { if (count > 0) avgMap[rid] = total / count; });
+    setAvgDuration(avgMap);
+
     const routinesWithExercises = routineData.map(r => ({
       ...r,
       exercises: exerciseData.filter(e => e.routine_id === r.id).map(e => ({ ...e, lastSession: lastSessionMap[`${r.id}::${e.name}`] || null }))
@@ -780,16 +796,62 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setEditMode(false);
   };
 
-  const deleteSelectedRoutines = async () => {
+  // ─── Routine edit mode (tiles unchanged; selection + bottom action bar) ─────
+  const enterRoutineEdit = () => { setSelectedRoutines(new Set()); setRoutineEditMode(true); };
+  const exitRoutineEdit = () => { setSelectedRoutines(new Set()); setRoutineEditMode(false); };
+  const toggleSelectRoutine = (id) => setSelectedRoutines(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+
+  const deleteSelectedRoutines = () => {
     const ids = [...selectedRoutines];
+    if (ids.length === 0) return;
+    const removed = routines.filter(r => selectedRoutines.has(r.id));
     setRoutines(prev => prev.filter(r => !selectedRoutines.has(r.id)));
-    setSelectedRoutines(new Set());
-    setRoutineEditMode(false);
+    exitRoutineEdit();
+    showToast(
+      `${removed.length} routine${removed.length !== 1 ? 's' : ''} deleted`,
+      () => setRoutines(prev => {
+        const have = new Set(prev.map(r => r.id));
+        return [...prev, ...removed.filter(r => !have.has(r.id))];
+      }),
+      async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const uid = session?.user?.id;
+        if (!uid) return;
+        await supabase.from('exercises').delete().eq('user_id', uid).in('routine_id', ids);
+        await supabase.from('routines').delete().eq('user_id', uid).in('id', ids);
+      }
+    );
+  };
+
+  const duplicateSelectedRoutines = async () => {
+    const targets = routines.filter(r => selectedRoutines.has(r.id));
+    if (targets.length === 0) return;
+    exitRoutineEdit();
+    for (const r of targets) await duplicateRoutine(r);
+  };
+
+  // Rename acts on exactly one selected routine via a small modal.
+  const openRenameModal = () => {
+    if (selectedRoutines.size !== 1) return;
+    const id = [...selectedRoutines][0];
+    const r = routines.find(x => x.id === id);
+    if (r) setRenameModal({ id, value: r.name });
+  };
+
+  const submitRenameModal = async () => {
+    if (!renameModal) return;
+    const name = renameModal.value.trim();
+    if (!name) return;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('exercises').delete().eq('user_id', uid).in('routine_id', ids);
-    await supabase.from('routines').delete().eq('user_id', uid).in('id', ids);
+    const { error } = await supabase.from('routines').update({ name }).eq('id', renameModal.id).eq('user_id', uid);
+    if (error) { return; }
+    setRoutines(prev => prev.map(r => r.id === renameModal.id ? { ...r, name } : r));
+    setRenameModal(null);
+    exitRoutineEdit();
   };
 
   const deleteSelectedExercises = async () => {
@@ -835,43 +897,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setShowCreateModal(false);
   };
 
-  const deleteRoutine = (id) => {
-    const item = routines.find(r => r.id === id);
-    if (!item) return;
-    setRoutines(prev => prev.filter(r => r.id !== id));
-    showToast(
-      `"${item.name}" deleted`,
-      () => setRoutines(prev => [...prev, item]),
-      async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const uid = session?.user?.id;
-        if (!uid) return;
-        await supabase.from('routines').delete().eq('id', id).eq('user_id', uid);
-      }
-    );
-  };
-
-  const renameRoutine = (routine) => {
-    setRenamingRoutine(routine);
-    setRenameValue(routine.name);
-    setMenuOpen(null);
-  };
-
-  const submitRename = async () => {
-    if (!renameValue.trim() || !renamingRoutine) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) return;
-    const { error } = await supabase.from('routines')
-      .update({ name: renameValue.trim() }).eq('id', renamingRoutine.id).eq('user_id', uid);
-    if (error) { return; }
-    setRoutines(routines.map(r => r.id === renamingRoutine.id ? { ...r, name: renameValue.trim() } : r));
-    setRenamingRoutine(null);
-    setRenameValue('');
-  };
-
   const duplicateRoutine = async (routine) => {
-    setMenuOpen(null);
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
@@ -1005,17 +1031,49 @@ const updateSet = (exId, setIdx, field, value) => {
     onWorkoutStart();
   };
 
+  // Start a workout straight from a routine card (skips the exercises preview). Combines
+  // openRoutine's prefill with startLogging, operating on the passed routine so it doesn't
+  // depend on activeRoutine/sessionLog state being set yet.
+  const startWorkoutFromRoutine = (routine) => {
+    if (!routine.exercises || routine.exercises.length === 0) return;
+    // Resume instead of restarting if this routine's workout is already in progress.
+    if (activeWorkout?.routine?.id === routine.id) {
+      setActiveRoutine(activeWorkout.routine); setView('logging'); onExpand(); return;
+    }
+    const initial = {};
+    const prefilledRest = {};
+    routine.exercises.forEach(ex => {
+      initial[ex.id] = ex.lastSession?.sets?.length > 0 ? ex.lastSession.sets : [{ sets: '', reps: '', weight: '' }];
+      const rt = ex.rest_timers;
+      prefilledRest[ex.id] = Array.isArray(rt) ? rt : (typeof rt === 'string' ? JSON.parse(rt) : []);
+    });
+    setActiveRoutine(routine);
+    setSessionLog(initial);
+    setRestTimers(prefilledRest);
+    restTimersRef.current = prefilledRest;
+    setExerciseEditMode(false);
+    setSelectedExercises(new Set());
+    setCheckedSets({});
+    setRestStatus({});
+    setExpandedExId(routine.exercises[0]?.id || null);
+    setView('logging');
+    setActiveWorkout({ routineName: routine.name, startTime: Date.now(), routine, sessionLog: initial });
+    onWorkoutStart();
+  };
+
   const confirmFinishWorkout = async () => {
+    if (finishingRef.current) return;   // already saving — ignore the duplicate trigger
+    finishingRef.current = true;
     const currentLog = sessionLogRef.current;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
+    if (!uid) { finishingRef.current = false; return; }
 
     const { data: sessionRow, error: sessionError } = await supabase
       .from('workout_sessions')
       .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString(), duration: workoutSeconds, user_id: uid }])
       .select().single();
-    if (sessionError) { return; }
+    if (sessionError) { finishingRef.current = false; return; }
 
     const exerciseInserts = activeRoutine.exercises.map(ex => ({
       session_id: sessionRow.id,
@@ -1025,13 +1083,14 @@ const updateSet = (exId, setIdx, field, value) => {
     }));
 
     const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
-    if (exError) { return; }
+    if (exError) { finishingRef.current = false; return; }
 
     await loadHistory();
     await loadRoutines();
     setActiveWorkout(null);
     setView('routines');
     setActiveRoutine(null);
+    finishingRef.current = false;   // ready for the next workout
   };
 
   const finishWorkout = () => {
@@ -1395,28 +1454,24 @@ const updateSet = (exId, setIdx, field, value) => {
   );
 
   if (view === 'routines' || view === 'logging') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ padding: '16px', paddingBottom: routineEditMode ? '160px' : '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {routineEditMode && selectedRoutines.size > 0 && (
-            <button onClick={deleteSelectedRoutines}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+          {!routineEditMode && (
+            <>
+              {routines.length > 0 && (
+                <button onClick={enterRoutineEdit}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+                  Edit
+                </button>
+              )}
+              <button onClick={() => setShowCreateModal(true)} aria-label="New routine"
+                style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                + Add Routine
+              </button>
+            </>
           )}
-          {routines.length > 0 && (
-            <button onClick={() => { setRoutineEditMode(e => !e); setSelectedRoutines(new Set()); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
-              {routineEditMode ? 'Done' : 'Edit'}
-            </button>
-          )}
-          <button onClick={() => setShowCreateModal(true)} aria-label="New routine"
-            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            + Add Routine
-          </button>
         </div>
       </div>
 
@@ -1428,70 +1483,75 @@ const updateSet = (exId, setIdx, field, value) => {
         <div style={{
           background: 'var(--card)', borderRadius: '12px', padding: '18px',
           boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: '1px solid var(--border)',
-          borderLeft: `3px solid ${routineColor(r.id)}`,
-          display: 'flex', alignItems: 'center', gap: '12px'
+          display: 'flex', alignItems: routineEditMode ? 'center' : 'flex-start', gap: '12px'
         }}>
+          {/* Edit mode keeps the tile identical — just a selection checkbox (left) and a drag
+              handle (right); actions live in the bottom bar. Tapping the tile toggles selection. */}
           {routineEditMode && (
-            <button onClick={() => setSelectedRoutines(prev => { const next = new Set(prev); next.has(r.id) ? next.delete(r.id) : next.add(r.id); return next; })}
+            <button onClick={() => toggleSelectRoutine(r.id)} aria-label="Select routine"
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
               <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${selectedRoutines.has(r.id) ? 'var(--accent)' : 'var(--border)'}`, background: selectedRoutines.has(r.id) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {selectedRoutines.has(r.id) && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </div>
             </button>
           )}
-          <div style={{ flex: 1, cursor: routineEditMode ? 'default' : (renamingRoutine?.id === r.id ? 'default' : 'pointer') }}
+          <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
             onClick={() => {
-              if (routineEditMode) return;
-              if (renamingRoutine?.id === r.id) return;
+              if (routineEditMode) { toggleSelectRoutine(r.id); return; }
               if (activeWorkout?.routine?.id === r.id) { setActiveRoutine(activeWorkout.routine); setView('logging'); onExpand(); return; }
               openRoutine(r);
             }}>
-            {renamingRoutine?.id === r.id ? (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setRenamingRoutine(null); }}>
-                <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
-                  className="input" style={{ flex: 1, padding: '8px 12px', fontSize: '15px' }}
-                  onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setRenamingRoutine(null); }}
-                  autoFocus />
-                <button onClick={submitRename} className="btn-secondary">Save</button>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)', lineHeight: 1.1 }}>{r.name}</div>
-                  {activeWorkout?.routine?.id === r.id && (
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>Active</span>
-                  )}
-                </div>
-                {routineCategories(r).length > 0 && (
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {routineCategories(r).join('  •  ')}
-                  </div>
-                )}
-                <span style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid var(--blue-200)', borderRadius: '20px', padding: '2px 10px' }}>
-                  {r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}
-                </span>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  {lastPerformed[r.id] ? (
-                    <>Last performed <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{daysAgoText(lastPerformed[r.id])}</span></>
-                  ) : 'Never performed'}
-                </div>
-              </>
-            )}
-          </div>
-          {!routineEditMode && (
-            <div>
-              <button onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenuPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                setMenuOpen(menuOpen === r.id ? null : r.id);
-              }}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '8px 0 8px 16px', minWidth: '44px', textAlign: 'center', letterSpacing: '2px' }}>
-                ···
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-primary)', lineHeight: 1.1 }}>{r.name}</div>
+              {activeWorkout?.routine?.id === r.id && (
+                <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>Active</span>
+              )}
             </div>
-          )}
+            {routineCategories(r).length > 0 && (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {routineCategories(r).join('  •  ')}
+              </div>
+            )}
+            {/* Meta row: last performed · # exercises · avg workout time, separated by dividers. */}
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              <span>
+                {lastPerformed[r.id] ? (
+                  <>Last performed <span style={{ color: 'var(--accent)', fontWeight: '600' }}>{daysAgoText(lastPerformed[r.id])}</span></>
+                ) : 'Never performed'}
+              </span>
+              <span style={{ width: '1px', height: '11px', background: 'var(--border)', flexShrink: 0 }} />
+              <span>{r.exercises.length} exercise{r.exercises.length !== 1 ? 's' : ''}</span>
+              {avgDuration[r.id] != null && (
+                <>
+                  <span style={{ width: '1px', height: '11px', background: 'var(--border)', flexShrink: 0 }} />
+                  <span>{avgTimeText(avgDuration[r.id])}</span>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Normal mode: small Start button (top-right). Greyed when the routine has no
+              exercises or while a workout is in progress. */}
+          {!routineEditMode && (() => {
+            const disabled = r.exercises.length === 0 || !!activeWorkout;
+            return (
+              <button
+                onClick={(e) => { e.stopPropagation(); if (!disabled) startWorkoutFromRoutine(r); }}
+                disabled={disabled}
+                style={{
+                  flexShrink: 0, border: 'none', borderRadius: '8px', padding: '7px 12px',
+                  fontSize: '13px', fontWeight: '600', lineHeight: 1, whiteSpace: 'nowrap',
+                  background: disabled ? 'var(--border)' : 'var(--accent)',
+                  color: disabled ? 'var(--text-muted)' : '#fff',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.6 : 1,
+                }}>
+                Start Workout
+              </button>
+            );
+          })()}
+          {/* Edit mode: drag handle to reorder. */}
           {routineEditMode && (
-            <div {...listeners} style={{ touchAction: 'none', cursor: 'grab', padding: '8px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+            <div {...listeners} style={{ touchAction: 'none', cursor: 'grab', padding: '8px 2px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <circle cx="6" cy="5" r="1.5" fill="currentColor"/>
                 <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
@@ -1509,35 +1569,6 @@ const updateSet = (exId, setIdx, field, value) => {
         </SortableContext>
       </DndContext>
 
-      {menuOpen && <div onClick={() => setMenuOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />}
-
-      {menuOpen && routines.find(r => r.id === menuOpen) && (() => {
-        const r = routines.find(r => r.id === menuOpen);
-        return (
-          <div style={{
-            position: 'fixed', top: menuPosition.top, right: menuPosition.right,
-            background: 'var(--card)', border: '1px solid var(--border)',
-            borderRadius: '12px', overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 300, minWidth: '140px'
-          }}>
-            {[
-              { label: 'Rename', action: () => renameRoutine(r) },
-              { label: 'Duplicate', action: () => duplicateRoutine(r) },
-              { label: 'Delete', action: () => { deleteRoutine(r.id); setMenuOpen(null); }, danger: true },
-            ].map(item => (
-              <button key={item.label} onClick={item.action} style={{
-                display: 'block', width: '100%', padding: '12px 16px', background: 'none',
-                border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px',
-                fontWeight: '500', color: item.danger ? '#ff4444' : 'var(--text-primary)',
-                borderBottom: item.label !== 'Delete' ? '1px solid var(--border)' : 'none'
-              }}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        );
-      })()}
-
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '20vh', zIndex: 500 }}
           onClick={() => setShowCreateModal(false)}>
@@ -1550,6 +1581,44 @@ const updateSet = (exId, setIdx, field, value) => {
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowCreateModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
               <button onClick={addRoutine} className="btn-primary" style={{ flex: 1 }}>Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit-mode action bar — floats above the tab bar (like the food log's select bar).
+          The routine tiles stay unchanged; these act on the ticked routines. */}
+      {routineEditMode && (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 82, width: '100%', maxWidth: 'calc(100% - 32px)', zIndex: 150 }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', padding: '12px 14px', display: 'flex', gap: 8 }}>
+            <button onClick={deleteSelectedRoutines} disabled={selectedRoutines.size === 0}
+              style={{ flex: 1, background: '#ff4444', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: selectedRoutines.size === 0 ? 'default' : 'pointer', opacity: selectedRoutines.size === 0 ? 0.4 : 1 }}>
+              Delete ({selectedRoutines.size})
+            </button>
+            <button onClick={duplicateSelectedRoutines} disabled={selectedRoutines.size === 0}
+              className="btn-secondary" style={{ flex: 1, opacity: selectedRoutines.size === 0 ? 0.4 : 1, cursor: selectedRoutines.size === 0 ? 'default' : 'pointer' }}>Duplicate</button>
+            <button onClick={openRenameModal} disabled={selectedRoutines.size !== 1}
+              className="btn-secondary" style={{ flex: 1, opacity: selectedRoutines.size !== 1 ? 0.4 : 1, cursor: selectedRoutines.size !== 1 ? 'default' : 'pointer' }}>Rename</button>
+            <button onClick={exitRoutineEdit}
+              style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', fontWeight: 600, fontSize: 14, cursor: 'pointer', color: 'var(--text-primary)' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {renameModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '20vh', zIndex: 500 }}
+          onClick={() => setRenameModal(null)}>
+          <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontWeight: '600', marginBottom: '16px', fontSize: '16px', color: 'var(--text-primary)' }}>Rename Routine</p>
+            <input value={renameModal.value} onChange={e => setRenameModal(m => ({ ...m, value: e.target.value }))}
+              className="input" style={{ marginBottom: '16px' }}
+              onKeyDown={e => e.key === 'Enter' && submitRenameModal()} autoFocus />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setRenameModal(null)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={submitRenameModal} className="btn-primary" style={{ flex: 1 }}>Save</button>
             </div>
           </div>
         </div>
