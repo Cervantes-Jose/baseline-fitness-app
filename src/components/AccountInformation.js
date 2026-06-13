@@ -110,7 +110,7 @@ function EditSheet({ field, onClose, onSave }) {
 }
 
 // ─── ACCOUNT INFORMATION ────────────────────────────────────
-export default function AccountInformation({ onBack = () => {}, user = null, metricSystem = 'imperial' }) {
+export default function AccountInformation({ user = null, metricSystem = 'imperial' }) {
   // gender/dob/height come from this user's `profiles` row; name + email come from auth.
   const [profile, setProfile] = useState({ gender: '', dob: '', height: '' });
   const [editing, setEditing] = useState(null);
@@ -198,12 +198,6 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
 
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Back to Profile */}
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Profile
-      </button>
-
       {/* Centered, enlarged avatar with a camera badge for changing the photo.
           Photo upload is deferred (needs storage), so the badge toasts for now. */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 24px' }}>
@@ -246,7 +240,7 @@ export default function AccountInformation({ onBack = () => {}, user = null, met
       </div>
 
       {/* Danger zone — permanent account deletion (handled server-side) */}
-      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: '#EF4444', padding: '28px 20px 8px', margin: 0 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: 'normal', color: '#EF4444', padding: '28px 20px 8px', margin: 0 }}>
         Danger Zone
       </p>
       <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)' }}>

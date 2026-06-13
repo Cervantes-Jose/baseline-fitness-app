@@ -31,17 +31,9 @@ const Link = ({ href, children }) => (
   <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 13, color: 'var(--accent)', textDecoration: 'none', margin: '0 0 6px' }}>{children}</a>
 );
 
-export default function PrivacyPolicy({ onBack = () => {}, hideBack = false }) {
+export default function PrivacyPolicy() {
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Back to Profile — hidden when shown inside the signup bottom sheet */}
-      {!hideBack && (
-        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          Profile
-        </button>
-      )}
-
       <div className="card-flat" style={{ margin: '0 16px', padding: 20 }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 2px' }}>Effective date: {EFFECTIVE_DATE}</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>Last updated: {LAST_UPDATED}</p>

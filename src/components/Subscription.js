@@ -29,7 +29,7 @@ const PREMIUM_PERKS = [
 
 const MANAGE_ROWS = ['Manage Subscription', 'Restore Purchases', 'Payment History'];
 
-export default function Subscription({ onBack = () => {} }) {
+export default function Subscription() {
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -43,12 +43,6 @@ export default function Subscription({ onBack = () => {} }) {
 
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Back to Profile */}
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Profile
-      </button>
-
       {/* Current plan */}
       <div className="card-flat" style={{ margin: '0 16px 16px', padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

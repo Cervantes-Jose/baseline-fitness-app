@@ -14,7 +14,7 @@ const Check = () => (
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 8 }}>
-      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '16px 20px 8px', margin: 0 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: 'normal', color: 'var(--text-primary)', padding: '16px 20px 8px', margin: 0 }}>
         {title}
       </p>
       <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', overflow: 'hidden' }}>
@@ -35,7 +35,7 @@ function OptionRow({ label, selected, onClick, isLast }) {
   );
 }
 
-export default function Units({ onBack = () => {}, metricSystem = 'imperial', setMetricSystem = () => {} }) {
+export default function Units({ metricSystem = 'imperial', setMetricSystem = () => {} }) {
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -51,12 +51,6 @@ export default function Units({ onBack = () => {}, metricSystem = 'imperial', se
 
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Back to Profile */}
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Profile
-      </button>
-
       {/* WEIGHT */}
       <Section title="Weight">
         <OptionRow label="Imperial (lbs)" selected={isImperial} onClick={() => setMetricSystem('imperial')} />

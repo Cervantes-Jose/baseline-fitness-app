@@ -4,7 +4,7 @@ import BodyGoals from './BodyGoals';
 
 // Goals shell: shared header + Nutrition / Body tab switcher. Each tab owns its own
 // data and Edit/Save flow.
-function Goals({ onGoalsUpdate = () => {}, onBack = () => {}, metricSystem = 'imperial' }) {
+function Goals({ onGoalsUpdate = () => {}, metricSystem = 'imperial' }) {
   const [tab, setTab] = useState('nutrition');
 
   // Individual rounded pills matching the Workout tabs (inactive = light grey, active
@@ -31,12 +31,6 @@ function Goals({ onGoalsUpdate = () => {}, onBack = () => {}, metricSystem = 'im
       `}</style>
 
       <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 4px' }}>Set targets and track your progress.</p>
-
-      {/* Back to Profile */}
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '0 0 4px' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Back
-      </button>
 
       {/* Nutrition / Body switcher */}
       <div style={{ display: 'flex', gap: 8 }}>

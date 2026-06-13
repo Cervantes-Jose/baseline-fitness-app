@@ -89,7 +89,7 @@ export default function LegalSheet({ doc, onClose = () => {} }) {
 
         {/* Scrollable document body — reuses the existing legal screens */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {doc === 'terms' ? <TermsOfService hideBack /> : <PrivacyPolicy hideBack />}
+          {doc === 'terms' ? <TermsOfService /> : <PrivacyPolicy />}
         </div>
       </div>
     </div>

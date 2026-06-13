@@ -248,7 +248,7 @@ const changeDate = (dir) => {
       case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
       case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} /></div>;
-      case 'profile-goals': return <Goals onBack={() => setActiveTab('profile')} metricSystem={metricSystem} onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
+      case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'workout-start':
       case 'workout-exercises':
       case 'workout-measurements':
@@ -274,11 +274,11 @@ const changeDate = (dir) => {
           onSkipRest={skipRest}
         />;
       case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
-      case 'profile-account': return <AccountInformation onBack={() => setActiveTab('profile')} user={user} metricSystem={metricSystem} />;
-      case 'profile-subscription': return <Subscription onBack={() => setActiveTab('profile')} />;
-      case 'profile-units': return <Units onBack={() => setActiveTab('profile')} metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
-      case 'profile-privacy': return <PrivacyPolicy onBack={() => setActiveTab('profile')} />;
-      case 'profile-terms': return <TermsOfService onBack={() => setActiveTab('profile')} />;
+      case 'profile-account': return <AccountInformation user={user} metricSystem={metricSystem} />;
+      case 'profile-subscription': return <Subscription />;
+      case 'profile-units': return <Units metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile-privacy': return <PrivacyPolicy />;
+      case 'profile-terms': return <TermsOfService />;
       default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
     }
   };
@@ -300,9 +300,15 @@ const changeDate = (dir) => {
 
   return (
     <div className="app">
-      {/* Header — hidden on dashboard + its edit screen (Dashboard renders its own) */}
+      {/* Header — hidden on dashboard + its edit screen (Dashboard renders its own).
+          Profile sub-screens get a bare blue back chevron stacked above the title. */}
       {activeTab !== 'dashboard' && activeTab !== 'dashboard-edit' && (
-        <div className="header">
+        <div className="header" style={activeTab.startsWith('profile-') ? { flexDirection: 'column', alignItems: 'flex-start', gap: 2 } : undefined}>
+          {activeTab.startsWith('profile-') && (
+            <button onClick={() => setActiveTab('profile')} aria-label="Back" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          )}
           <span className="header-title">{getHeaderTitle(activeTab)}</span>
         </div>
       )}

@@ -51,7 +51,7 @@ function Row({ icon, label, onClick, right, isLast }) {
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 8 }}>
-      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--text-muted)', padding: '16px 20px 8px', margin: 0 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: 'normal', color: 'var(--text-primary)', padding: '16px 20px 8px', margin: 0 }}>
         {title}
       </p>
       <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', overflow: 'hidden' }}>
