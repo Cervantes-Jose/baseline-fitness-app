@@ -14,6 +14,14 @@ function ButtonSpinner() {
   );
 }
 
+// Field layout: a label stacked above its input, with bigger inputs than the
+// default `.input` to give the login form more presence.
+const fieldGroup = { display: 'flex', flexDirection: 'column', gap: 9 };
+// Black, sentence-case label (overrides `.section-title`'s muted uppercase look).
+const fieldLabel = { margin: 0, color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 'normal' };
+// Bigger inputs, squared off (12px) to match the app's flat tiles.
+const bigInput = { padding: '19px 18px', fontSize: 17, borderRadius: 12 };
+
 // ─── AUTH SCREEN ────────────────────────────────────────────
 // Full-screen login / signup / forgot-password flow. Rendered by App.js when
 // there is no authenticated user. No bottom tab bar here.
@@ -128,26 +136,25 @@ export default function AuthScreen({ onAuth = () => {} }) {
     <div style={{
       minHeight: '100vh', background: 'var(--bg)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: '24px',
+      justifyContent: 'center', padding: '24px 16px',
     }}>
       {/* keyframes for the in-button spinner */}
       <style>{`@keyframes authSpin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* App name + tagline */}
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
-          Baseline Fitness
+      {/* App name + tagline — pinned to the top-left of the screen */}
+      <div style={{ position: 'absolute', top: 56, left: 24, right: 24, textAlign: 'left' }}>
+        <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-1px', margin: 0, lineHeight: 1.1 }}>
+          {view === 'login' ? 'Welcome to Baseline Fitness' : 'Baseline Fitness'}
         </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 6 }}>
-          Track everything. Know your baseline.
+        <p style={{ fontSize: 16, color: 'var(--text-muted)', marginTop: 12 }}>
+          {view === 'login' ? 'Sign in to continue tracking your progress.' : 'Track everything. Know your baseline.'}
         </p>
       </div>
 
       {/* Form card */}
       <form
         onSubmit={onSubmit}
-        className="card-flat"
-        style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}
+        style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 20 }}
       >
         {view === 'reset' && (
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>
@@ -156,59 +163,86 @@ export default function AuthScreen({ onAuth = () => {} }) {
         )}
 
         {view === 'signup' && (
-          <input
-            className="input"
-            type="text"
-            autoCapitalize="words"
-            autoComplete="given-name"
-            placeholder="First Name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            disabled={loading}
-          />
+          <div style={fieldGroup}>
+            <label className="section-title" style={fieldLabel}>First Name</label>
+            <input
+              className="input"
+              type="text"
+              autoCapitalize="words"
+              autoComplete="given-name"
+              placeholder="Enter your name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              disabled={loading}
+              style={bigInput}
+            />
+          </div>
         )}
 
         {view !== 'reset' && (
-          <input
-            className="input"
-            type="email"
-            inputMode="email"
-            autoCapitalize="none"
-            autoComplete="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-          />
+          <div style={fieldGroup}>
+            <label className="section-title" style={fieldLabel}>Email</label>
+            <input
+              className="input"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              style={bigInput}
+            />
+          </div>
         )}
 
         {view !== 'forgot' && (
-          <input
-            className="input"
-            type="password"
-            autoComplete={view === 'login' ? 'current-password' : 'new-password'}
-            placeholder={view === 'reset' ? 'New password' : 'Password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-          />
+          <div style={fieldGroup}>
+            <label className="section-title" style={fieldLabel}>Password</label>
+            <input
+              className="input"
+              type="password"
+              autoComplete={view === 'login' ? 'current-password' : 'new-password'}
+              placeholder={view === 'reset' ? 'New password' : 'Enter your password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              style={bigInput}
+            />
+          </div>
+        )}
+
+        {/* Forgot password (right) — login only */}
+        {view === 'login' && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -2 }}>
+            <button
+              type="button"
+              onClick={() => switchView('forgot')}
+              style={{ ...linkStyle, fontSize: 14 }}
+            >
+              Forgot password?
+            </button>
+          </div>
         )}
 
         {(view === 'signup' || view === 'reset') && (
-          <>
+          <div style={fieldGroup}>
+            <label className="section-title" style={fieldLabel}>Confirm Password</label>
             <input
               className="input"
               type="password"
               autoComplete="new-password"
-              placeholder={view === 'reset' ? 'Confirm new password' : 'Confirm password'}
+              placeholder={view === 'reset' ? 'Re-enter new password' : 'Re-enter your password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={loading}
+              style={bigInput}
             />
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: -4 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
               At least 6 characters
             </p>
-          </>
+          </div>
         )}
 
         {/* Success message (forgot password) */}
@@ -237,17 +271,10 @@ export default function AuthScreen({ onAuth = () => {} }) {
           type="submit"
           className="btn-primary"
           disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 50, opacity: loading ? 0.85 : 1 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 50, fontWeight: 500, opacity: loading ? 0.85 : 1 }}
         >
           {loading ? <ButtonSpinner /> : (view === 'login' ? 'Sign In' : view === 'signup' ? 'Create Account' : view === 'reset' ? 'Update Password' : 'Send Reset Link')}
         </button>
-
-        {/* Forgot password link (login only) */}
-        {view === 'login' && (
-          <button type="button" onClick={() => switchView('forgot')} style={{ ...linkStyle, alignSelf: 'center' }}>
-            Forgot password?
-          </button>
-        )}
 
         {/* Back to sign in (forgot only) */}
         {view === 'forgot' && (
