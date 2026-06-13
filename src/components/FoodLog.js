@@ -122,9 +122,11 @@ function CalendarModal({ selected, onSelect, onClose }) {
 }
 
 // ─── MACRO CIRCLE TILE ───────────────────────────────────────
+// A single macro ring. Rendered as a borderless cell (flex:1) inside the combined macro
+// tile, with vertical dividers between cells — see the MACRO CIRCLES section below.
 function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
-  const size = 80;
-  const sw = 7;
+  const size = 62;
+  const sw = 6;
   const radius = (size - sw) / 2;
   const circ = 2 * Math.PI * radius;
   const progress = Math.min(goal > 0 ? value / goal : 0, 1);
@@ -133,11 +135,8 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
 
   return (
     <div style={{
-      background: 'var(--card)', borderRadius: 16, padding: '12px 10px',
+      flex: 1, minWidth: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      flexShrink: 0, minWidth: 104,
-      border: '1px solid var(--border)',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
     }}>
       <div style={{ position: 'relative', width: size, height: size }}>
         <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', position: 'absolute', top: 0, left: 0 }}>
@@ -147,16 +146,16 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
             style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, textAlign: 'center' }}>
             {isCalories ? value : `${value}g`}
           </div>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1 }}>
+          <div style={{ fontSize: 8, color: 'var(--text-muted)', lineHeight: 1 }}>
             /{isCalories ? goal : `${goal}g`}
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{pct}%</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5 }}>{pct}%</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', marginTop: 1 }}>{label}</div>
     </div>
   );
 }
@@ -428,6 +427,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Last portion (serving/unit/servings) used for each food, keyed by name. Lets re-adding
   // or editing a food default to what you last entered instead of the food's base serving.
   const [lastPortions, setLastPortions] = useState({});
+  // Free-text filter for the Favorites / Custom Foods / Meals tabs (cleared on tab switch).
+  const [listSearch, setListSearch] = useState('');
   // Which list the Add Food sheet shows when not actively searching.
   const [addFoodTab, setAddFoodTab] = useState('recent');   // 'recent' | 'favorites' | 'meals' | 'custom'
 
@@ -512,6 +513,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => {
     if (activeFilter !== 'Custom Foods' && customEditMode) { setCustomEditMode(false); setNameDrafts({}); }
   }, [activeFilter, customEditMode]);
+
+  // Reset the list filter whenever the tab changes so a stale query doesn't hide items.
+  useEffect(() => { setListSearch(''); }, [activeFilter]);
 
   useEffect(() => {
     if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); loadLastPortions(); }
@@ -1455,6 +1459,23 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     );
   };
 
+  // Filter a list of {name} items by the active list search query (no-op when empty).
+  const filterByName = (arr) => {
+    const q = listSearch.trim().toLowerCase();
+    return q ? arr.filter(x => (x.name || '').toLowerCase().includes(q)) : arr;
+  };
+
+  // Search bar shown atop the Favorites / Custom Foods / Meals tabs (matches the exercise picker).
+  const renderListSearch = (placeholder) => (
+    <input
+      value={listSearch}
+      onChange={e => setListSearch(e.target.value)}
+      placeholder={placeholder}
+      className="input"
+      style={{ width: '100%', marginBottom: 10 }}
+    />
+  );
+
   const renderFavoriteRow = (fav) => {
     const f = fav.food || {};
     return (
@@ -1567,16 +1588,25 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       </div>
 
       {/* ─── MACRO CIRCLES ──────────────────────────────────── */}
-      <div style={{
-        display: 'flex', overflowX: 'auto', gap: 10,
-        padding: '12px 16px',
-        scrollbarWidth: 'none', msOverflowStyle: 'none',
-      }}>
-        <MacroCircle value={totals.calories} goal={calorieGoal} color="#3B82F6" trackColor="#DBEAFE" label="Calories" isCalories />
-        <MacroCircle value={totals.protein}  goal={proteinGoal} color="#22C55E" trackColor="#DCFCE7" label="Protein" />
-        <MacroCircle value={totals.fats}     goal={fatsGoal}    color="#3B82F6" trackColor="#DBEAFE" label="Fat" />
-        <MacroCircle value={totals.carbs}    goal={carbsGoal}   color="#EAB308" trackColor="#FEF9C3" label="Carbs" />
-        <div style={{ minWidth: 4, flexShrink: 0 }} />
+      {/* One combined tile with vertical dividers between rings (like the workout stats tile). */}
+      <div style={{ padding: '12px 16px' }}>
+        <div style={{
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)', padding: '14px 4px',
+          display: 'flex', alignItems: 'center',
+        }}>
+          {[
+            { value: totals.calories, goal: calorieGoal, color: '#3B82F6', trackColor: '#DBEAFE', label: 'Calories', isCalories: true },
+            { value: totals.protein,  goal: proteinGoal, color: '#22C55E', trackColor: '#DCFCE7', label: 'Protein' },
+            { value: totals.fats,     goal: fatsGoal,    color: '#3B82F6', trackColor: '#DBEAFE', label: 'Fat' },
+            { value: totals.carbs,    goal: carbsGoal,   color: '#EAB308', trackColor: '#FEF9C3', label: 'Carbs' },
+          ].map((m, i) => (
+            <React.Fragment key={m.label}>
+              {i > 0 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '4px 0' }} />}
+              <MacroCircle {...m} />
+            </React.Fragment>
+          ))}
+        </div>
       </div>
 
       {/* ─── FILTER TABS ────────────────────────────────────── */}
@@ -1615,8 +1645,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           {favorites.length === 0 && meals.length === 0
             ? emptyState('No favorites yet. Tap a food and choose “Add to Favorites” to see it here.')
             : <>
-                {meals.map(renderMealLogRow)}
-                {favorites.map(renderFavoriteRow)}
+                {renderListSearch('Search favorites...')}
+                {(() => {
+                  const fm = filterByName(meals), ff = filterByName(favorites);
+                  return fm.length === 0 && ff.length === 0
+                    ? emptyState('No favorites match your search.')
+                    : <>{fm.map(renderMealLogRow)}{ff.map(renderFavoriteRow)}</>;
+                })()}
               </>}
         </div>
       ) : activeFilter === 'Meals' ? (
@@ -1630,7 +1665,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           </div>
           {meals.length === 0
             ? emptyState('No meals yet. Tap “+ Add Meal” to build one from your foods.')
-            : meals.map(renderMealManageRow)}
+            : <>
+                {renderListSearch('Search meals...')}
+                {(() => {
+                  const fm = filterByName(meals);
+                  return fm.length === 0
+                    ? emptyState('No meals match your search.')
+                    : fm.map(renderMealManageRow);
+                })()}
+              </>}
         </div>
       ) : activeFilter === 'Custom Foods' ? (
         /* ─── CUSTOM FOODS LIST ──────────────────────────────── */
@@ -1649,7 +1692,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           </div>
           {customFoods.length === 0 ? (
             emptyState('No custom foods yet. Tap “+ Add Custom Food” to create one.')
-          ) : customFoods.map(food => (
+          ) : (() => {
+            const fc = filterByName(customFoods);
+            return <>
+              {renderListSearch('Search custom foods...')}
+              {fc.length === 0
+                ? emptyState('No custom foods match your search.')
+                : fc.map(food => (
             customEditMode ? (
               /* Edit mode: inline rename + quick delete. */
               <div key={'mcustom-' + food.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
@@ -1683,6 +1732,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               </div>
             )
           ))}
+            </>;
+          })()}
         </div>
       ) : activeFilter === 'Nutrition' ? (
         <Nutrition selectedDate={date} />
@@ -1758,6 +1809,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                         })()}
                         {hourFoods.map(f => {
                           const isSel = selectedEntries.some(e => e.id === f.id);
+                          // Portion added, e.g. "50g" or "50g ×3" (omit for older rows missing it).
+                          const portion = f.serving != null
+                            ? `${Math.round((Number(f.serving) || 0) * 100) / 100}${f.unit || 'g'}${Number(f.servings) > 1 ? ` ×${Number(f.servings)}` : ''}`
+                            : null;
                           return (
                             <div key={f.id}
                               onClick={(e) => { e.stopPropagation(); onFoodTap(f); }}
@@ -1777,7 +1832,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                               )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{f.name}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{f.calories} cal · {f.protein}g P</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>{f.calories} cal · {f.protein}g P · {f.carbs}g C · {f.fats}g F{portion ? ` · ${portion}` : ''}</div>
                               </div>
                               {selectMode && (
                                 <button onClick={(e) => { e.stopPropagation(); deleteFood(f.id, h.value); }} aria-label="Delete food"
