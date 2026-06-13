@@ -1,5 +1,26 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import LegalSheet from './LegalSheet';
+
+// Eye / eye-off icon for the password reveal toggle.
+function EyeIcon({ off }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {off ? (
+        <>
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </>
+      ) : (
+        <>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      )}
+    </svg>
+  );
+}
 
 // Small inline spinner used inside buttons while auth is processing.
 function ButtonSpinner() {
@@ -28,6 +49,7 @@ const bigInput = { padding: '19px 18px', fontSize: 17, borderRadius: 12 };
 export default function AuthScreen({ onAuth = () => {} }) {
   const [view, setView] = useState('login'); // login | signup | forgot | reset
   const [firstName, setFirstName] = useState('');
+  const [age, setAge] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,6 +57,8 @@ export default function AuthScreen({ onAuth = () => {} }) {
   const [success, setSuccess] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [legalDoc, setLegalDoc] = useState(null); // null | 'terms' | 'privacy'
 
   // Supabase redirects back from a password-reset email with a recovery token in
   // the URL hash. Detect it on mount and show the "Set New Password" form.
@@ -52,6 +76,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
     setSuccess('');
     setResetSent(false);
     setFirstName('');
+    setAge('');
     setPassword('');
     setConfirmPassword('');
   };
@@ -68,6 +93,9 @@ export default function AuthScreen({ onAuth = () => {} }) {
   const handleSignUp = async () => {
     setError('');
     if (!firstName.trim()) { setError('Please enter your name'); return; }
+    const ageNum = parseInt(age, 10);
+    if (!age.trim() || Number.isNaN(ageNum)) { setError('Please enter your age'); return; }
+    if (ageNum < 13) { setError('You must be at least 13 years old to use Baseline Fitness'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
     setLoading(true);
@@ -141,13 +169,31 @@ export default function AuthScreen({ onAuth = () => {} }) {
       {/* keyframes for the in-button spinner */}
       <style>{`@keyframes authSpin { to { transform: rotate(360deg); } }`}</style>
 
+      {/* Back to sign in — bare blue chevron, top-left (signup only) */}
+      {view === 'signup' && (
+        <button
+          type="button"
+          onClick={() => switchView('login')}
+          aria-label="Back"
+          style={{ position: 'absolute', top: 16, left: 10, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 8, display: 'flex' }}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      )}
+
       {/* App name + tagline — pinned to the top-left of the screen */}
       <div style={{ position: 'absolute', top: 56, left: 24, right: 24, textAlign: 'left' }}>
         <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-1px', margin: 0, lineHeight: 1.1 }}>
-          {view === 'login' ? 'Welcome to Baseline Fitness' : 'Baseline Fitness'}
+          {view === 'login' && <span style={{ display: 'block' }}>Welcome to</span>}
+          {view === 'signup' && <span style={{ display: 'block' }}>Join</span>}
+          <span style={{ display: 'block', color: 'var(--accent)' }}>Baseline Fitness</span>
         </h1>
         <p style={{ fontSize: 16, color: 'var(--text-muted)', marginTop: 12 }}>
-          {view === 'login' ? 'Sign in to continue tracking your progress.' : 'Track everything. Know your baseline.'}
+          {view === 'login'
+            ? 'Sign in to continue tracking your progress.'
+            : view === 'signup'
+            ? 'Elevate your fitness journey.'
+            : 'Track everything. Know your baseline.'}
         </p>
       </div>
 
@@ -197,19 +243,54 @@ export default function AuthScreen({ onAuth = () => {} }) {
           </div>
         )}
 
-        {view !== 'forgot' && (
+        {view === 'signup' && (
           <div style={fieldGroup}>
-            <label className="section-title" style={fieldLabel}>Password</label>
+            <label className="section-title" style={fieldLabel}>Age</label>
             <input
               className="input"
-              type="password"
-              autoComplete={view === 'login' ? 'current-password' : 'new-password'}
-              placeholder={view === 'reset' ? 'New password' : 'Enter your password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              type="number"
+              inputMode="numeric"
+              min="13"
+              placeholder="Enter your age"
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
               disabled={loading}
               style={bigInput}
             />
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              You must be at least 13 years old.
+            </p>
+          </div>
+        )}
+
+        {view !== 'forgot' && (
+          <div style={fieldGroup}>
+            <label className="section-title" style={fieldLabel}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="input"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete={view === 'login' ? 'current-password' : 'new-password'}
+                placeholder={view === 'reset' ? 'New password' : 'Enter your password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                style={{ ...bigInput, paddingRight: 52 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute', top: '50%', right: 14, transform: 'translateY(-50%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <EyeIcon off={showPassword} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -239,9 +320,15 @@ export default function AuthScreen({ onAuth = () => {} }) {
               disabled={loading}
               style={bigInput}
             />
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              At least 6 characters
-            </p>
+            {confirmPassword && confirmPassword !== password ? (
+              <p style={{ fontSize: 12, color: '#EF4444', fontWeight: 500, margin: '2px 0 0' }}>
+                Passwords don't match
+              </p>
+            ) : (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                At least 6 characters
+              </p>
+            )}
           </div>
         )}
 
@@ -273,8 +360,20 @@ export default function AuthScreen({ onAuth = () => {} }) {
           disabled={loading}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 50, fontWeight: 500, opacity: loading ? 0.85 : 1 }}
         >
-          {loading ? <ButtonSpinner /> : (view === 'login' ? 'Sign In' : view === 'signup' ? 'Create Account' : view === 'reset' ? 'Update Password' : 'Send Reset Link')}
+          {loading ? <ButtonSpinner /> : (view === 'login' ? 'Sign In' : view === 'signup' ? 'Sign up' : view === 'reset' ? 'Update Password' : 'Send Reset Link')}
         </button>
+
+        {/* Legal agreement — signup only. Links open the bottom sheet. */}
+        {view === 'signup' && (
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5, margin: 0 }}>
+            <span style={{ display: 'block' }}>By signing up, you agree to our</span>
+            <span style={{ display: 'block' }}>
+              <button type="button" onClick={() => setLegalDoc('terms')} style={{ ...linkStyle, fontSize: 14 }}>Terms of Service</button>
+              {' '}and{' '}
+              <button type="button" onClick={() => setLegalDoc('privacy')} style={{ ...linkStyle, fontSize: 14 }}>Privacy Policy</button>.
+            </span>
+          </p>
+        )}
 
         {/* Back to sign in (forgot only) */}
         {view === 'forgot' && (
@@ -285,7 +384,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
       </form>
 
       {/* Footer view switch */}
-      <div style={{ marginTop: 20, fontSize: 14, color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: view === 'signup' ? 10 : 20, fontSize: 15, color: 'var(--text-muted)' }}>
         {view === 'login' && (
           <span>
             Don't have an account?{' '}
@@ -299,6 +398,9 @@ export default function AuthScreen({ onAuth = () => {} }) {
           </span>
         )}
       </div>
+
+      {/* Terms / Privacy bottom sheet */}
+      <LegalSheet doc={legalDoc} onClose={() => setLegalDoc(null)} />
     </div>
   );
 }

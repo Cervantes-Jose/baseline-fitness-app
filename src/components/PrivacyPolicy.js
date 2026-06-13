@@ -15,14 +15,16 @@ const Email = () => (
   <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{CONTACT_EMAIL}</a>
 );
 
-export default function PrivacyPolicy({ onBack = () => {} }) {
+export default function PrivacyPolicy({ onBack = () => {}, hideBack = false }) {
   return (
     <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Back to Profile */}
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Profile
-      </button>
+      {/* Back to Profile — hidden when shown inside the signup bottom sheet */}
+      {!hideBack && (
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: 'var(--accent)', fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '4px 12px 8px' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          Profile
+        </button>
+      )}
 
       <div className="card-flat" style={{ margin: '0 16px', padding: 20 }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 2px' }}>Effective date: {EFFECTIVE_DATE}</p>
