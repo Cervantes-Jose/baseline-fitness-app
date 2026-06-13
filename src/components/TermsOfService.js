@@ -2,7 +2,7 @@ import React from 'react';
 
 // Static legal screen. Reached from Profile → Support → Terms of Service.
 const EFFECTIVE_DATE = 'June 12, 2026';
-const LAST_UPDATED = 'June 12, 2026';
+const LAST_UPDATED = 'June 13, 2026';
 const CONTACT_EMAIL = 'baselinestudios.dev@gmail.com';
 
 const H = ({ children, first }) => (
@@ -13,6 +13,21 @@ const P = ({ children }) => (
 );
 const Email = () => (
   <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{CONTACT_EMAIL}</a>
+);
+// Bulleted list (mirrors the HTML <ul> blocks).
+const List = ({ items }) => (
+  <ul style={{ margin: '4px 0 6px', paddingLeft: 18 }}>
+    {items.map((it, i) => (
+      <li key={i} style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 3 }}>{it}</li>
+    ))}
+  </ul>
+);
+// Emphasized callout (mirrors the HTML .warning-box, e.g. the "Important" health note).
+const Callout = ({ label, children }) => (
+  <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', margin: '10px 0' }}>
+    <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color: 'var(--accent)', margin: '0 0 6px' }}>{label}</p>
+    <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>{children}</p>
+  </div>
 );
 
 export default function TermsOfService({ onBack = () => {}, hideBack = false }) {
@@ -31,34 +46,55 @@ export default function TermsOfService({ onBack = () => {}, hideBack = false }) 
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>Last updated: {LAST_UPDATED}</p>
 
         <H first>Acceptance of Terms</H>
-        <P>By creating an account or using this fitness app, you agree to these Terms of Service. If you do not agree, please do not use the app.</P>
+        <P>By creating an account or using Baseline Fitness, you agree to these Terms of Service. If you do not agree, do not use the app.</P>
 
-        <H>The Service</H>
-        <P>The app lets you log food, track workouts and body measurements, and set personal goals. We may add, change, or remove features over time.</P>
-
-        <H>Not Medical Advice</H>
-        <P>The app is provided for general fitness and informational purposes only and is not a substitute for professional medical advice. Consult a qualified healthcare provider before starting any diet or exercise program. Nutrition values shown are estimates and may not be accurate.</P>
+        <H>Who Can Use Baseline Fitness</H>
+        <P>You must be at least 13 years old to use Baseline Fitness. By using the app you confirm you meet this requirement.</P>
 
         <H>Your Account</H>
-        <P>You are responsible for keeping your login credentials secure and for all activity under your account. You must provide accurate information and be old enough to form a binding agreement in your jurisdiction.</P>
+        <P>You are responsible for maintaining the security of your account credentials. Do not share your password. You are responsible for all activity that occurs under your account.</P>
+        <P>If you believe your account has been compromised, contact us immediately at <Email />.</P>
+
+        <H>What Baseline Fitness Is</H>
+        <P>Baseline Fitness is a personal fitness tracking tool designed to help you log food, workouts, and body measurements for your own reference.</P>
+        <Callout label="Important">Baseline Fitness is not a medical device and is not a substitute for professional medical, nutritional, or fitness advice. Do not use it to diagnose, treat, or manage any medical condition. Always consult a qualified healthcare professional before making significant changes to your diet or exercise routine. Do not disregard professional medical advice or delay seeking medical attention because of anything in this app.</Callout>
+
+        <H>Your Data</H>
+        <P>You own your fitness data. Baseline Studios does not claim any rights to the data you enter into Baseline Fitness. See our Privacy Policy for details on how your data is stored and protected.</P>
 
         <H>Acceptable Use</H>
-        <P>You agree not to misuse the app, attempt to disrupt or abuse its services, access data that is not yours, or use it for any unlawful purpose.</P>
+        <P>You agree not to:</P>
+        <List items={['Use the app for any unlawful purpose', "Attempt to gain unauthorized access to the service or other users' data", 'Reverse engineer, scrape, or abuse the app or its APIs', 'Use automated scripts or bots to interact with the service']} />
 
-        <H>Intellectual Property</H>
-        <P>The app and its content (excluding the data you enter) are owned by us and protected by applicable laws. You retain ownership of the data you create.</P>
+        <H>Service Availability</H>
+        <P>We aim to keep Baseline Fitness available at all times but do not guarantee uninterrupted access. The service may be temporarily unavailable due to maintenance, updates, or circumstances outside our control.</P>
 
-        <H>Disclaimers &amp; Limitation of Liability</H>
-        <P>The app is provided "as is" without warranties of any kind. To the fullest extent permitted by law, we are not liable for any damages arising from your use of the app.</P>
+        <H>Changes to the Service</H>
+        <P>We reserve the right to modify, suspend, or discontinue any part of Baseline Fitness at any time. We will make reasonable efforts to notify users of significant changes.</P>
 
-        <H>Termination</H>
-        <P>You may stop using the app and delete your account at any time. We may suspend or terminate access if these Terms are violated.</P>
+        <H>Disclaimer of Warranties</H>
+        <P>Baseline Fitness is provided as-is without warranties of any kind, express or implied. We do not warrant that the app will be error-free or that nutrition data from third party sources is complete or accurate. Food search data comes from the USDA FoodData Central database and is not guaranteed to be accurate or complete.</P>
+
+        <H>Limitation of Liability</H>
+        <P>To the maximum extent permitted by law, Baseline Studios shall not be liable for any indirect, incidental, or consequential damages arising from your use of Baseline Fitness.</P>
+
+        <H>Subscriptions and Billing</H>
+        <P>Deleting the app from your device does not cancel a subscription. Subscriptions must be cancelled through the Google Play Store.</P>
+        <P>Baseline Studios will provide reasonable advance notice to users before any price changes take effect.</P>
+
+        <H>App Store</H>
+        <P>These Terms are an agreement between you and Baseline Studios, not with Google Play. Google Play is not responsible for the app, its content, or any claims related to it. Baseline Studios is solely responsible for the app and its services.</P>
 
         <H>Changes to These Terms</H>
-        <P>We may update these Terms from time to time. Material changes will be reflected by the "Last updated" date above; continued use of the app means you accept the updated Terms.</P>
+        <P>We may update these Terms of Service from time to time. The effective date at the top of this document will reflect the most recent version. Continued use of the app after changes constitutes acceptance.</P>
+
+        <H>Governing Law</H>
+        <P>These Terms are governed by the laws of the State of Georgia, United States.</P>
 
         <H>Contact</H>
-        <P>If you have questions about these Terms, contact us at <Email />.</P>
+        <P>Questions about these Terms:</P>
+        <P><Email /></P>
+        <P>Baseline Studios — Georgia, United States</P>
       </div>
     </div>
   );
