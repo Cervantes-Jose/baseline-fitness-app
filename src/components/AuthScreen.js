@@ -200,7 +200,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
       {/* Form card */}
       <form
         onSubmit={onSubmit}
-        style={{ width: '100%', maxWidth: 420, marginTop: 72, display: 'flex', flexDirection: 'column', gap: 20 }}
+        style={{ width: '100%', maxWidth: 420, marginTop: 96, display: 'flex', flexDirection: 'column', gap: 20 }}
       >
         {view === 'reset' && (
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>
