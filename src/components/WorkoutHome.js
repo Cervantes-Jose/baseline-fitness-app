@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import Workouts from './Workouts';
 import ExerciseDatabase from './ExerciseDatabase';
 import Measurements from './Measurements';
+import Fab from './Fab';
 
 const TABS = ['Routines', 'Exercises', 'Measurements', 'History'];
 
@@ -126,6 +127,24 @@ function WorkoutHome({
   // screen; lift the FAB above it when it's showing.
   const workoutBarVisible = !!activeWorkout && !workoutExpanded;
 
+  // The workout FAB lives here (not in the child screens) so a single speed-dial can add a
+  // routine / exercise / measurement regardless of which sub-tab is open. Picking an action
+  // switches to that tab and bumps a nonce; the matching child watches its signal and opens
+  // its create flow. `target` is cleared once consumed so re-mounting a tab won't re-fire.
+  const [addReq, setAddReq] = useState({ target: null, nonce: 0 });
+  const requestAdd = (target, targetTab) => {
+    setTab(targetTab);
+    setAddReq(r => ({ target, nonce: r.nonce + 1 }));
+  };
+  const clearAddReq = () => setAddReq(r => ({ ...r, target: null }));
+  const signalFor = (target) => (addReq.target === target ? addReq.nonce : 0);
+
+  const fabActions = [
+    { label: 'Add Routine', onClick: () => requestAdd('routine', 'Routines') },
+    { label: 'Add Exercise', onClick: () => requestAdd('exercise', 'Exercises') },
+    { label: 'Add Measurement', onClick: () => requestAdd('measurement', 'Measurements') },
+  ];
+
   const workoutProps = {
     activeWorkout,
     setActiveWorkout,
@@ -225,13 +244,17 @@ function WorkoutHome({
 
       {/* Tab content */}
       {tab === 'Routines' && (
-        <Workouts key="wh-routines" resetKey={resetKey} workoutBarVisible={workoutBarVisible} {...workoutProps} />
+        <Workouts key="wh-routines" resetKey={resetKey} autoCreateSignal={signalFor('routine')} onAutoCreate={clearAddReq} {...workoutProps} />
       )}
-      {tab === 'Exercises' && <ExerciseDatabase workoutBarVisible={workoutBarVisible} />}
-      {tab === 'Measurements' && <Measurements metricSystem={metricSystem} workoutBarVisible={workoutBarVisible} />}
+      {tab === 'Exercises' && <ExerciseDatabase autoCreateSignal={signalFor('exercise')} onAutoCreate={clearAddReq} />}
+      {tab === 'Measurements' && <Measurements metricSystem={metricSystem} autoCreateSignal={signalFor('measurement')} onAutoCreate={clearAddReq} />}
       {tab === 'History' && (
         <Workouts key="wh-history" initialView="history" {...workoutProps} />
       )}
+
+      {/* Section-wide speed-dial. Hidden while the active-workout logging modal is expanded
+          (it covers the screen); raised above the collapsed mini bar. */}
+      {!workoutExpanded && <Fab raised={workoutBarVisible} actions={fabActions} />}
     </div>
   );
 }

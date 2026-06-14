@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
-import Fab from './Fab';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -242,7 +241,7 @@ function MiniChart({ entries, color }) {
   );
 }
 
-function Measurements({ metricSystem = 'imperial', workoutBarVisible = false }) {
+function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {} }) {
   const [view, setView] = useState('list');
   const [measurements, setMeasurements] = useState([]);
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -361,6 +360,19 @@ function Measurements({ metricSystem = 'imperial', workoutBarVisible = false }) 
     setMeasurements(prev => [...prev, m]);
     openMeasurement(m);
   };
+
+  // Create + open a new measurement when the parent FAB requests it (signal = a bumped
+  // nonce). The ref guards against re-firing for the same nonce (e.g. StrictMode
+  // double-invoke), which would otherwise insert a duplicate blank row.
+  const autoCreateHandled = useRef(0);
+  useEffect(() => {
+    if (autoCreateSignal && autoCreateSignal !== autoCreateHandled.current) {
+      autoCreateHandled.current = autoCreateSignal;
+      createAndOpenMeasurement();
+      onAutoCreate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCreateSignal]);
 
   // Inline rename from the detail title.
   const updateActiveName = (name) => {
@@ -591,8 +603,6 @@ function Measurements({ metricSystem = 'imperial', workoutBarVisible = false }) 
         );
       })}
 
-      {/* Floating add button — new measurement */}
-      <Fab raised={workoutBarVisible} label="New measurement" onClick={createAndOpenMeasurement} />
     </div>
   );
 

@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
-import Fab from './Fab';
 
 export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
@@ -155,7 +154,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
   );
 }
 
-function ExerciseDatabase({ workoutBarVisible = false }) {
+function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(new Set());
   const [customExercises, setCustomExercises] = useState([]);
@@ -172,6 +171,18 @@ function ExerciseDatabase({ workoutBarVisible = false }) {
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const searchInputRef = useRef(null);
+
+  // Open the create-exercise modal when the parent FAB requests it (signal = a bumped nonce);
+  // the ref guards against re-firing for the same nonce (e.g. StrictMode double-invoke).
+  const autoCreateHandled = useRef(0);
+  useEffect(() => {
+    if (autoCreateSignal && autoCreateSignal !== autoCreateHandled.current) {
+      autoCreateHandled.current = autoCreateSignal;
+      setShowCreateModal(true);
+      onAutoCreate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCreateSignal]);
 
   useEffect(() => {
     (async () => {
@@ -514,8 +525,6 @@ function ExerciseDatabase({ workoutBarVisible = false }) {
         </div>
       )}
 
-      {/* Floating add button — new custom exercise */}
-      <Fab raised={workoutBarVisible} label="Add custom exercise" onClick={() => setShowCreateModal(true)} />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { EXERCISE_DATABASE, CATEGORIES } from './ExerciseDatabase';
-import Fab from './Fab';
 import {
   DndContext,
   closestCenter,
@@ -509,7 +508,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {}, activeRest = null, restRemaining = 0, completedRest = null, onStartRest = () => {}, onSkipRest = () => {}, workoutBarVisible = false }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {}, activeRest = null, restRemaining = 0, completedRest = null, onStartRest = () => {}, onSkipRest = () => {}, autoCreateSignal = 0, onAutoCreate = () => {} }) {
   // When a workout is in progress, the live logging state is mirrored to
   // localStorage ('activeWorkoutLog') so switching to a completely different app
   // tab — which unmounts this component — doesn't lose entered weights/reps,
@@ -529,6 +528,17 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Open the create-routine modal when the parent FAB requests it (signal = a bumped nonce).
+  // The ref guards against re-firing for the same nonce (e.g. StrictMode double-invoke).
+  const autoCreateHandled = useRef(0);
+  useEffect(() => {
+    if (autoCreateSignal && autoCreateSignal !== autoCreateHandled.current) {
+      autoCreateHandled.current = autoCreateSignal;
+      setShowCreateModal(true);
+      onAutoCreate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCreateSignal]);
   const sessionLogRef = useRef(sessionLog);
   // Guards finishWorkout against double-submit (rapid taps / doubled events) which would
   // otherwise insert the same session twice. Synchronous ref so it blocks within one tick.
@@ -1467,14 +1477,6 @@ const updateSet = (exId, setIdx, field, value) => {
           )}
         </div>
       </div>
-
-      {/* Floating add button — new routine. Shown whenever the routines list is visible: no
-          active workout (view 'routines'), or an active workout that's collapsed to the mini
-          bar (view 'logging' but not expanded). Hidden during edit mode (its own bottom bar)
-          and while the logging modal is expanded over this view. */}
-      {(view === 'routines' || (view === 'logging' && !workoutExpanded)) && !routineEditMode && (
-        <Fab raised={workoutBarVisible} label="New routine" onClick={() => setShowCreateModal(true)} />
-      )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRoutineDragEnd}>
         <SortableContext items={routines.map(r => r.id)} strategy={verticalListSortingStrategy}>

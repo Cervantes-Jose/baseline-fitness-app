@@ -2248,17 +2248,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         </div>
       )}
 
-      {/* Floating add button — context action by filter tab; hidden on Favorites/Nutrition
-          and while the multi-select bar is up. */}
-      {!selectMode && (activeFilter === 'Add Food' || activeFilter === 'Custom Foods' || activeFilter === 'Meals') && (
+      {/* Floating add button — speed-dial of the food add actions. Hidden while the
+          multi-select bar is up. */}
+      {!selectMode && (
         <Fab
           raised={workoutBarVisible}
-          label={activeFilter === 'Custom Foods' ? 'Add custom food' : activeFilter === 'Meals' ? 'Add meal' : 'Add food'}
-          onClick={() => {
-            if (activeFilter === 'Custom Foods') openCustomFoodDetail(null);
-            else if (activeFilter === 'Meals') openMealBuilder(null);
-            else openAddFood(new Date().getHours());
-          }}
+          label="Add"
+          actions={[
+            { label: 'Add Food', onClick: () => openAddFood(new Date().getHours()) },
+            { label: 'Add Custom Food', onClick: () => openCustomFoodDetail(null) },
+            { label: 'Add Meal', onClick: () => openMealBuilder(null) },
+          ]}
         />
       )}
     </div>
