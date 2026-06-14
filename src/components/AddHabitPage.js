@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { WEEK_ORDER, DOW_LETTER, customFreqLabel } from './habitMath';
+import WheelTimePicker from './WheelTimePicker';
 
 // Full-page form to create (or edit) a daily habit. Reminders store settings only.
 // onSave receives the assembled fields (no id/user_id; the caller persists).
@@ -87,9 +88,10 @@ export default function AddHabitPage({ onBack, onSave, initial = null }) {
     </p>
   );
 
+  // Matches the section headers inside a habit's detail (uppercase, grey, tracked).
   const cardHeader = (text, optional) => (
-    <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 18px' }}>
-      {text}{optional && <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}> (Optional)</span>}
+    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 18px' }}>
+      {text}{optional && <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}> (Optional)</span>}
     </p>
   );
 
@@ -119,7 +121,7 @@ export default function AddHabitPage({ onBack, onSave, initial = null }) {
 
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Habit Details */}
-        <div className="card">
+        <div className="card" style={{ paddingBottom: 28 }}>
           {cardHeader('Habit Details')}
 
           <div style={{ marginBottom: 24 }}>
@@ -179,7 +181,7 @@ export default function AddHabitPage({ onBack, onSave, initial = null }) {
               </button>
               {timeOpen && (
                 <div style={{ paddingBottom: 14 }}>
-                  <input type="time" value={reminderTime} onChange={e => setReminderTime(e.target.value)} className="input" />
+                  <WheelTimePicker value={reminderTime} onChange={setReminderTime} />
                 </div>
               )}
 

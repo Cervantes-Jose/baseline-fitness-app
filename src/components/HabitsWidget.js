@@ -13,6 +13,7 @@ export default function HabitsWidget() {
   const [habits, setHabits] = useState([]);
   const [doneToday, setDoneToday] = useState(() => new Set()); // habit_ids done today
   const [viewAll, setViewAll] = useState(false);
+  const [jiggleId, setJiggleId] = useState(null);             // habit just checked → jiggle once
   const today = new Date();
   const todayStr = ymd(today);
 
@@ -37,6 +38,11 @@ export default function HabitsWidget() {
     const wasDone = next.has(habit.id);
     wasDone ? next.delete(habit.id) : next.add(habit.id);
     setDoneToday(next);
+    // Tactile feedback when checking a habit ON: a quick jiggle + a short buzz.
+    if (!wasDone) {
+      setJiggleId(habit.id);
+      if (navigator.vibrate) navigator.vibrate(10);
+    }
     if (wasDone) {
       await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', todayStr);
     } else {
@@ -69,6 +75,8 @@ export default function HabitsWidget() {
     const scheduled = isScheduled(habit, today);
     return (
       <button key={habit.id} onClick={() => toggleToday(habit)} disabled={!scheduled}
+        className={jiggleId === habit.id ? 'jiggle' : undefined}
+        onAnimationEnd={() => setJiggleId(null)}
         style={{
           flex: 1, minWidth: 0, textAlign: 'left', cursor: scheduled ? 'pointer' : 'default',
           display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14,

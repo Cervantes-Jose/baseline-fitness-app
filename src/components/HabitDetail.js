@@ -14,6 +14,7 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 // days are checkable circles; non-scheduled days are greyed and inert.
 export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete = () => {}, showToast = () => {} }) {
   const [doneSet, setDoneSet] = useState(() => new Set());   // Set of ymd strings
+  const [logTargets, setLogTargets] = useState({});          // ymd -> target snapshot at log time
   const [monthRef, setMonthRef] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const todayStr = ymd(new Date());
@@ -23,12 +24,31 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   const [dragY, setDragY] = useState(0);
   const dragStart = useRef(null);
 
+  // "View All" history sheet — mirrors the measurements detail history sheet exactly.
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyDragY, setHistoryDragY] = useState(0);
+  const historyDragStart = useRef(null);
+  const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
+
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { cancelAnimationFrame(id); document.body.style.overflow = prev; };
   }, []);
+
+  useEffect(() => {
+    if (showAllHistory) {
+      const id = requestAnimationFrame(() => setHistoryOpen(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [showAllHistory]);
+
+  const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
+  const onHistDown = (e) => { e.currentTarget.setPointerCapture(e.pointerId); historyDragStart.current = e.clientY; };
+  const onHistMove = (e) => { if (historyDragStart.current === null) return; setHistoryDragY(Math.max(0, e.clientY - historyDragStart.current)); };
+  const onHistUp = (e) => { if (historyDragStart.current === null) return; const dy = Math.max(0, e.clientY - historyDragStart.current); historyDragStart.current = null; setHistoryDragY(0); if (dy > 80) closeAllHistory(); };
 
   const requestClose = () => setShown(false);
   const onSheetTransitionEnd = (e) => { if (e.propertyName === 'transform' && !shown) onBack(); };
@@ -40,8 +60,11 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   const loadLogs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from('habit_logs').select('date').eq('habit_id', habit.id).eq('user_id', user.id);
-    if (data) setDoneSet(new Set(data.map(r => r.date)));
+    const { data } = await supabase.from('habit_logs').select('date, target').eq('habit_id', habit.id).eq('user_id', user.id);
+    if (data) {
+      setDoneSet(new Set(data.map(r => r.date)));
+      setLogTargets(Object.fromEntries(data.map(r => [r.date, r.target])));
+    }
   }, [habit.id]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
@@ -58,10 +81,15 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
     wasDone ? next.delete(key) : next.add(key);
     setDoneSet(next);
     if (wasDone) {
+      setLogTargets(prev => { const n = { ...prev }; delete n[key]; return n; });
       const { error } = await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', key);
       if (error) { showToast('Could not update'); loadLogs(); }
     } else {
-      const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: key });
+      // Snapshot the habit's current target so this day's history keeps showing the
+      // value as it was, even if the habit's target is edited later.
+      const snapshot = habit.target || null;
+      setLogTargets(prev => ({ ...prev, [key]: snapshot }));
+      const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: key, target: snapshot });
       if (error) { showToast('Could not update'); loadLogs(); }
     }
   };
@@ -71,6 +99,29 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   const mp = monthProgress(habit, doneSet, monthRef.getFullYear(), monthRef.getMonth());
   const cells = monthGrid(monthRef.getFullYear(), monthRef.getMonth());
   const historyDates = [...doneSet].sort((a, b) => (a < b ? 1 : -1)).map(parseYmd); // newest first
+  const last5 = historyDates.slice(0, 5);
+
+  // One history row — matches the measurements detail row exactly (size, accent bar, divider).
+  // The right side shows the target snapshot for that day (e.g. "5g") when one was recorded.
+  const renderHistoryRow = (d, i, arr) => {
+    const t = logTargets[ymd(d)];
+    return (
+      <div key={ymd(d)} style={{
+        display: 'flex', alignItems: 'center', gap: '10px', padding: '12px',
+        borderLeft: `3px solid ${i === 0 ? 'var(--accent)' : 'transparent'}`,
+        borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>
+            {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </div>
+        </div>
+        {t ? (
+          <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{t}</span>
+        ) : null}
+      </div>
+    );
+  };
 
   const stats = [
     { label: 'Current Streak', value: currentStreak(habit, doneSet), sub: 'Days' },
@@ -125,13 +176,7 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 10px' }} />
           {/* No back button — swipe down (or tap the backdrop) dismisses the sheet. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <button onClick={onEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, fontWeight: 600, padding: '4px 8px' }}>Edit</button>
-              <button onClick={() => setConfirmDelete(true)} aria-label="Delete habit"
-                style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: '4px 8px', display: 'flex' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
+            <button onClick={onEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, fontWeight: 600, padding: '4px 8px' }}>Edit</button>
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.4px' }}>{habit.name}</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '4px 0 12px' }}>{habitSubtitle(habit)}</p>
@@ -140,103 +185,125 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Overview */}
-          <div>
-            <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 4px 8px' }}>Overview</p>
-            <div className="card-flat" style={{ padding: '16px 20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                {stats.map((s, i) => (
-                  <div key={s.label} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                    {i > 0 && <div style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 1, background: 'var(--border)', opacity: 0.6 }} />}
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>{s.label}</div>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginTop: 4 }}>{s.sub}</div>
-                  </div>
-                ))}
-              </div>
+          <div className="card-flat" style={{ padding: '16px 20px' }}>
+            <p style={{ ...sectionLabel, marginBottom: 12 }}>Overview</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              {stats.map((s, i) => (
+                <div key={s.label} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                  {i > 0 && <div style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 1, background: 'var(--border)', opacity: 0.6 }} />}
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginTop: 4 }}>{s.sub}</div>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* This Week */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 4px 8px' }}>
-              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>This Week</p>
+          <div className="card-flat" style={{ padding: '14px 6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 4px' }}>
+              <p style={sectionLabel}>This Week</p>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{wk.done} of {wk.scheduled} days</span>
             </div>
-            <div className="card-flat" style={{ padding: '14px 6px' }}>
-              <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                {week.map((d, i) => (
-                  <Fragment key={i}>
-                    {i > 0 && <div style={{ width: 1, background: 'var(--border)', opacity: 0.6, margin: '2px 0' }} />}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 1px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>{DOW_SHORT[d.getDay()]}</span>
-                      <span style={{ fontSize: 10, color: ymd(d) === todayStr ? 'var(--accent)' : 'var(--text-muted)', fontWeight: ymd(d) === todayStr ? 700 : 400 }}>{d.getMonth() + 1}/{d.getDate()}</span>
-                      {dayCircle(d, 24)}
-                    </div>
-                  </Fragment>
-                ))}
-              </div>
+            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+              {week.map((d, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <div style={{ width: 1, background: 'var(--border)', opacity: 0.6, margin: '2px 0' }} />}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 1px' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>{DOW_SHORT[d.getDay()]}</span>
+                    <span style={{ fontSize: 10, color: ymd(d) === todayStr ? 'var(--accent)' : 'var(--text-muted)', fontWeight: ymd(d) === todayStr ? 700 : 400 }}>{d.getMonth() + 1}/{d.getDate()}</span>
+                    {dayCircle(d, 24)}
+                  </div>
+                </Fragment>
+              ))}
             </div>
           </div>
 
           {/* Month Overview */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 4px 8px' }}>
-              <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Month Overview</p>
+          <div className="card-flat" style={{ padding: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <p style={sectionLabel}>Month Overview</p>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{mp.done} of {mp.scheduled} days</span>
             </div>
-            <div className="card-flat" style={{ padding: '16px' }}>
-              {/* Month label (top-left) + arrows (to its right) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{MONTH_NAMES[monthRef.getMonth()]} {monthRef.getFullYear()}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button onClick={() => setMonthRef(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1 }}>‹</button>
-                  <button onClick={() => canGoNextMonth && setMonthRef(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} disabled={!canGoNextMonth}
-                    style={{ background: 'none', border: 'none', cursor: canGoNextMonth ? 'pointer' : 'default', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1, opacity: canGoNextMonth ? 1 : 0.3 }}>›</button>
-                </div>
+            {/* Month label (top-left) + arrows (to its right) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{MONTH_NAMES[monthRef.getMonth()]} {monthRef.getFullYear()}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setMonthRef(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1 }}>‹</button>
+                <button onClick={() => canGoNextMonth && setMonthRef(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} disabled={!canGoNextMonth}
+                  style={{ background: 'none', border: 'none', cursor: canGoNextMonth ? 'pointer' : 'default', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1, opacity: canGoNextMonth ? 1 : 0.3 }}>›</button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 8 }}>
-                {[1,2,3,4,5,6,0].map(dow => (
-                  <div key={dow} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{DOW_LETTER[dow]}</div>
-                ))}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, justifyItems: 'center' }}>
-                {cells.map((cell, i) => {
-                  if (!cell.inMonth) return <div key={i} style={{ width: 28, height: 28 }} />;
-                  return (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <span style={{ fontSize: 10, color: ymd(cell.date) === todayStr ? 'var(--accent)' : 'var(--text-muted)', fontWeight: ymd(cell.date) === todayStr ? 700 : 400 }}>{cell.date.getDate()}</span>
-                      {dayCircle(cell.date, 24)}
-                    </div>
-                  );
-                })}
-              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 8 }}>
+              {[1,2,3,4,5,6,0].map(dow => (
+                <div key={dow} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{DOW_LETTER[dow]}</div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, justifyItems: 'center' }}>
+              {cells.map((cell, i) => {
+                if (!cell.inMonth) return <div key={i} style={{ width: 28, height: 28 }} />;
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <span style={{ fontSize: 10, color: ymd(cell.date) === todayStr ? 'var(--accent)' : 'var(--text-muted)', fontWeight: ymd(cell.date) === todayStr ? 700 : 400 }}>{cell.date.getDate()}</span>
+                    {dayCircle(cell.date, 24)}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* History — flat list, newest first; the most recent gets a blue accent bar */}
-          <div>
-            <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 4px 8px' }}>History</p>
-            {historyDates.length === 0 ? (
-              <p style={{ fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>No completed days yet.</p>
-            ) : (
-              <div className="card-flat" style={{ padding: 0, overflow: 'hidden' }}>
-                {historyDates.map((d, i) => (
-                  <div key={ymd(d)} style={{
-                    display: 'flex', alignItems: 'center', padding: '14px 12px',
-                    borderLeft: `3px solid ${i === 0 ? 'var(--accent)' : 'transparent'}`,
-                    borderBottom: i < historyDates.length - 1 ? '1px solid var(--border)' : 'none',
-                  }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </div>
-                ))}
+          {/* History — flat list, newest first; the most recent gets an accent bar. Up to 5
+              show here; the rest live behind "View All". Mirrors the measurements detail. */}
+          {historyDates.length === 0 ? (
+            <div className="card-flat">
+              <p style={sectionLabel}>History</p>
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0 8px' }}>No completed days yet.</p>
+            </div>
+          ) : (
+            <div className="card-flat">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <p style={sectionLabel}>History</p>
+                <button onClick={() => setShowAllHistory(true)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '13px', fontWeight: '600', padding: '2px 4px' }}>
+                  View All
+                </button>
               </div>
-            )}
-          </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {last5.map((d, i, arr) => renderHistoryRow(d, i, arr))}
+              </div>
+            </div>
+          )}
+
+          {/* Delete — outlined red button below History */}
+          <button onClick={() => setConfirmDelete(true)}
+            style={{ width: '100%', background: 'transparent', border: '1px solid #EF4444', borderRadius: 12, color: '#EF4444', cursor: 'pointer', fontSize: 15, fontWeight: 700, padding: '14px' }}>
+            Delete Habit
+          </button>
         </div>
       </div>
+
+      {/* View All — full-screen bottom sheet (mirrors the measurements detail history sheet) */}
+      {showAllHistory && (
+        <div onClick={e => e.stopPropagation()} style={{
+          position: 'fixed', inset: 0, zIndex: 760, background: 'var(--bg)',
+          transform: historyOpen ? `translateY(${historyDragY}px)` : 'translateY(100%)',
+          transition: historyDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div onPointerDown={onHistDown} onPointerMove={onHistMove} onPointerUp={onHistUp}
+            style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
+          </div>
+          <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
+            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>{habit.name}</h2>
+            <p style={{ ...sectionLabel, marginTop: '6px' }}>History</p>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
+            {historyDates.map((d, i, arr) => renderHistoryRow(d, i, arr))}
+          </div>
+        </div>
+      )}
 
       {/* Delete confirm */}
       {confirmDelete && (

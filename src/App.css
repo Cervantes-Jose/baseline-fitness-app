@@ -250,6 +250,19 @@ border-bottom: none;
   box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
+/* Wheel-picker columns hide their scrollbar (scroll-snap drives selection). */
+.wheel-col::-webkit-scrollbar { display: none; }
+
+/* Tactile "jiggle" — a quick springy wobble for tap feedback (e.g. checking a habit). */
+@keyframes jiggle {
+  0%   { transform: scale(1)     rotate(0deg);    }
+  25%  { transform: scale(1.025) rotate(-1deg);   }
+  50%  { transform: scale(1.02)  rotate(1deg);    }
+  75%  { transform: scale(1.015) rotate(-0.6deg); }
+  100% { transform: scale(1)     rotate(0deg);    }
+}
+.jiggle { animation: jiggle 0.32s ease; }
+
 /* Promote cards to their own GPU layer so transforms/scroll stay smooth on 120/144hz */
 .card, .card-flat {
   will-change: transform;

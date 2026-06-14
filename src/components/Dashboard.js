@@ -206,33 +206,6 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
   );
 }
 
-// ─── MACRO ROW ───────────────────────────────────────────────
-function MacroRow({ label, consumed, goal, color, iconColor }) {
-  const pct = Math.min(goal > 0 ? consumed / goal : 0, 1);
-  const pctLabel = Math.round(pct * 100);
-  const done = pct >= 1;
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? color : 'var(--bg)', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {done && <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'baseline' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{consumed}g / {goal}g</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color }}>{pctLabel}%</span>
-          </div>
-        </div>
-        <div style={{ height: 6, borderRadius: 4, background: 'var(--bg)', overflow: 'hidden' }}>
-          <div style={{ width: `${pct * 100}%`, height: '100%', borderRadius: 4, background: color, transition: 'width 0.5s ease' }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── DASHBOARD ───────────────────────────────────────────────
 // Widgets shown on a fresh dashboard, in order. Everything else (Carbs, Fats, and
 // the per-measurement trend charts) lives in the "Add Widget" pool until the user
@@ -240,7 +213,7 @@ function MacroRow({ label, consumed, goal, color, iconColor }) {
 // widget removes it from the list and it returns to the pool.
 // `glance` (the day-streak summary) is pinned at the top and rendered outside the
 // orderable set — it isn't draggable, deletable, or in the Add Widget picker.
-const DEFAULT_ORDER = ['calories', 'protein', 'weight', 'bodyfat', 'macros'];
+const DEFAULT_ORDER = ['calories', 'protein', 'weight', 'bodyfat'];
 
 // Half-width tiles (the rest are full-width). Calories/Protein/Carbs/Fats are the
 // small ring tiles that can pair two-per-row.
@@ -597,18 +570,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
         </div>
       </div>
     ),
-    macros: (
-      <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Today's Macro Progress</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <MacroRow label="Protein" consumed={protein} goal={proteinGoal} color="#22C55E" />
-          <MacroRow label="Fats" consumed={fats} goal={fatsGoal} color="#3B82F6" />
-          <MacroRow label="Carbs" consumed={carbs} goal={carbsGoal} color="#EAB308" />
-        </div>
-      </div>
-    ),
   };
 
   // One trend widget per measurement the user tracks, merged into the widget map.
@@ -633,7 +594,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       { id: 'protein', label: 'Protein' },
       { id: 'carbs', label: 'Carbs' },
       { id: 'fats', label: 'Fats' },
-      { id: 'macros', label: 'Macro Progress' },
     ] },
     { category: 'Measurements', items: measurementItems.map(({ id, label }) => ({ id, label })) },
   ];
@@ -735,6 +695,12 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       </div>
       {/* Pinned summary */}
       {widgetMap.glance}
+
+      {/* Daily Habits — fixed card directly under the glance bar (not a draggable widget) */}
+      <div style={{ marginTop: 4 }}>
+        <HabitsWidget />
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 16px' }}>
         {buildRows(placed, breaks).map((row, ri) => (
           <div key={ri} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -745,11 +711,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
             ))}
           </div>
         ))}
-      </div>
-
-      {/* Daily Habits — fixed card under the customizable tiles (not a draggable widget) */}
-      <div style={{ marginTop: 4 }}>
-        <HabitsWidget />
       </div>
     </div>
   );

@@ -157,7 +157,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
           </svg>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)' }}>{displayName}</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--accent)' }}>{displayName}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{memberSince}</div>
           <span style={{ display: 'inline-block', marginTop: 8, fontSize: 11, fontWeight: 700, background: '#EFF6FF', color: '#3B82F6', padding: '3px 10px', borderRadius: 20 }}>
             Free
