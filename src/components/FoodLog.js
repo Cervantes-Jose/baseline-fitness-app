@@ -1658,10 +1658,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   return (
     <div style={{ margin: '-20px' }}>
 
-      {/* Calendar button — fixed to App header's right slot */}
+      {/* Calendar button — fixed top-right, aligned with the date-nav row */}
       <button onClick={() => setShowCalendar(true)} style={{
         position: 'fixed', top: 0, right: 0, zIndex: 150,
-        padding: '24px 20px 16px',
+        padding: '26px 20px 8px',
         background: 'none', border: 'none', cursor: 'pointer',
         color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
       }}>
@@ -1673,15 +1673,22 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       </button>
 
       {/* ─── DATE NAV ───────────────────────────────────────── */}
+      {/* Extra horizontal padding pulls the ‹ › arrows inward so the right arrow
+          clears the fixed calendar icon at the top-right. */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '4px 20px 8px',
+        padding: '28px 56px 8px',
       }}>
         <button onClick={() => changeDate(-1)} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,
         }}>‹</button>
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--accent)' }}>{navDateText}</span>
+        {/* Tapping the date jumps back to today when viewing any other day. */}
+        <button onClick={() => { if (!isToday) setDate(new Date()); }} disabled={isToday} style={{
+          background: 'none', border: 'none', padding: '2px 8px',
+          fontWeight: 600, fontSize: 15, color: 'var(--accent)',
+          cursor: isToday ? 'default' : 'pointer',
+        }}>{navDateText}</button>
         <button onClick={() => changeDate(1)} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,

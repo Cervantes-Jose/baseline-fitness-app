@@ -4,6 +4,7 @@ import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@d
 import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
+import HabitsWidget from './HabitsWidget';
 import { goalTrend } from './goalColor';
 
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
@@ -447,7 +448,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const metaName = user?.user_metadata?.first_name;
   const emailPrefix = user?.email ? user.email.split('@')[0] : '';
   const displayName = metaName || emailPrefix || 'there';
-  const greeting = `Good ${timeOfDay}, ${displayName}`;
 
   const remaining = Math.max(calorieGoal - calories, 0);
 
@@ -480,15 +480,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       ),
       value: calorieGoal,
       label: 'Cal goal',
-    },
-    {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M8 18l2-8 3 4 2-6 3 10" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      ),
-      value: '—',
-      label: 'Steps taken',
     },
   ];
 
@@ -734,9 +725,9 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   return (
     <div style={{ paddingBottom: 8 }}>
       {/* Header / greeting */}
-      <div style={{ padding: '20px 20px 8px' }}>
+      <div style={{ padding: '32px 20px 8px' }}>
         <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
-          {greeting}
+          Good {timeOfDay}, <span style={{ color: 'var(--accent)' }}>{displayName}</span>
         </div>
         <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4, fontWeight: 400 }}>
           Let's crush your goals today.
@@ -754,6 +745,11 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
             ))}
           </div>
         ))}
+      </div>
+
+      {/* Daily Habits — fixed card under the customizable tiles (not a draggable widget) */}
+      <div style={{ marginTop: 4 }}>
+        <HabitsWidget />
       </div>
     </div>
   );

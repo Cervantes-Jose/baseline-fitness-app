@@ -82,7 +82,7 @@ function parseRest(str) {
 const REST_DEFAULT_SECONDS = 90; // new rest timers default to 1:30
 const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
 
-function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
+function SortableExercise({ ex, number, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   // Which rest slot (set index) is being manually edited, and its draft text.
@@ -172,10 +172,18 @@ function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, se
               </div>
             </button>
           )}
+          {typeof number === 'number' && (
+            <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', flexShrink: 0 }}>
+              {number}
+            </div>
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{ex.name}</span>
               {isCustom && <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '500', marginTop: '3px' }}>
+              {sets.length} {sets.length === 1 ? 'set' : 'sets'}
             </div>
           </div>
           {!exerciseEditMode && (
@@ -301,6 +309,9 @@ function RestRow({ duration, running, remaining, status, onSkip, name = 'Rest' }
 function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, checkedSets, toggleCheck, isCustom = false, isExpanded, onToggleExpand, onDeleteExercise, onRenameExercise, restTimers = [], activeRest, restRemaining, restStatus = {}, onSkipRest = () => {} }) {
   const [editMode, setEditMode] = useState(false);
   const [nameDraft, setNameDraft] = useState(ex.name);
+  // Keyboard "Next" flow on mobile: weight → reps → check the set → next set's weight.
+  // Holds each input's DOM node keyed `${idx}-weight` / `${idx}-reps`.
+  const inputRefs = useRef({});
 
   // Collapsing the card (e.g. opening another exercise) also exits edit mode.
   useEffect(() => { if (!isExpanded) setEditMode(false); }, [isExpanded]);
@@ -384,10 +395,20 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>{idx + 1}</div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{prevSets[idx] && prevSets[idx].weight && prevSets[idx].reps ? `${prevSets[idx].weight}×${prevSets[idx].reps}` : '—'}</div>
               <input value={set.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)}
-                inputMode="decimal"
+                ref={el => { inputRefs.current[`${idx}-weight`] = el; }}
+                inputMode="decimal" enterKeyHint="next"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); inputRefs.current[`${idx}-reps`]?.focus(); } }}
                 placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
               <input value={set.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)}
-                inputMode="numeric" pattern="[0-9]*"
+                ref={el => { inputRefs.current[`${idx}-reps`] = el; }}
+                inputMode="numeric" pattern="[0-9]*" enterKeyHint="next"
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  if (!checkedSets[idx]) toggleCheck(idx);          // "Next" on reps completes the set
+                  const nextWeight = inputRefs.current[`${idx + 1}-weight`];
+                  if (nextWeight) nextWeight.focus(); else e.currentTarget.blur();
+                }}
                 placeholder="0" className="input" style={{ padding: '10px', textAlign: 'center' }} />
               {editMode ? (
                 <button onClick={() => deleteSet(ex.id, idx)} aria-label="Delete set"
@@ -462,9 +483,9 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
         background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px',
         boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>{exercises.length}</span>
+          <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)', marginTop: '3px' }}>{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</span>
         </div>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
           style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: 'var(--text-muted)', flexShrink: 0 }}>
@@ -1541,10 +1562,11 @@ const updateSet = (exId, setIdx, field, value) => {
                 onClick={(e) => { e.stopPropagation(); if (!disabled) startWorkoutFromRoutine(r); }}
                 disabled={disabled}
                 style={{
-                  flexShrink: 0, border: 'none', borderRadius: '8px', padding: '7px 12px',
+                  flexShrink: 0, borderRadius: '8px', padding: '7px 12px',
                   fontSize: '13px', fontWeight: '600', lineHeight: 1, whiteSpace: 'nowrap',
-                  background: disabled ? 'var(--border)' : 'var(--accent)',
-                  color: disabled ? 'var(--text-muted)' : '#fff',
+                  background: disabled ? 'var(--border)' : '#fff',
+                  border: disabled ? '1px solid var(--border)' : '1px solid var(--accent)',
+                  color: disabled ? 'var(--text-muted)' : 'var(--accent)',
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   opacity: disabled ? 0.6 : 1,
                 }}>
@@ -1631,8 +1653,8 @@ const updateSet = (exId, setIdx, field, value) => {
     </div>
   );
 
-  const renderConfigExercise = (ex) => (
-    <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} isCustom={customExerciseNames.has(ex.name)} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
+  const renderConfigExercise = (ex, number) => (
+    <SortableExercise key={ex.id} ex={ex} number={number} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} isCustom={customExerciseNames.has(ex.name)} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
   );
 
   if (view === 'exercises') return (
@@ -1667,18 +1689,20 @@ const updateSet = (exId, setIdx, field, value) => {
               {exerciseEditMode ? 'Done' : 'Edit'}
             </button>
           )}
-          <button onClick={openExercisePicker} aria-label="Add exercise"
-            style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            + Add Exercise
-          </button>
         </div>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-          {activeRoutine.exercises.map(ex => renderConfigExercise(ex))}
+          {activeRoutine.exercises.map((ex, i) => renderConfigExercise(ex, i + 1))}
         </SortableContext>
       </DndContext>
+
+      {/* Add Exercise — white card with blue border, styled like the Add Set button */}
+      <button onClick={openExercisePicker}
+        style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        + Add Exercise
+      </button>
 
     </div>
     {activeRoutine.exercises.length > 0 && (

@@ -173,7 +173,7 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
     <>
       {/* Daily Calories — label sits outside the tile */}
       <div>
-        <p className="section-title" style={{ margin: '0 4px 8px' }}>Daily Calories</p>
+        <p className="section-title" style={{ margin: '0 4px 8px', fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 'normal' }}>Daily Calories</p>
         <div className="card">
           {/* Same size in view + edit — edit just adds the ± flanking the number */}
           <div style={{ padding: '8px 0' }}>
@@ -199,7 +199,7 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
 
       {/* Macronutrients — label outside; all three share one tile */}
       <div>
-        <p className="section-title" style={{ margin: '0 4px 8px' }}>Macronutrients</p>
+        <p className="section-title" style={{ margin: '0 4px 8px', fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 'normal' }}>Macronutrients</p>
         <div className="card" style={{ padding: '2px 16px' }}>
           {MACROS.map((m, i) => {
             const c = consumed[m.key];

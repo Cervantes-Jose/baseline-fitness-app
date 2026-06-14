@@ -122,10 +122,10 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
           boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{cat}</span>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: '20px' }}>
-            {exercises.length}
+          <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)', marginTop: '3px' }}>
+            {exercises.length} exercise{exercises.length !== 1 ? 's' : ''}
           </span>
         </div>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"

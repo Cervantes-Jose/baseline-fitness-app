@@ -123,7 +123,7 @@ useEffect(() => { load(); }, []);
 
   return (
     <>
-      <p className="section-title" style={{ margin: '4px 4px 8px' }}>Body Composition Goals</p>
+      <p className="section-title" style={{ margin: '4px 4px 8px', fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'none', letterSpacing: 'normal' }}>Body Composition Goals</p>
 
       {goalRows.length === 0 && (
         <div className="card-flat" style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--text-muted)', fontSize: 14 }}>
