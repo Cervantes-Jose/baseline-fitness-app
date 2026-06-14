@@ -15,6 +15,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, supabaseAnonKey } from '../supabaseClient';
 import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
+import Fab from './Fab';
 import {
   UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
   customServingScale, defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
@@ -449,7 +450,7 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
 }
 
 // ─── FOOD LOG ────────────────────────────────────────────────
-function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60, onSelectModeChange = () => {} }) {
+function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60, onSelectModeChange = () => {}, workoutBarVisible = false }) {
   const currentHour = new Date().getHours();
 
   const [date, setDate] = useState(new Date());
@@ -562,6 +563,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => {
     if (activeFilter !== 'Custom Foods' && customEditMode) { setCustomEditMode(false); setNameDrafts({}); }
   }, [activeFilter, customEditMode]);
+
+  // Long-press multi-select only applies to the main log timeline. Switching filter tabs
+  // (Favorites/Custom Foods/Meals/Nutrition) moves off that view, so cancel any in-progress
+  // selection — otherwise the fixed select bar lingers over an unrelated screen. (Leaving
+  // the Food section entirely unmounts FoodLog, which clears it via the cleanup below.)
+  useEffect(() => {
+    setSelectMode(false); setSelectedEntries([]); setCopyMode(false); setMoveMode(false);
+  }, [activeFilter]);
 
   // Reset the list filter whenever the tab changes so a stale query doesn't hide items.
   useEffect(() => { setListSearch(''); }, [activeFilter]);
@@ -1749,12 +1758,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ) : activeFilter === 'Meals' ? (
         /* ─── MEALS LIST ─────────────────────────────────────── */
         <div style={{ padding: '8px 20px 40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <button onClick={() => openMealBuilder(null)}
-              style={{ background: 'var(--accent)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              + Add Meal
-            </button>
-          </div>
           {meals.length === 0
             ? emptyState('No meals yet. Tap “+ Add Meal” to build one from your foods.')
             : <>
@@ -1777,10 +1780,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                 {customEditMode ? 'Done' : 'Edit'}
               </button>
             )}
-            <button onClick={() => openCustomFoodDetail(null)}
-              style={{ background: 'var(--accent)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              + Add Custom Food
-            </button>
           </div>
           {customFoods.length === 0 ? (
             emptyState('No custom foods yet. Tap “+ Add Custom Food” to create one.')
@@ -2247,6 +2246,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             }
           `}</style>
         </div>
+      )}
+
+      {/* Floating add button — context action by filter tab; hidden on Favorites/Nutrition
+          and while the multi-select bar is up. */}
+      {!selectMode && (activeFilter === 'Add Food' || activeFilter === 'Custom Foods' || activeFilter === 'Meals') && (
+        <Fab
+          raised={workoutBarVisible}
+          label={activeFilter === 'Custom Foods' ? 'Add custom food' : activeFilter === 'Meals' ? 'Add meal' : 'Add food'}
+          onClick={() => {
+            if (activeFilter === 'Custom Foods') openCustomFoodDetail(null);
+            else if (activeFilter === 'Meals') openMealBuilder(null);
+            else openAddFood(new Date().getHours());
+          }}
+        />
       )}
     </div>
   );

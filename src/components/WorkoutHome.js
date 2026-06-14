@@ -122,6 +122,10 @@ function WorkoutHome({
     };
   };
 
+  // The collapsed active-workout bar (rendered globally in App) overlaps the bottom of the
+  // screen; lift the FAB above it when it's showing.
+  const workoutBarVisible = !!activeWorkout && !workoutExpanded;
+
   const workoutProps = {
     activeWorkout,
     setActiveWorkout,
@@ -221,10 +225,10 @@ function WorkoutHome({
 
       {/* Tab content */}
       {tab === 'Routines' && (
-        <Workouts key="wh-routines" resetKey={resetKey} {...workoutProps} />
+        <Workouts key="wh-routines" resetKey={resetKey} workoutBarVisible={workoutBarVisible} {...workoutProps} />
       )}
-      {tab === 'Exercises' && <ExerciseDatabase />}
-      {tab === 'Measurements' && <Measurements metricSystem={metricSystem} />}
+      {tab === 'Exercises' && <ExerciseDatabase workoutBarVisible={workoutBarVisible} />}
+      {tab === 'Measurements' && <Measurements metricSystem={metricSystem} workoutBarVisible={workoutBarVisible} />}
       {tab === 'History' && (
         <Workouts key="wh-history" initialView="history" {...workoutProps} />
       )}

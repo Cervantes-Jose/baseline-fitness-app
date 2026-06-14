@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
+import Fab from './Fab';
 
 export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
@@ -154,7 +155,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
   );
 }
 
-function ExerciseDatabase() {
+function ExerciseDatabase({ workoutBarVisible = false }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(new Set());
   const [customExercises, setCustomExercises] = useState([]);
@@ -313,7 +314,7 @@ function ExerciseDatabase() {
   return (
     <div style={{ paddingBottom: '20px' }}>
 
-      {/* Top bar — always-visible search + add button */}
+      {/* Top bar — always-visible search (add moved to the floating button) */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '16px 16px 12px' }}>
         <input
           ref={searchInputRef}
@@ -325,13 +326,6 @@ function ExerciseDatabase() {
           className="input"
           style={{ flex: 1, minWidth: 0, boxSizing: 'border-box' }}
         />
-        <button
-          onClick={() => setShowCreateModal(true)}
-          aria-label="Add custom exercise"
-          style={{ flexShrink: 0, background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          + Add Exercise
-        </button>
       </div>
 
       {/* Success message */}
@@ -520,6 +514,8 @@ function ExerciseDatabase() {
         </div>
       )}
 
+      {/* Floating add button — new custom exercise */}
+      <Fab raised={workoutBarVisible} label="Add custom exercise" onClick={() => setShowCreateModal(true)} />
     </div>
   );
 }

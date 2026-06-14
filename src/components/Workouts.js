@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { EXERCISE_DATABASE, CATEGORIES } from './ExerciseDatabase';
+import Fab from './Fab';
 import {
   DndContext,
   closestCenter,
@@ -508,7 +509,7 @@ function PickerCategorySection({ cat, exercises, isExpanded, onToggle, selectedE
   );
 }
 
-function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {}, activeRest = null, restRemaining = 0, completedRest = null, onStartRest = () => {}, onSkipRest = () => {} }) {
+function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView, workoutExpanded = false, onCollapse = () => {}, onWorkoutStart = () => {}, onExpand = () => {}, showToast = () => {}, resetKey = 0, metricSystem = 'imperial', workoutPaused = false, onTogglePause = () => {}, activeRest = null, restRemaining = 0, completedRest = null, onStartRest = () => {}, onSkipRest = () => {}, workoutBarVisible = false }) {
   // When a workout is in progress, the live logging state is mirrored to
   // localStorage ('activeWorkoutLog') so switching to a completely different app
   // tab — which unmounts this component — doesn't lose entered weights/reps,
@@ -1458,22 +1459,22 @@ const updateSet = (exId, setIdx, field, value) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>My Routines</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {!routineEditMode && (
-            <>
-              {routines.length > 0 && (
-                <button onClick={enterRoutineEdit}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
-                  Edit
-                </button>
-              )}
-              <button onClick={() => setShowCreateModal(true)} aria-label="New routine"
-                style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                + Add Routine
-              </button>
-            </>
+          {!routineEditMode && routines.length > 0 && (
+            <button onClick={enterRoutineEdit}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '14px', fontWeight: '600', padding: '4px 8px' }}>
+              Edit
+            </button>
           )}
         </div>
       </div>
+
+      {/* Floating add button — new routine. Shown whenever the routines list is visible: no
+          active workout (view 'routines'), or an active workout that's collapsed to the mini
+          bar (view 'logging' but not expanded). Hidden during edit mode (its own bottom bar)
+          and while the logging modal is expanded over this view. */}
+      {(view === 'routines' || (view === 'logging' && !workoutExpanded)) && !routineEditMode && (
+        <Fab raised={workoutBarVisible} label="New routine" onClick={() => setShowCreateModal(true)} />
+      )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleRoutineDragEnd}>
         <SortableContext items={routines.map(r => r.id)} strategy={verticalListSortingStrategy}>

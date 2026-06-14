@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
+import Fab from './Fab';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -241,7 +242,7 @@ function MiniChart({ entries, color }) {
   );
 }
 
-function Measurements({ metricSystem = 'imperial' }) {
+function Measurements({ metricSystem = 'imperial', workoutBarVisible = false }) {
   const [view, setView] = useState('list');
   const [measurements, setMeasurements] = useState([]);
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -475,12 +476,8 @@ function Measurements({ metricSystem = 'imperial' }) {
 
   if (view === 'list') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 0' }}>
         <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Measurements</p>
-        <button onClick={createAndOpenMeasurement} aria-label="New measurement"
-          style={{ background: 'var(--accent)', border: 'none', cursor: 'pointer', color: '#fff', fontSize: '13px', fontWeight: '500', lineHeight: 1, padding: '7px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          + Add Measurement
-        </button>
       </div>
 
       {renamingMeasurement && (
@@ -593,6 +590,9 @@ function Measurements({ metricSystem = 'imperial' }) {
           </div>
         );
       })}
+
+      {/* Floating add button — new measurement */}
+      <Fab raised={workoutBarVisible} label="New measurement" onClick={createAndOpenMeasurement} />
     </div>
   );
 
