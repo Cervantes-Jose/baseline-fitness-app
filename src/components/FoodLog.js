@@ -17,7 +17,7 @@ import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
 import {
   UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
-  defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
+  customServingScale, defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
   buildMealComponent, sumMealComponents, mealAsFood,
 } from './foodMath';
 
@@ -171,20 +171,22 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
   const editable = isCustom && editing;   // fields are currently shown as inputs
   const count = Number(servings) || 0;
 
-  // Custom foods define macros per serving (held in `edit`, which mirrors the saved
-  // values in read mode). When editing, the tiles show that per-serving definition; in
-  // read mode they scale by number of servings like any other food detail.
+  // Custom foods define macros for their saved serving (held in `edit`, which mirrors the
+  // saved values in read mode). When editing, the tiles show that per-serving definition;
+  // in read mode they scale by the serving size (relative to the defined serving) and the
+  // number of servings — the same way any other food detail scales.
   const perServing = isCustom
     ? { calories: Number(edit.calories) || 0, protein: Number(edit.protein) || 0, carbs: Number(edit.carbs) || 0, fats: Number(edit.fats) || 0 }
     : null;
+  const customScale = isCustom ? customServingScale(food, serving, unit) * count : 1;
   const macros = editable
     ? perServing
     : isCustom
       ? {
-          calories: Math.round(perServing.calories * count),
-          protein: Math.round(perServing.protein * count),
-          carbs: Math.round(perServing.carbs * count),
-          fats: Math.round(perServing.fats * count),
+          calories: Math.round(perServing.calories * customScale),
+          protein: Math.round(perServing.protein * customScale),
+          carbs: Math.round(perServing.carbs * customScale),
+          fats: Math.round(perServing.fats * customScale),
         }
       : computeMacros(food, serving, unit, count);
   const scale = scaleOf(food, serving, unit) * count;
@@ -199,10 +201,10 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
     { label: 'Carbs', key: 'carbs', value: macros.carbs, unit: 'g', color: '#EAB308' },
   ];
 
-  // Custom food, read mode: show stored micros (scaled by number of servings), hiding zeros.
+  // Custom food, read mode: show stored micros (scaled like the macros), hiding zeros.
   const customMicrosShown = isCustom && !editable
     ? CUSTOM_MICRO_FIELDS
-        .map(m => ({ ...m, value: Math.round((Number(edit.micros[m.key]) || 0) * count * 10) / 10 }))
+        .map(m => ({ ...m, value: Math.round((Number(edit.micros[m.key]) || 0) * customScale * 10) / 10 }))
         .filter(m => m.value > 0)
     : [];
 
@@ -937,19 +939,23 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setDetailFood(null);
   };
 
-  // Read mode: stage an already-saved custom food into the log (× number of servings).
+  // Read mode: stage an already-saved custom food into the log. Scale by the serving size
+  // (relative to the food's defined serving) and the number of servings — matches the
+  // detail-view tiles and buildLoggedFields.
   const addCustomToLog = () => {
     const e = customEdit;
     if (!e) return;
     const name = (e.name || '').trim() || 'Custom Food';
+    const serving = Number(detailServing) || 0;
     const servings = Number(detailServings) || 0;
+    const sc = customServingScale(detailFood, serving, detailUnit) * servings;
     const adjusted = {
-      calories: Math.round((Number(e.calories) || 0) * servings),
-      protein: Math.round((Number(e.protein) || 0) * servings),
-      carbs: Math.round((Number(e.carbs) || 0) * servings),
-      fats: Math.round((Number(e.fats) || 0) * servings),
+      calories: Math.round((Number(e.calories) || 0) * sc),
+      protein: Math.round((Number(e.protein) || 0) * sc),
+      carbs: Math.round((Number(e.carbs) || 0) * sc),
+      fats: Math.round((Number(e.fats) || 0) * sc),
     };
-    setCheckedFoods(prev => ({ ...prev, [name]: { food: detailFood, serving: Number(detailServing) || 0, unit: detailUnit, servings, adjustedMacros: adjusted } }));
+    setCheckedFoods(prev => ({ ...prev, [name]: { food: detailFood, serving, unit: detailUnit, servings, adjustedMacros: adjusted } }));
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(null);

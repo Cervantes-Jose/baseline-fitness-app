@@ -20,6 +20,21 @@ export const scaleOf = (food, serving, unit) => {
   return base > 0 ? servingToGrams(serving, unit, base) / base : 1;
 };
 
+// A custom food's macros/micros are stored for its *defined* serving (savedServing/
+// savedUnit). Logging a different serving size scales them proportionally — defined
+// 50g / 180cal, log 100g → ×2 — so the serving-size field behaves like it does for any
+// other food. Returns 1 (no scaling) when there's no defined serving (older rows, or a
+// serving of 0), preserving prior behavior. Tolerates camelCase or snake_case fields.
+export const customServingScale = (food, serving, unit) => {
+  const savedServing = food?.savedServing ?? food?.saved_serving;
+  const savedUnit = food?.savedUnit ?? food?.saved_unit ?? 'g';
+  if (!(Number(savedServing) > 0)) return 1;
+  const base = baseGramsOf(food);
+  const defGrams = servingToGrams(savedServing, savedUnit, base);
+  if (!(defGrams > 0)) return 1;
+  return servingToGrams(serving, unit, base) / defGrams;
+};
+
 export const computeMacros = (food, serving, unit, servings = 1) => {
   const s = scaleOf(food, serving, unit) * (Number(servings) || 0);
   return {
@@ -100,8 +115,9 @@ export const buildLoggedFields = (food, serving, unit, servings, macros) => {
   const grams = Math.round(perServingGrams * count) || 0;
   let nutrients;
   if (food.isCustom && food.micros) {
+    const sc = customServingScale(food, serving, unit) * count;
     nutrients = CUSTOM_MICRO_FIELDS
-      .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * count * 10) / 10, unit: m.unit }))
+      .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * sc * 10) / 10, unit: m.unit }))
       .filter(n => n.value > 0);
   } else {
     nutrients = parseMicros(food, scaleOf(food, serving, unit) * count).map(n => ({ name: n.name, value: n.value, unit: n.unit }));
@@ -129,19 +145,20 @@ export const buildMealComponent = (food, serving, unit, servings = 1) => {
   const count = Number(servings) || 1;
   const grams = Math.round(servingToGrams(serving, unit, baseGramsOf(food)) * count) || 0;
   let macros, micros;
-  // Custom foods define macros/micros per *their own serving*, scaled by the number
-  // of servings (serving size/unit only affects the displayed grams). Other foods scale
-  // by grams. This mirrors how FoodLog logs each type so a meal matches its parts.
+  // Custom foods define macros/micros for their saved serving; scale by both the serving
+  // size (relative to that defined serving) and the number of servings, so a meal matches
+  // exactly what FoodLog would log. Other foods scale by grams.
   if (food.isCustom) {
+    const sc = customServingScale(food, serving, unit) * count;
     macros = {
-      calories: Math.round((Number(food.calories) || 0) * count),
-      protein: Math.round((Number(food.protein) || 0) * count),
-      carbs: Math.round((Number(food.carbs) || 0) * count),
-      fats: Math.round((Number(food.fats) || 0) * count),
+      calories: Math.round((Number(food.calories) || 0) * sc),
+      protein: Math.round((Number(food.protein) || 0) * sc),
+      carbs: Math.round((Number(food.carbs) || 0) * sc),
+      fats: Math.round((Number(food.fats) || 0) * sc),
     };
     micros = food.micros
       ? CUSTOM_MICRO_FIELDS
-          .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * count * 10) / 10, unit: m.unit }))
+          .map(m => ({ name: m.label, value: Math.round((Number(food.micros[m.key]) || 0) * sc * 10) / 10, unit: m.unit }))
           .filter(n => n.value > 0)
       : [];
   } else {
