@@ -162,7 +162,7 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
 
 // ─── SERVING / MACRO HELPERS ─────────────────────────────────
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
+function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, hideBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in the detail view
@@ -217,14 +217,52 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
     onUnit(newUnit);
   };
 
+  // In edit mode, changing the serving size rescales the per-serving macros/micros
+  // proportionally (e.g. 100 g / 360 cal → set 50 g → 180 cal). We scale from a base
+  // captured when the field gains focus, so typing intermediate values doesn't compound
+  // rounding errors. Clearing the field leaves the macros untouched until a real value.
+  const sizeBaseRef = useRef(null);
+  const captureSizeBase = () => {
+    sizeBaseRef.current = {
+      grams: servingToGrams(serving, unit, baseGramsOf(food)),
+      calories: Number(edit?.calories) || 0,
+      protein: Number(edit?.protein) || 0,
+      carbs: Number(edit?.carbs) || 0,
+      fats: Number(edit?.fats) || 0,
+      micros: edit ? { ...edit.micros } : {},
+    };
+  };
+  const changeServingSize = (val) => {
+    onServing(val);
+    if (!editable) return;
+    const base = sizeBaseRef.current;
+    if (!base || !(base.grams > 0)) return;
+    const newGrams = servingToGrams(val, unit, baseGramsOf(food));
+    if (!(newGrams > 0)) return;   // empty / 0 — wait for a real value before rescaling
+    const r = newGrams / base.grams;
+    onEditField('calories', String(Math.round(base.calories * r)));
+    onEditField('protein', String(Math.round(base.protein * r)));
+    onEditField('carbs', String(Math.round(base.carbs * r)));
+    onEditField('fats', String(Math.round(base.fats * r)));
+    CUSTOM_MICRO_FIELDS.forEach(m => {
+      const bv = Number(base.micros[m.key]) || 0;
+      if (bv > 0) onEditMicro(m.key, String(Math.round(bv * r * 10) / 10));
+    });
+  };
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Back
-          </button>
+          {hideBack ? (
+            /* Opened from a main tab — no Back button; slide the sheet down to dismiss. */
+            <div style={{ flexShrink: 0 }} />
+          ) : (
+            <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '15px', fontWeight: '600', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Back
+            </button>
+          )}
           {!editable && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               {isCustom && (
@@ -305,7 +343,9 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
           <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
             <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Serving Size</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-              <input type="number" inputMode="decimal" value={serving} onChange={e => onServing(e.target.value)}
+              <input type="number" inputMode="decimal" value={serving}
+                onFocus={editable ? captureSizeBase : undefined}
+                onChange={e => (editable ? changeServingSize(e.target.value) : onServing(e.target.value))}
                 style={{ width: '64px', padding: '6px 8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '600', textAlign: 'center', outline: 'none' }} />
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setUnitMenuOpen(o => !o)}
@@ -443,6 +483,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [mealDraft, setMealDraft] = useState(null);
   // True while the Add Food sheet is picking a food *for the meal builder* (vs. logging).
   const [addFoodMealMode, setAddFoodMealMode] = useState(false);
+  // Index of the meal component currently being re-edited (null = adding a new one). When
+  // set, confirming the detail replaces that component instead of appending.
+  const [editingMealComponentIdx, setEditingMealComponentIdx] = useState(null);
 
   // Barcode scanner (ZXing camera) + Open Food Facts lookup.
   const [showScanner, setShowScanner] = useState(false);
@@ -482,6 +525,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // True when the custom-food editor was opened from the main Custom Foods tab (vs. from
   // inside the Add Food sheet). On save we return to where it was opened from.
   const [customFromMain, setCustomFromMain] = useState(false);
+  // True when the detail view was opened from a main tab (Favorites / Custom Foods)
+  // rather than from inside the Add Food sheet. On Back we close the whole sheet so the
+  // user returns to that main screen instead of landing on the Add Food list.
+  const [detailFromMain, setDetailFromMain] = useState(false);
   // Main Custom Foods tab: quick rename/delete mode + in-progress name edits keyed by id.
   const [customEditMode, setCustomEditMode] = useState(false);
   const [nameDrafts, setNameDrafts] = useState({});
@@ -674,12 +721,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ? { id: meal.id, name: meal.name, components: meal.components || [], servings: String(meal.servings || 1) }
       : { id: null, name: '', components: [], servings: '1' });
   };
-  const closeMealBuilder = () => { setMealDraft(null); setAddFoodMealMode(false); };
+  const closeMealBuilder = () => { setMealDraft(null); setAddFoodMealMode(false); setEditingMealComponentIdx(null); };
 
   // From the builder's "Add Food": open the Add Food sheet in meal mode (picking a
   // food appends it to the meal instead of logging it). The builder stays mounted below.
   const openMealFoodPicker = () => {
     setAddFoodMealMode(true);
+    setEditingMealComponentIdx(null);   // picking a new food, not editing an existing component
     setSearchQuery('');
     setDetailFood(null);
     setCustomEdit(null);
@@ -689,12 +737,38 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(true);
   };
 
-  // Append the food currently open in the detail screen to the meal in progress.
+  // Tap an existing meal component to re-edit it: reopen the detail screen with the
+  // stored food + serving inputs. Only components saved with a `source` (added after the
+  // edit feature shipped) are editable; older ones are tap-to-remove only.
+  const openMealComponent = (idx) => {
+    const c = mealDraft?.components[idx];
+    if (!c || !c.source) return;
+    setAddFoodMealMode(true);
+    setEditingMealComponentIdx(idx);
+    setAddFoodDragY(0);
+    setShowAddFoodScreen(true);
+    if (c.source.isCustom) openCustomDetail(c.source, false);
+    else openDetail(c.source);
+    // Restore the exact serving/unit/servings that were logged (override the opener's
+    // last-portion/default seeding).
+    setDetailServing(String(c.serving));
+    setDetailUnit(c.unit);
+    setDetailServings(String(c.servings != null ? c.servings : 1));
+  };
+
+  // Append (or, when editing, replace) the food currently open in the detail screen.
   const addDetailToMeal = () => {
     const food = detailFood;
     if (!food) return;
     const component = buildMealComponent(food, Number(detailServing) || 0, detailUnit, Number(detailServings) || 1);
-    setMealDraft(prev => prev ? { ...prev, components: [...prev.components, component] } : prev);
+    setMealDraft(prev => {
+      if (!prev) return prev;
+      const components = editingMealComponentIdx != null
+        ? prev.components.map((c, i) => (i === editingMealComponentIdx ? component : c))
+        : [...prev.components, component];
+      return { ...prev, components };
+    });
+    setEditingMealComponentIdx(null);
     setDetailFood(null);
     setCustomEdit(null);
     setCustomEditing(false);
@@ -772,6 +846,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // existing foods open read-only unless startEditing is true (··· Edit / top-right Edit).
   const openCustomDetail = (food, startEditing = false) => {
     setCustomFromMain(false);   // opened from within the sheet; openCustomFoodDetail overrides to true
+    setDetailFromMain(false);   // ditto for Back behavior; main-tab openers override to true
     const existing = food && food.id != null;
     const microStrings = CUSTOM_MICRO_FIELDS.reduce((o, m) => { o[m.key] = '0'; return o; }, {});
     if (existing && food.micros) {
@@ -786,9 +861,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       fats: existing ? String(food.fats ?? '') : '',
       micros: microStrings,
     });
-    // Existing custom foods default to the last portion logged; new ones to base serving.
+    // A custom food's serving SIZE is part of its definition (saved_serving/saved_unit),
+    // so always show that — never a previously logged serving, which would mask edits to
+    // the size and make saves look like they didn't take. Only the number-of-servings
+    // count is remembered from the last log.
     const last = existing ? lastPortions[food?.name] : null;
-    const { serving, unit } = last || defaultServingOf(food || {});
+    const { serving, unit } = defaultServingOf(food || {});
     setDetailServing(String(serving));
     setDetailUnit(unit);
     setDetailServings(String(last?.servings || 1));
@@ -1044,6 +1122,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(true);
     if (fav.isCustom) openCustomDetail(fav.food, false);
     else openDetail(fav.food);
+    setDetailFromMain(true);   // override: Back returns to the main Favorites screen
   };
 
   // From the main Custom Foods tab: open the Add Food sheet straight into a custom
@@ -1055,6 +1134,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowAddFoodScreen(true);
     openCustomDetail(food, startEditing);
     setCustomFromMain(true);   // override: this open originated on the main Custom Foods tab
+    setDetailFromMain(true);   // override: Back returns to the main Custom Foods screen
   };
 
   // Tap a logged food in the timeline → open the detail to re-adjust its serving.
@@ -1126,6 +1206,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       setSearchQuery('');
       setCheckedFoods({});
       setDetailFood(null);
+      setDetailFromMain(false);
+      setCustomEdit(null);
+      setCustomEditing(false);
+      setCustomFromMain(false);
+      setEditingMealComponentIdx(null);
       setEditingEntry(null);
       setSearchResults(null);
       setSearchError(null);
@@ -1279,6 +1364,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setDetailServings(String(last?.servings || 1));
     setCustomEdit(null);
     setCustomEditing(false);
+    setDetailFromMain(false);   // opened from within the sheet; main-tab openers override to true
     setDetailFood(food);
   };
 
@@ -1911,8 +1997,14 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               onHourChange={editingEntry ? undefined : setAddFoodHour}
               entryMode={!!editingEntry}
               entryDirty={!!editingEntry && (detailServing !== editingEntry.origServing || detailUnit !== editingEntry.origUnit || detailServings !== editingEntry.origServings)}
-              onBack={() => { setDetailFood(null); setCustomEdit(null); setCustomEditing(false); setEditingEntry(null); }}
-              addLabel={addFoodMealMode ? 'Add to Meal' : undefined}
+              hideBack={detailFromMain}
+              onBack={() => {
+                // Editing an existing meal component: cancel back to the builder, not the
+                // food picker list (there was no list step to return to).
+                if (editingMealComponentIdx != null) { setEditingMealComponentIdx(null); closeAddFood(); return; }
+                setDetailFood(null); setCustomEdit(null); setCustomEditing(false); setEditingEntry(null);
+              }}
+              addLabel={addFoodMealMode ? (editingMealComponentIdx != null ? 'Update Food' : 'Add to Meal') : undefined}
               onAdd={(addFoodMealMode && !customEditing) ? addDetailToMeal : (editingEntry ? saveLoggedEntry : (customEditing ? saveCustomDetail : (customEdit ? addCustomToLog : confirmDetail)))}
             />
           ) : (
@@ -2065,6 +2157,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           draft={mealDraft}
           onChange={setMealDraft}
           onAddFood={openMealFoodPicker}
+          onEditComponent={openMealComponent}
           onSave={saveMeal}
           onClose={closeMealBuilder}
           onDelete={mealDraft.id ? () => deleteMeal(mealDraft) : null}

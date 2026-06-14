@@ -7,7 +7,7 @@ import { sumMealComponents } from './foodMath';
 //
 // draft shape: { id|null, name, components: [ { food:{name,brandOwner}, serving, unit,
 //   grams, calories, protein, carbs, fats, micros:[{name,value,unit}] } ], servings: string }
-function MealBuilder({ draft, onChange, onAddFood, onSave, onClose, onDelete }) {
+function MealBuilder({ draft, onChange, onAddFood, onEditComponent, onSave, onClose, onDelete }) {
   // Local buffer for the serving-size field so typing stays smooth (the displayed
   // value is otherwise derived from total ÷ servings, which would fight the cursor).
   const [sizeFocused, setSizeFocused] = useState(false);
@@ -144,18 +144,29 @@ function MealBuilder({ draft, onChange, onAddFood, onSave, onClose, onDelete }) 
             No foods yet — tap “Add Food” to build your meal.
           </p>
         ) : (
-          draft.components.map((c, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{c.food.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {c.grams}g · {c.calories} cal · {c.protein}g P · {c.carbs}g C · {c.fats}g F
+          draft.components.map((c, i) => {
+            // Components saved with a `source` can be re-opened in the detail screen and
+            // re-edited; older ones are tap-to-remove only.
+            const editable = !!c.source && onEditComponent;
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                <div onClick={editable ? () => onEditComponent(i) : undefined}
+                  style={{ flex: 1, minWidth: 0, cursor: editable ? 'pointer' : 'default' }}>
+                  <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{c.food.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {c.grams}g · {c.calories} cal · {c.protein}g P · {c.carbs}g C · {c.fats}g F
+                  </div>
                 </div>
+                {editable && (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                <button onClick={() => removeComponent(i)} aria-label="Remove food"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: '4px 6px', flexShrink: 0 }}>×</button>
               </div>
-              <button onClick={() => removeComponent(i)} aria-label="Remove food"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: '4px 6px', flexShrink: 0 }}>×</button>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

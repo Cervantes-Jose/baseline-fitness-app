@@ -151,9 +151,14 @@ export const buildMealComponent = (food, serving, unit, servings = 1) => {
   return {
     food: { name: food.name, brandOwner: food.brandOwner || null },
     serving: Number(serving) || 0, unit,
+    servings: Number(servings) || 1,
     grams,
     calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats,
     micros,
+    // Full source food + servings count so the component can be re-opened in the detail
+    // screen and re-edited. Components saved before this existed lack `source` and stay
+    // tap-to-remove only.
+    source: food,
   };
 };
 
