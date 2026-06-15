@@ -1663,7 +1663,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         position: 'fixed', top: 0, right: 0, zIndex: 150,
         padding: '26px 20px 8px',
         background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--text-secondary)', display: 'flex', alignItems: 'center',
+        color: 'var(--accent)', display: 'flex', alignItems: 'center',
       }}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
           <rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2"/>

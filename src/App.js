@@ -14,6 +14,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AuthScreen from './components/AuthScreen';
 import { supabase } from './supabaseClient';
+import { flushWorkoutQueue } from './components/offlineQueue';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -126,12 +127,20 @@ const changeDate = (dir) => {
    supabase.auth.getSession().then(({ data: { session } }) => {
      setUser(session?.user ?? null);
      setAuthLoading(false);
+     // Replay any workouts finished offline on a previous visit.
+     if (session?.user?.id) flushWorkoutQueue(session.user.id);
    });
+   // A workout queued while offline syncs the moment the connection returns.
+   const onOnline = () => flushWorkoutQueue();
+   window.addEventListener('online', onOnline);
    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
      // Recovery link signs the user into a temporary session; keep them on
      // AuthScreen (user stays null) so its "Set New Password" form can show.
      if (event === 'PASSWORD_RECOVERY') { setUser(null); return; }
      setUser(session?.user ?? null);
+     // On sign-in, drain that user's offline queue (e.g. they signed out before
+     // a queued workout could sync, then signed back in).
+     if (event !== 'SIGNED_OUT' && session?.user?.id) flushWorkoutQueue(session.user.id);
      // Session ended (sign-out or expired/failed token refresh) → back to AuthScreen.
      // Wipe per-user localStorage and in-memory workout state so the next account to
      // sign in on this browser never inherits the previous user's data.
@@ -144,7 +153,10 @@ const changeDate = (dir) => {
        setActiveTab('dashboard');
      }
    });
-   return () => subscription.unsubscribe();
+   return () => {
+     subscription.unsubscribe();
+     window.removeEventListener('online', onOnline);
+   };
  }, []);
 
  useEffect(() => {

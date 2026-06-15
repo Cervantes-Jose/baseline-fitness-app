@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
+import RoutineAddMenu from './RoutineAddMenu';
+import RoutinePickerSheet from './RoutinePickerSheet';
 
 export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
@@ -20,7 +22,7 @@ export const EXERCISE_DATABASE = {
 
 export const CATEGORIES = Object.keys(EXERCISE_DATABASE);
 
-function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onRename, onDelete }) {
+function ExerciseRow({ name, isCustom, categoryLabel, routines, onAddToRoutine, onViewAll, onRename, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const btnRef = useRef(null);
@@ -64,14 +66,7 @@ function ExerciseRow({ name, isCustom, categoryLabel, onAdd, onRename, onDelete 
           </svg>
         </button>
       )}
-      <button
-        onClick={onAdd}
-        style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-light)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M8 3v10M3 8h10" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round"/>
-        </svg>
-      </button>
+      <RoutineAddMenu routines={routines} onAdd={onAddToRoutine} onViewAll={onViewAll} />
       {menuOpen && createPortal(
         <>
           <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 600 }} />
@@ -159,7 +154,8 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
   const [expanded, setExpanded] = useState(new Set());
   const [customExercises, setCustomExercises] = useState([]);
   const [routines, setRoutines] = useState([]);
-  const [addTarget, setAddTarget] = useState(null);
+  // The exercise whose full "View All" routine picker is open ({ name, category }).
+  const [viewAllTarget, setViewAllTarget] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
@@ -193,7 +189,15 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
         if (data) setCustomExercises(data);
       });
       supabase.from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true }).then(({ data }) => {
-        if (data) setRoutines(data);
+        if (!data) return;
+        // Match the My Routines order so the menu's first 4 are the same first 4.
+        let ordered = data;
+        try {
+          const savedOrder = JSON.parse(localStorage.getItem('routineOrder') || 'null');
+          if (savedOrder) ordered = [...data].sort((a, b) =>
+            (savedOrder.indexOf(a.id) + 1 || Infinity) - (savedOrder.indexOf(b.id) + 1 || Infinity));
+        } catch {}
+        setRoutines(ordered);
       });
     })();
   }, []);
@@ -230,16 +234,15 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
     setTimeout(() => setSuccessMsg(''), 2500);
   };
 
-  const addToRoutine = async (routineId, routineName) => {
-    if (!addTarget) return;
+  // Add a specific exercise to a specific routine. Used by both the inline
+  // "Add to {name}" quick actions and the "View All" picker sheet.
+  const addExerciseToRoutine = async (exercise, routine) => {
+    if (!exercise || !routine) return;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { error } = await supabase.from('exercises').insert([{ routine_id: routineId, name: addTarget.name, user_id: uid }]);
-    if (!error) {
-      setAddTarget(null);
-      showSuccess(`Added to ${routineName}`);
-    }
+    const { error } = await supabase.from('exercises').insert([{ routine_id: routine.id, name: exercise.name, user_id: uid }]);
+    if (!error) showSuccess(`Added to ${routine.name}`);
   };
 
   const deleteCustom = async (id) => {
@@ -359,7 +362,9 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
                     name={name}
                     isCustom={custom}
                     categoryLabel={category}
-                    onAdd={() => setAddTarget({ name, category })}
+                    routines={routines}
+                    onAddToRoutine={(routine) => addExerciseToRoutine({ name, category }, routine)}
+                    onViewAll={() => setViewAllTarget({ name, category })}
                     onRename={customEx ? () => { setRenameValue(customEx.name); setRenameTarget(customEx); } : undefined}
                     onDelete={customEx ? () => requestDelete(customEx) : undefined}
                   />
@@ -388,7 +393,9 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
                       key={name}
                       name={name}
                       isCustom={!!customEx}
-                      onAdd={() => setAddTarget({ name, category: cat })}
+                      routines={routines}
+                      onAddToRoutine={(routine) => addExerciseToRoutine({ name, category: cat }, routine)}
+                      onViewAll={() => setViewAllTarget({ name, category: cat })}
                       onRename={customEx ? () => { setRenameValue(customEx.name); setRenameTarget(customEx); } : undefined}
                       onDelete={customEx ? () => requestDelete(customEx) : undefined}
                     />
@@ -400,33 +407,13 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
         </div>
       )}
 
-      {/* Add to Routine modal */}
-      {addTarget && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}
-          onClick={() => setAddTarget(null)}
-        >
-          <div
-            style={{ background: 'var(--card)', borderRadius: '20px 20px 0 0', padding: '24px 24px 40px', width: '100%', maxWidth: '480px', maxHeight: '65vh', overflowY: 'auto' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)', margin: '0 auto 20px' }} />
-            <p style={{ fontWeight: '700', fontSize: '17px', color: 'var(--text-primary)', marginBottom: '4px' }}>{addTarget.name}</p>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>Choose a routine</p>
-            {routines.length === 0
-              ? <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>No routines yet — create one first.</p>
-              : routines.map(r => (
-                <button
-                  key={r.id}
-                  onClick={() => addToRoutine(r.id, r.name)}
-                  style={{ display: 'block', width: '100%', padding: '14px 16px', marginBottom: '8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', textAlign: 'left', fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}
-                >
-                  {r.name}
-                </button>
-              ))
-            }
-          </div>
-        </div>
+      {/* "View All" routine picker — full-screen, swipe-down dismissable */}
+      {viewAllTarget && (
+        <RoutinePickerSheet
+          exerciseName={viewAllTarget.name}
+          onPick={(routine) => { addExerciseToRoutine(viewAllTarget, routine); setViewAllTarget(null); }}
+          onClose={() => setViewAllTarget(null)}
+        />
       )}
 
       {/* Create Custom Exercise modal */}

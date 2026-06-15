@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { EXERCISE_DATABASE, CATEGORIES } from './ExerciseDatabase';
+import { queueWorkoutSave, getQueuedHistoryItems, isNetworkError } from './offlineQueue';
 import {
   DndContext,
   closestCenter,
@@ -807,13 +808,28 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
+    // Workouts finished offline live in the local queue until they sync. Surface
+    // them in History so an offline finish is invisible to the user.
+    const queued = getQueuedHistoryItems(uid);
     const { data: sessions, error } = await supabase
       .from('workout_sessions').select('*, session_exercises(*)').eq('user_id', uid).order('created_at', { ascending: false });
-    if (error) { return; }
-    setHistory(sessions.map(s => ({
+    if (error) {
+      // Offline: keep what's shown but make sure queued workouts are present.
+      if (queued.length) setHistory(prev => {
+        const seen = new Set(prev.map(s => s.id));
+        return [...queued.filter(q => !seen.has(q.id)), ...prev];
+      });
+      return;
+    }
+    const serverItems = sessions.map(s => ({
       id: s.id, date: s.date, routineName: s.routine_name,
       exercises: s.session_exercises.map(e => ({ name: e.exercise_name, sets: Array.isArray(e.sets) ? e.sets : (typeof e.sets === 'string' ? JSON.parse(e.sets) : []) }))
-    })));
+    }));
+    // Prepend queued workouts the server doesn't have yet (same id => no dupe
+    // once they sync). Queued items are the most recent, so they go on top.
+    const serverIds = new Set(serverItems.map(s => s.id));
+    const pending = queued.filter(q => !serverIds.has(q.id));
+    setHistory([...pending, ...serverItems]);
   };
 
   const deleteSelectedSessions = async () => {
@@ -1101,23 +1117,47 @@ const updateSet = (exId, setIdx, field, value) => {
     const uid = session?.user?.id;
     if (!uid) { finishingRef.current = false; return; }
 
-    const { data: sessionRow, error: sessionError } = await supabase
-      .from('workout_sessions')
-      .insert([{ routine_id: activeRoutine.id, routine_name: activeRoutine.name, date: new Date().toLocaleDateString(), duration: workoutSeconds, user_id: uid }])
-      .select().single();
-    if (sessionError) { finishingRef.current = false; return; }
-
+    // Ids are generated client-side so the offline fallback (and its later
+    // replay) reference a stable session_id without a server round-trip.
+    const sessionId = crypto.randomUUID();
+    const sessionRow = {
+      id: sessionId,
+      routine_id: activeRoutine.id,
+      routine_name: activeRoutine.name,
+      date: new Date().toLocaleDateString(),
+      duration: workoutSeconds,
+      user_id: uid,
+    };
     const exerciseInserts = activeRoutine.exercises.map(ex => ({
-      session_id: sessionRow.id,
+      id: crypto.randomUUID(),
+      session_id: sessionId,
       exercise_name: ex.name,
       sets: currentLog[ex.id] || [],
-      user_id: uid
+      user_id: uid,
     }));
 
-    const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
-    if (exError) { finishingRef.current = false; return; }
+    // Try the normal online save. If it fails because we're offline, queue the
+    // bundle and fall through to the exact same success path — the user can't
+    // tell the difference. A real (non-network) error keeps today's behavior:
+    // bail and leave the modal open rather than silently swallow a genuine bug.
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error('offline');   // skip the doomed round-trip
+      }
+      const { error: sessionError } = await supabase.from('workout_sessions').insert([sessionRow]);
+      if (sessionError) throw sessionError;
+      const { error: exError } = await supabase.from('session_exercises').insert(exerciseInserts);
+      if (exError) throw exError;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        queueWorkoutSave(uid, { session: sessionRow, exercises: exerciseInserts });
+      } else {
+        finishingRef.current = false;
+        return;
+      }
+    }
 
-    await loadHistory();
+    await loadHistory();   // online: refetch; offline: merges the just-queued workout
     await loadRoutines();
     setActiveWorkout(null);
     setView('routines');
@@ -1772,7 +1812,7 @@ const updateSet = (exId, setIdx, field, value) => {
           {!editMode && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button onClick={() => setCalendarView(v => !v)}
-                style={{ background: calendarView ? 'var(--accent-light)' : 'none', border: calendarView ? '1px solid var(--border)' : '1px solid transparent', borderRadius: '8px', cursor: 'pointer', padding: '6px', color: calendarView ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                style={{ background: calendarView ? 'var(--accent-light)' : 'none', border: calendarView ? '1px solid var(--border)' : '1px solid transparent', borderRadius: '8px', cursor: 'pointer', padding: '6px', color: 'var(--accent)', display: 'flex', alignItems: 'center' }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
                   <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

@@ -486,6 +486,15 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
+  // Defaults render in their canonical order regardless of created_at (a bulk
+  // seed insert doesn't reliably preserve array order); custom measurements
+  // keep their existing (created_at) order after the defaults.
+  const defaultOrder = name => {
+    const i = DEFAULT_MEASUREMENT_NAMES.findIndex(n => n.toLowerCase() === (name || '').toLowerCase());
+    return i === -1 ? Infinity : i;
+  };
+  const orderedMeasurements = [...measurements].sort((a, b) => defaultOrder(a.name) - defaultOrder(b.name));
+
   if (view === 'list') return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 0' }}>
@@ -548,7 +557,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         );
       })()}
 
-      {measurements.map((m, idx) => {
+      {orderedMeasurements.map((m, idx) => {
         const isDefault = defaultIds.has(m.id) || DEFAULT_MEASUREMENT_NAME_SET.has((m.name || '').toLowerCase());
         const hasEntries = m.entries.length > 0;
         const last = m.entries[m.entries.length - 1];
@@ -703,15 +712,22 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           Back
         </button>
-        <input
-          value={activeMeasurement.name}
-          placeholder="Measurement name"
-          autoFocus={!activeMeasurement.name}
-          onChange={e => updateActiveName(e.target.value)}
-          onBlur={persistActiveName}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: '100%', margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }}
-        />
+        {(defaultIds.has(activeMeasurement.id) || DEFAULT_MEASUREMENT_NAME_SET.has((activeMeasurement.name || '').toLowerCase())) ? (
+          // Default (hardcoded) measurements can't be renamed — show a static title.
+          <h2 style={{ width: '100%', margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', padding: '2px 0' }}>
+            {activeMeasurement.name}
+          </h2>
+        ) : (
+          <input
+            value={activeMeasurement.name}
+            placeholder="Measurement name"
+            autoFocus={!activeMeasurement.name}
+            onChange={e => updateActiveName(e.target.value)}
+            onBlur={persistActiveName}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            style={{ width: '100%', margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }}
+          />
+        )}
 
         {/* TREND */}
         <div className="card-flat">
