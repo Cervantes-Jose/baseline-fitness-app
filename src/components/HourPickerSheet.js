@@ -1,4 +1,4 @@
-import { useRef, useState, useLayoutEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { tapHaptic } from './haptics';
 
 // Hour picker that pops out *from* the hour pill (like the FAB speed-dial pops
@@ -27,6 +27,10 @@ function HourPickerSheet({ open, hours = [], value, onSelect, onClose, align = '
     setTimeout(() => { onSelect(val); onClose(); }, 130);
   };
 
+  // Reset the flash state whenever the picker closes, so reopening it lets you
+  // pick again (otherwise `pending` stays set and blocks the next selection).
+  useEffect(() => { if (!open) setPending(null); }, [open]);
+
   // Center the selected hour in the scroll viewport as soon as it mounts
   // (before paint, so there's no visible jump from the top).
   useLayoutEffect(() => {
@@ -38,25 +42,40 @@ function HourPickerSheet({ open, hours = [], value, onSelect, onClose, align = '
     }
   }, [open]);
 
+  // Dismiss on a tap *outside* the list. Using a click listener (rather than a
+  // full-screen backdrop) keeps the page behind scrollable, and a scroll
+  // gesture won't dismiss the picker — only a discrete tap outside does.
+  useEffect(() => {
+    if (!open) return;
+    // Arm on the next tick so the same tap that *opened* the picker (which is
+    // still propagating to document) can't immediately close it.
+    let armed = false;
+    const t = setTimeout(() => { armed = true; }, 0);
+    const onDocClick = (e) => {
+      if (!armed) return;
+      if (listRef.current && !listRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener('click', onDocClick);
+    return () => { clearTimeout(t); document.removeEventListener('click', onDocClick); };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <>
-      {/* Transparent tap-outside backdrop */}
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
-
-      {/* Scrollable column of floating hour pills, anchored beneath the trigger */}
-      <div
-        ref={listRef}
-        style={{
-          position: 'absolute', top: '100%', [align]: 0, marginTop: 8, zIndex: 201,
-          maxHeight: 256,
-          overflowY: 'auto',
-          display: 'flex', flexDirection: 'column',
-          alignItems: align === 'right' ? 'flex-end' : 'flex-start',
-          gap: 7,
-          padding: '38px 4px',
-          scrollbarWidth: 'none',
+    /* Scrollable column of floating hour pills, anchored beneath the trigger */
+    <div
+      ref={listRef}
+      style={{
+        position: 'absolute', top: '100%', [align]: 0, marginTop: 8, zIndex: 201,
+        maxHeight: 256,
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
+        display: 'flex', flexDirection: 'column',
+        alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+        gap: 7,
+        padding: '38px 4px',
+        scrollbarWidth: 'none',
           // Fade the rows in/out at the top and bottom edges as they scroll.
           WebkitMaskImage:
             'linear-gradient(to bottom, transparent 0, #000 38px, #000 calc(100% - 38px), transparent 100%)',
@@ -93,8 +112,7 @@ function HourPickerSheet({ open, hours = [], value, onSelect, onClose, align = '
             </button>
           );
         })}
-      </div>
-    </>
+    </div>
   );
 }
 

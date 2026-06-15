@@ -43,13 +43,25 @@ const fieldLabel = { margin: 0, color: 'var(--text-primary)', textTransform: 'no
 // Bigger inputs, squared off (12px) to match the app's flat tiles.
 const bigInput = { padding: '19px 18px', fontSize: 17, borderRadius: 12 };
 
+// Whole-years age from a "YYYY-MM-DD" string. Returns null for an invalid or
+// future date (negative age).
+function ageFromDob(dobStr) {
+  const d = new Date(dobStr + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+  return age < 0 ? null : age;
+}
+
 // ─── AUTH SCREEN ────────────────────────────────────────────
 // Full-screen login / signup / forgot-password flow. Rendered by App.js when
 // there is no authenticated user. No bottom tab bar here.
 export default function AuthScreen({ onAuth = () => {} }) {
   const [view, setView] = useState('login'); // login | signup | forgot | reset
   const [firstName, setFirstName] = useState('');
-  const [age, setAge] = useState('');
+  const [dob, setDob] = useState('');   // YYYY-MM-DD (matches the profiles.dob column)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -76,7 +88,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
     setSuccess('');
     setResetSent(false);
     setFirstName('');
-    setAge('');
+    setDob('');
     setPassword('');
     setConfirmPassword('');
   };
@@ -93,8 +105,9 @@ export default function AuthScreen({ onAuth = () => {} }) {
   const handleSignUp = async () => {
     setError('');
     if (!firstName.trim()) { setError('Please enter your name'); return; }
-    const ageNum = parseInt(age, 10);
-    if (!age.trim() || Number.isNaN(ageNum)) { setError('Please enter your age'); return; }
+    if (!dob) { setError('Please enter your date of birth'); return; }
+    const ageNum = ageFromDob(dob);
+    if (ageNum == null) { setError('Please enter a valid date of birth'); return; }
     if (ageNum < 13) { setError('You must be at least 13 years old to use Baseline Fitness'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
@@ -105,11 +118,21 @@ export default function AuthScreen({ onAuth = () => {} }) {
       options: {
         data: {
           first_name: firstName,
+          // Stash DOB in auth metadata too: it persists with the signup even
+          // when email confirmation is on (no session yet to write profiles).
+          // AccountInformation backfills it into the profiles row on first load.
+          dob,
         },
       },
     });
+    if (error) { setLoading(false); setError(error.message); return; }
+    // When email confirmation is off there's a session immediately, so write
+    // DOB straight to the profiles row. When it's on, this no-ops (no session)
+    // and the metadata copy above is synced into profiles on first load.
+    if (data?.user?.id && data?.session) {
+      await supabase.from('profiles').upsert({ user_id: data.user.id, dob }, { onConflict: 'user_id' });
+    }
     setLoading(false);
-    if (error) { setError(error.message); return; }
     onAuth(data.user);
   };
 
@@ -245,17 +268,15 @@ export default function AuthScreen({ onAuth = () => {} }) {
 
         {view === 'signup' && (
           <div style={fieldGroup}>
-            <label className="section-title" style={fieldLabel}>Age</label>
+            <label className="section-title" style={fieldLabel}>Date of Birth</label>
             <input
               className="input"
-              type="number"
-              inputMode="numeric"
-              min="13"
-              placeholder="Enter your age"
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
               disabled={loading}
-              style={bigInput}
+              style={{ ...bigInput, textAlign: 'left' }}
             />
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
               You must be at least 13 years old.

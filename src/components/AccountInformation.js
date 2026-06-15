@@ -139,15 +139,22 @@ export default function AccountInformation({ user = null, metricSystem = 'imperi
         .maybeSingle();
       if (cancelled) return;
       if (error) { return; }
-      if (data) {
-        setProfile({
-          gender: data.gender || '',
-          dob: data.dob || '',
-          height: data.height != null ? String(data.height) : '',
-        });
+      // DOB captured at sign-up lives in auth metadata; if it hasn't made it
+      // into the profiles row yet (e.g. signup happened before a session
+      // existed under email confirmation), backfill it here.
+      const metaDob = user?.user_metadata?.dob || '';
+      const resolvedDob = data?.dob || metaDob;
+      setProfile({
+        gender: data?.gender || '',
+        dob: resolvedDob,
+        height: data?.height != null ? String(data.height) : '',
+      });
+      if (metaDob && !data?.dob) {
+        supabase.from('profiles').upsert({ user_id: uid, dob: metaDob }, { onConflict: 'user_id' });
       }
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid]);
 
   const showToast = (msg) => {
