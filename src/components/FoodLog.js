@@ -62,6 +62,14 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 // ─── CALENDAR MODAL ─────────────────────────────────────────
 function CalendarModal({ selected, onSelect, onClose }) {
   const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+
+  // Lock background scroll while the calendar sheet is open (same pattern as the
+  // other portal/overlay sheets) so the page behind doesn't scroll under it.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   const year = month.getFullYear();
   const monthIdx = month.getMonth();
   const firstDay = new Date(year, monthIdx, 1).getDay();

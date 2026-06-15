@@ -42,40 +42,36 @@ function HourPickerSheet({ open, hours = [], value, onSelect, onClose, align = '
     }
   }, [open]);
 
-  // Dismiss on a tap *outside* the list. Using a click listener (rather than a
-  // full-screen backdrop) keeps the page behind scrollable, and a scroll
-  // gesture won't dismiss the picker — only a discrete tap outside does.
+  // Lock background scroll while the picker is open so the page behind can't
+  // move under it (released on close/unmount).
   useEffect(() => {
     if (!open) return;
-    // Arm on the next tick so the same tap that *opened* the picker (which is
-    // still propagating to document) can't immediately close it.
-    let armed = false;
-    const t = setTimeout(() => { armed = true; }, 0);
-    const onDocClick = (e) => {
-      if (!armed) return;
-      if (listRef.current && !listRef.current.contains(e.target)) onClose();
-    };
-    document.addEventListener('click', onDocClick);
-    return () => { clearTimeout(t); document.removeEventListener('click', onDocClick); };
-  }, [open, onClose]);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    /* Scrollable column of floating hour pills, anchored beneath the trigger */
-    <div
-      ref={listRef}
-      style={{
-        position: 'absolute', top: '100%', [align]: 0, marginTop: 8, zIndex: 201,
-        maxHeight: 256,
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        overscrollBehavior: 'contain',
-        display: 'flex', flexDirection: 'column',
-        alignItems: align === 'right' ? 'flex-end' : 'flex-start',
-        gap: 7,
-        padding: '38px 4px',
-        scrollbarWidth: 'none',
+    <>
+      {/* Full-screen backdrop: tap anywhere outside the list to dismiss. */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+
+      {/* Scrollable column of floating hour pills, anchored beneath the trigger */}
+      <div
+        ref={listRef}
+        style={{
+          position: 'absolute', top: '100%', [align]: 0, marginTop: 8, zIndex: 201,
+          maxHeight: 256,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          display: 'flex', flexDirection: 'column',
+          alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+          gap: 7,
+          padding: '38px 4px',
+          scrollbarWidth: 'none',
           // Fade the rows in/out at the top and bottom edges as they scroll.
           WebkitMaskImage:
             'linear-gradient(to bottom, transparent 0, #000 38px, #000 calc(100% - 38px), transparent 100%)',
@@ -112,7 +108,8 @@ function HourPickerSheet({ open, hours = [], value, onSelect, onClose, align = '
             </button>
           );
         })}
-    </div>
+      </div>
+    </>
   );
 }
 

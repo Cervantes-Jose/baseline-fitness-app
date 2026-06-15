@@ -81,6 +81,19 @@ function parseRest(str) {
 }
 
 const REST_DEFAULT_SECONDS = 90; // new rest timers default to 1:30
+
+// Sets to prefill for an exercise when opening/starting a routine: the saved
+// plan (`planned_sets`, edited in the config view or carried over from the last
+// completed session) if present, else the last session's sets, else one empty
+// set. `planned_sets` is jsonb on the exercises table.
+function prefillSetsFor(ex) {
+  const ps = ex.planned_sets;
+  let planned = Array.isArray(ps) ? ps : null;
+  if (!planned && typeof ps === 'string') { try { planned = JSON.parse(ps); } catch { planned = null; } }
+  if (planned && planned.length > 0) return planned;
+  if (ex.lastSession?.sets?.length > 0) return ex.lastSession.sets;
+  return [{ sets: '', reps: '', weight: '' }];
+}
 const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
 
 function SortableExercise({ ex, number, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
@@ -568,6 +581,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   // Rest timers keyed by exercise id: array where index i = rest (seconds) after set i, or null/undefined for no timer.
   const [restTimers, setRestTimers] = useState(savedLog?.restTimers || {});
   const restTimersRef = useRef(restTimers);
+  // Debounced persistence of edited planned sets (config view). `pendingPlanned`
+  // holds the latest sets array per exercise id awaiting a write; one shared
+  // timer flushes them so rapid typing collapses into a single save.
+  const pendingPlanned = useRef({});
+  const plannedTimer = useRef(null);
   // Finished rest states during the active workout: { [exId]: { [slotIdx]: 'completed' | 'skipped' } }.
   // The *running* rest itself is owned by App (activeRest prop); this only tracks the after-state.
   const [restStatus, setRestStatus] = useState(savedLog?.restStatus || {});
@@ -676,6 +694,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const next = { ...restTimersRef.current, [exId]: arr };
     restTimersRef.current = next;
     setRestTimers(next);
+    // Keep the in-memory routine copies in sync (like delete/reorder/add do),
+    // so going Back and re-opening the routine — which rebuilds rest timers
+    // from routine.exercises[].rest_timers in openRoutine — reflects the edit
+    // instead of the stale pre-edit value. The DB write already happened below.
+    const applyRest = (ex) => (ex.id === exId ? { ...ex, rest_timers: arr } : ex);
+    setActiveRoutine(prev => (prev ? { ...prev, exercises: prev.exercises.map(applyRest) } : prev));
+    setRoutines(prev => prev.map(r => ({ ...r, exercises: (r.exercises || []).map(applyRest) })));
     persistRest(exId, arr);
   };
 
@@ -696,6 +721,41 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     arr[slotIdx] = null;
     commitRestTimers(exId, arr);
   };
+
+  // Write an exercise's planned (target) sets to its row. Plain column update —
+  // the exercises table GRANT/RLS already cover all columns.
+  const persistPlannedSets = async (exId, sets) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    await supabase.from('exercises').update({ planned_sets: sets }).eq('id', exId).eq('user_id', uid);
+  };
+
+  // Flush any debounced planned-sets writes immediately (also called on unmount
+  // so leaving the workouts section never drops a pending edit).
+  const flushPlannedSets = () => {
+    clearTimeout(plannedTimer.current);
+    const entries = Object.entries(pendingPlanned.current);
+    pendingPlanned.current = {};
+    entries.forEach(([exId, sets]) => persistPlannedSets(exId, sets));
+  };
+
+  // Called when sets are edited in the config view: sync the in-memory routine
+  // copies right away (so going Back and re-opening reflects the edit), then
+  // debounce the DB write. Mirrors the rest-timer commit pattern.
+  const savePlannedSets = (exId, sets) => {
+    const applyPlanned = (ex) => (ex.id === exId ? { ...ex, planned_sets: sets } : ex);
+    setActiveRoutine(prev => (prev ? { ...prev, exercises: prev.exercises.map(applyPlanned) } : prev));
+    setRoutines(prev => prev.map(r => ({ ...r, exercises: (r.exercises || []).map(applyPlanned) })));
+    pendingPlanned.current[exId] = sets;
+    clearTimeout(plannedTimer.current);
+    plannedTimer.current = setTimeout(flushPlannedSets, 500);
+  };
+
+  // Flush any pending planned-sets write when the component unmounts (e.g. the
+  // user navigates out of the workouts section before the debounce fires).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => flushPlannedSets(), []);
 
   useEffect(() => {
     if (showExercisePicker) {
@@ -966,9 +1026,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const prefilled = {};
     const prefilledRest = {};
     routine.exercises.forEach(ex => {
-      prefilled[ex.id] = ex.lastSession?.sets?.length > 0
-        ? ex.lastSession.sets
-        : [{ sets: '', reps: '', weight: '' }];
+      prefilled[ex.id] = prefillSetsFor(ex);
       const rt = ex.rest_timers;
       prefilledRest[ex.id] = Array.isArray(rt) ? rt : (typeof rt === 'string' ? JSON.parse(rt) : []);
     });
@@ -1014,26 +1072,36 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   };
 
 const updateSet = (exId, setIdx, field, value) => {
+    let computed;
     setSessionLog(prev => {
       const sets = [...(prev[exId] || [])];
       sets[setIdx] = { ...sets[setIdx], [field]: value };
+      computed = sets;
       return { ...prev, [exId]: sets };
     });
+    // In the routine config view these edits are the saved plan; persist them.
+    // During an active workout they're the live session log — don't touch the plan.
+    if (view === 'exercises') savePlannedSets(exId, computed);
   };
 
   const addSet = (exId) => {
-    setSessionLog(prev => ({
-      ...prev,
-      [exId]: [...(prev[exId] || []), { sets: '', reps: '', weight: '' }]
-    }));
+    let computed;
+    setSessionLog(prev => {
+      computed = [...(prev[exId] || []), { sets: '', reps: '', weight: '' }];
+      return { ...prev, [exId]: computed };
+    });
+    if (view === 'exercises') savePlannedSets(exId, computed);
   };
 
   const deleteSet = (exId, setIdx) => {
+    let computed;
     setSessionLog(prev => {
       const sets = [...(prev[exId] || [])];
       sets.splice(setIdx, 1);
+      computed = sets;
       return { ...prev, [exId]: sets };
     });
+    if (view === 'exercises') savePlannedSets(exId, computed);
     // Keep the rest-timer slots aligned to set indices (slot i = rest after set i).
     if (restTimersRef.current[exId]) {
       const arr = [...restTimersRef.current[exId]];
@@ -1091,7 +1159,7 @@ const updateSet = (exId, setIdx, field, value) => {
     const initial = {};
     const prefilledRest = {};
     routine.exercises.forEach(ex => {
-      initial[ex.id] = ex.lastSession?.sets?.length > 0 ? ex.lastSession.sets : [{ sets: '', reps: '', weight: '' }];
+      initial[ex.id] = prefillSetsFor(ex);
       const rt = ex.rest_timers;
       prefilledRest[ex.id] = Array.isArray(rt) ? rt : (typeof rt === 'string' ? JSON.parse(rt) : []);
     });
@@ -1156,6 +1224,16 @@ const updateSet = (exId, setIdx, field, value) => {
         return;
       }
     }
+
+    // Save what was actually logged as each exercise's plan, so re-opening the
+    // routine prefills this session's sets/reps/weight (still editable before
+    // the next workout). Best-effort — skipped if offline; loadRoutines below
+    // refreshes the in-memory copies either way.
+    try {
+      await Promise.all(activeRoutine.exercises.map(ex =>
+        supabase.from('exercises').update({ planned_sets: currentLog[ex.id] || [] }).eq('id', ex.id).eq('user_id', uid)
+      ));
+    } catch {}
 
     await loadHistory();   // online: refetch; offline: merges the just-queued workout
     await loadRoutines();

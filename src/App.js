@@ -244,6 +244,27 @@ const changeDate = (dir) => {
   // A finished/discarded workout should never leave a rest ticking in the mini-bar.
   useEffect(() => { if (!activeWorkout) { setActiveRest(null); setCompletedRest(null); } }, [activeWorkout]);
 
+  // App-wide: select all existing text the moment any text/number input gains
+  // focus, so typing immediately replaces the current value. One delegated
+  // focusin listener covers every input (current and future) without touching
+  // each field. Skips inputs whose type doesn't support selection (date,
+  // checkbox, radio, etc.) — calling select() on those would throw/no-op.
+  useEffect(() => {
+    const SELECTABLE = new Set(['text', 'search', 'email', 'tel', 'url', 'password', 'number']);
+    const onFocusIn = (e) => {
+      const el = e.target;
+      if (!el) return;
+      const isTextarea = el.tagName === 'TEXTAREA';
+      const isSelectableInput = el.tagName === 'INPUT' && SELECTABLE.has((el.type || 'text').toLowerCase());
+      if (!isTextarea && !isSelectableInput) return;
+      // Defer so the browser's own caret placement on focus doesn't override
+      // the selection (notably on mobile taps).
+      setTimeout(() => { try { el.select(); } catch {} }, 0);
+    };
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
+  }, []);
+
 
   const currentTabs = MAIN_TABS;
 
