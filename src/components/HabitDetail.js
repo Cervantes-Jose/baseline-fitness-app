@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import {
@@ -6,6 +6,7 @@ import {
   weekProgress, monthProgress, currentStreak, longestStreak, daysTrackedThisMonth,
   habitSubtitle,
 } from './habitMath';
+import useSheetDrag from './useSheetDrag';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -21,14 +22,10 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
 
   // Sheet slide-in/out + swipe-down
   const [shown, setShown] = useState(false);
-  const [dragY, setDragY] = useState(0);
-  const dragStart = useRef(null);
 
   // "View All" history sheet — mirrors the measurements detail history sheet exactly.
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyDragY, setHistoryDragY] = useState(0);
-  const historyDragStart = useRef(null);
   const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
 
   useEffect(() => {
@@ -46,16 +43,14 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   }, [showAllHistory]);
 
   const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
-  const onHistDown = (e) => { e.currentTarget.setPointerCapture(e.pointerId); historyDragStart.current = e.clientY; };
-  const onHistMove = (e) => { if (historyDragStart.current === null) return; setHistoryDragY(Math.max(0, e.clientY - historyDragStart.current)); };
-  const onHistUp = (e) => { if (historyDragStart.current === null) return; const dy = Math.max(0, e.clientY - historyDragStart.current); historyDragStart.current = null; setHistoryDragY(0); if (dy > 80) closeAllHistory(); };
+  const hist = useSheetDrag({ onDismiss: closeAllHistory, threshold: 80 });
 
   const requestClose = () => setShown(false);
   const onSheetTransitionEnd = (e) => { if (e.propertyName === 'transform' && !shown) onBack(); };
 
-  const onPointerDown = (e) => { dragStart.current = e.clientY; };
-  const onPointerMove = (e) => { if (dragStart.current === null) return; const dy = e.clientY - dragStart.current; if (dy > 0) setDragY(dy); };
-  const onPointerUp = () => { if (dragStart.current === null) return; if (dragY > 120) requestClose(); else setDragY(0); dragStart.current = null; };
+  // Swipe-to-dismiss: drag the header, or swipe down anywhere on the body once
+  // it's scrolled to the top.
+  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: requestClose, threshold: 120 });
 
   const loadLogs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -74,21 +69,25 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
     if (!isScheduled(habit, date)) return;
     const key = ymd(date);
     if (key > todayStr) return; // no checking the future
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
     const next = new Set(doneSet);
     const wasDone = next.has(key);
     wasDone ? next.delete(key) : next.add(key);
+    // Snapshot the habit's current target so this day's history keeps showing the
+    // value as it was, even if the habit's target is edited later.
+    const snapshot = habit.target || null;
+    // Optimistic UI first so the check feels instant — don't wait on getUser().
     setDoneSet(next);
     if (wasDone) {
       setLogTargets(prev => { const n = { ...prev }; delete n[key]; return n; });
+    } else {
+      setLogTargets(prev => ({ ...prev, [key]: snapshot }));
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { loadLogs(); return; }   // couldn't persist — re-sync to server truth
+    if (wasDone) {
       const { error } = await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', key);
       if (error) { showToast('Could not update'); loadLogs(); }
     } else {
-      // Snapshot the habit's current target so this day's history keeps showing the
-      // value as it was, even if the habit's target is edited later.
-      const snapshot = habit.target || null;
-      setLogTargets(prev => ({ ...prev, [key]: snapshot }));
       const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: key, target: snapshot });
       if (error) { showToast('Could not update'); loadLogs(); }
     }
@@ -167,11 +166,11 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
           width: '100%', maxWidth: 480, height: '100vh', background: 'var(--bg)', borderRadius: '18px 18px 0 0',
           display: 'flex', flexDirection: 'column',
           transform: shown ? `translateY(${dragY}px)` : 'translateY(100%)',
-          transition: dragStart.current === null ? 'transform 0.34s cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
+          transition: dragging ? 'none' : 'transform 0.34s cubic-bezier(0.32, 0.72, 0, 1)',
           boxShadow: '0 -8px 32px rgba(0,0,0,0.18)', overflow: 'hidden',
         }}>
         {/* Grabber + header (drag target) */}
-        <div onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+        <div {...handleProps}
           style={{ padding: '10px 16px 0', flexShrink: 0, touchAction: 'none' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 10px' }} />
           {/* No back button — swipe down (or tap the backdrop) dismisses the sheet. */}
@@ -183,7 +182,7 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
         </div>
 
         {/* Scrollable content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Overview */}
           <div className="card-flat" style={{ padding: '16px 20px' }}>
             <p style={{ ...sectionLabel, marginBottom: 12 }}>Overview</p>
@@ -287,11 +286,11 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
       {showAllHistory && (
         <div onClick={e => e.stopPropagation()} style={{
           position: 'fixed', inset: 0, zIndex: 760, background: 'var(--bg)',
-          transform: historyOpen ? `translateY(${historyDragY}px)` : 'translateY(100%)',
-          transition: historyDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: historyOpen ? `translateY(${hist.dragY}px)` : 'translateY(100%)',
+          transition: hist.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           display: 'flex', flexDirection: 'column',
         }}>
-          <div onPointerDown={onHistDown} onPointerMove={onHistMove} onPointerUp={onHistUp}
+          <div {...hist.handleProps}
             style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
@@ -299,7 +298,7 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
             <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>{habit.name}</h2>
             <p style={{ ...sectionLabel, marginTop: '6px' }}>History</p>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
+          <div ref={hist.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
             {historyDates.map((d, i, arr) => renderHistoryRow(d, i, arr))}
           </div>
         </div>

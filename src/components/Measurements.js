@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
+import useSheetDrag from './useSheetDrag';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -267,8 +268,10 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const [showCalendar, setShowCalendar] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyDragY, setHistoryDragY] = useState(0);
-  const historyDragStart = useRef(null);
+  const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
+  // Swipe-to-dismiss for the View All history sheet: drag the handle, or swipe
+  // down anywhere on the list once it's scrolled to the top.
+  const hist = useSheetDrag({ onDismiss: closeAllHistory, threshold: 80 });
 
   useEffect(() => {
     if (showAllHistory) {
@@ -661,11 +664,6 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     }
     const last7 = descEntries.slice(0, 7);
 
-    const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
-    const onHistDown = (e) => { e.currentTarget.setPointerCapture(e.pointerId); historyDragStart.current = e.clientY; };
-    const onHistMove = (e) => { if (historyDragStart.current === null) return; setHistoryDragY(Math.max(0, e.clientY - historyDragStart.current)); };
-    const onHistUp = (e) => { if (historyDragStart.current === null) return; const dy = Math.max(0, e.clientY - historyDragStart.current); historyDragStart.current = null; setHistoryDragY(0); if (dy > 80) closeAllHistory(); };
-
     const renderEntryRow = (entry, i, arr, accent) => {
       const s = entry.date;
       const dateLabel = !s ? '' : /^\d{4}-\d{2}-\d{2}$/.test(s)
@@ -873,11 +871,11 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         {showAllHistory && (
           <div style={{
             position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
-            transform: historyOpen ? `translateY(${historyDragY}px)` : 'translateY(100%)',
-            transition: historyDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+            transform: historyOpen ? `translateY(${hist.dragY}px)` : 'translateY(100%)',
+            transition: hist.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
             display: 'flex', flexDirection: 'column',
           }}>
-            <div onPointerDown={onHistDown} onPointerMove={onHistMove} onPointerUp={onHistUp}
+            <div {...hist.handleProps}
               style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
               <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
             </div>
@@ -885,7 +883,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
               <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>{activeMeasurement.name}</h2>
               <p style={{ ...sectionLabel, marginTop: '6px' }}>History</p>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
+            <div ref={hist.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
               {descEntries.map((entry, i, arr) => renderEntryRow(entry, i, arr, i === 0))}
             </div>
           </div>

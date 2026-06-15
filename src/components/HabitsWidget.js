@@ -32,17 +32,18 @@ export default function HabitsWidget() {
 
   const toggleToday = async (habit) => {
     if (!isScheduled(habit, today)) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
     const next = new Set(doneToday);
     const wasDone = next.has(habit.id);
     wasDone ? next.delete(habit.id) : next.add(habit.id);
+    // Optimistic UI first so the check feels instant — don't wait on getUser().
     setDoneToday(next);
     // Tactile feedback when checking a habit ON: a quick jiggle + a short buzz.
     if (!wasDone) {
       setJiggleId(habit.id);
       if (navigator.vibrate) navigator.vibrate(10);
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { load(); return; }   // couldn't persist — re-sync to server truth
     if (wasDone) {
       await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', todayStr);
     } else {

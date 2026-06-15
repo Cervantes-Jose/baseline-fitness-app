@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { loadRoutinesWithStats, routineCategories, avgTimeText, daysAgoText } from './routineMeta';
+import useSheetDrag from './useSheetDrag';
 
 // Full-screen "View All" routine picker. Mirrors the My Routines list (rich
 // tiles) minus the page's top stats widget. Slides up from the bottom and is
 // swipe-down dismissable. Tapping a routine adds `exerciseName` to it via onPick.
 function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
   const [data, setData] = useState(null);   // { routines, lastPerformed, avgDuration } | null while loading
-  const [dragY, setDragY] = useState(0);
-  const dragStart = useRef(null);
+  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
+  // it's scrolled to the top.
+  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: onClose });
 
   useEffect(() => {
     (async () => {
@@ -17,20 +19,6 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
       setData(await loadRoutinesWithStats(session?.user?.id));
     })();
   }, []);
-
-  // Swipe-to-dismiss: drag down from the handle/header; release past a threshold closes.
-  const onPointerDown = (e) => { dragStart.current = e.clientY; };
-  const onPointerMove = (e) => {
-    if (dragStart.current == null) return;
-    const dy = e.clientY - dragStart.current;
-    if (dy > 0) setDragY(dy);
-  };
-  const endDrag = () => {
-    if (dragStart.current == null) return;
-    dragStart.current = null;
-    if (dragY > 110) onClose();
-    else setDragY(0);
-  };
 
   const routines = data?.routines || [];
   const divider = <span style={{ width: 1, height: 11, background: 'var(--border)', flexShrink: 0 }} />;
@@ -46,14 +34,13 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
           background: 'var(--bg)', width: '100%', maxWidth: 480, height: '92vh', marginTop: 'auto',
           borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden',
           transform: `translateY(${dragY}px)`,
-          transition: dragStart.current == null ? 'transform 0.25s ease' : 'none',
+          transition: dragging ? 'none' : 'transform 0.25s ease',
           boxShadow: '0 -6px 24px rgba(0,0,0,0.18)',
         }}
       >
-        {/* Drag handle + header — the swipe-to-dismiss zone */}
+        {/* Drag handle + header — always a drag zone */}
         <div
-          onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-          onPointerUp={endDrag} onPointerCancel={endDrag}
+          {...handleProps}
           style={{ flexShrink: 0, padding: '10px 16px 8px', cursor: 'grab', touchAction: 'none' }}
         >
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 12px' }} />
@@ -61,7 +48,7 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>{exerciseName}</p>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {data == null ? (
             <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Loading...</p>
           ) : routines.length === 0 ? (

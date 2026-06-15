@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import useSheetDrag from './useSheetDrag';
 
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
@@ -209,8 +210,6 @@ function Nutrition({ selectedDate }) {
   // Food-log mini view (bottom sheet) for a tapped history date.
   const [miniDate, setMiniDate] = useState(null);
   const [miniOpen, setMiniOpen] = useState(false);
-  const [miniDragY, setMiniDragY] = useState(0);
-  const miniDragStart = useRef(null);
 
   // The 14-day window is anchored to the date selected in the Food Log header, so
   // navigating the date moves the trends with it. Default to today.
@@ -292,9 +291,9 @@ function Nutrition({ selectedDate }) {
   };
 
   const closeMini = () => { setMiniOpen(false); setTimeout(() => setMiniDate(null), 350); };
-  const onMiniDown = (e) => { e.currentTarget.setPointerCapture(e.pointerId); miniDragStart.current = e.clientY; };
-  const onMiniMove = (e) => { if (miniDragStart.current === null) return; setMiniDragY(Math.max(0, e.clientY - miniDragStart.current)); };
-  const onMiniUp = (e) => { if (miniDragStart.current === null) return; const dy = Math.max(0, e.clientY - miniDragStart.current); miniDragStart.current = null; setMiniDragY(0); if (dy > 80) closeMini(); };
+  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
+  // it's scrolled to the top.
+  const mini = useSheetDrag({ onDismiss: closeMini, threshold: 80 });
 
   const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
 
@@ -314,13 +313,13 @@ function Nutrition({ selectedDate }) {
       <>
         <div onClick={closeMini} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600 }} />
         <div style={{
-          position: 'fixed', bottom: 0, left: '50%', transform: `translateX(-50%) translateY(${miniOpen ? miniDragY : window.innerHeight}px)`,
-          transition: miniDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          position: 'fixed', bottom: 0, left: '50%', transform: `translateX(-50%) translateY(${miniOpen ? mini.dragY : window.innerHeight}px)`,
+          transition: mini.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           width: '100%', maxWidth: 480, maxHeight: '75vh',
           background: 'var(--bg)', borderRadius: '24px 24px 0 0', zIndex: 601,
           boxShadow: '0 -4px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column',
         }}>
-          <div onPointerDown={onMiniDown} onPointerMove={onMiniMove} onPointerUp={onMiniUp}
+          <div {...mini.handleProps}
             style={{ height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
@@ -328,7 +327,7 @@ function Nutrition({ selectedDate }) {
             <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>Foods on {fmtLongDate(miniDate)}</h2>
             <p style={{ ...sectionLabel, marginTop: '6px' }}>{selectedNutrient.name}</p>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
+          <div ref={mini.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
             {hours.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center', padding: '32px 0' }}>No foods logged this day</p>
             ) : hours.map(h => (

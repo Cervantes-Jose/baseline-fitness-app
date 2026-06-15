@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_MEASUREMENT_NAMES, getDefaultUnit } from './Measurements';
 import { GOOD, BAD } from './goalColor';
+import useSheetDrag from './useSheetDrag';
 
 // A measurement's `goal` (numeric, nullable) lives on the `measurements` row — it's
 // user-owned target data, covered by the table's owner RLS policy. Weight/Body Fat are
@@ -230,10 +231,12 @@ useEffect(() => { load(); }, []);
 function AddGoalSheet({ items, onClose, onAdd }) {
   const [shown, setShown] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
   const [closing, setClosing] = useState(false);
-  const startRef = useRef(0);
+
+  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
+  // it's scrolled to the top. Dismiss slides the sheet down, then unmounts.
+  const dismiss = () => { setClosing(true); setTimeout(onClose, 280); };
+  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: dismiss, threshold: 100 });
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
@@ -246,14 +249,6 @@ function AddGoalSheet({ items, onClose, onAdd }) {
     return next;
   });
 
-  const onDown = (e) => { startRef.current = e.clientY; setDragging(true); try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {} };
-  const onMove = (e) => { if (dragging) setDragY(Math.max(0, e.clientY - startRef.current)); };
-  const onUp = () => {
-    setDragging(false);
-    if (dragY > 100) { setClosing(true); setTimeout(onClose, 280); }   // dismissed
-    else setDragY(0);                                                  // snap back
-  };
-
   const sheetTransform = (closing || !shown) ? 'translateY(100%)' : `translateY(${dragY}px)`;
 
   return createPortal(
@@ -262,7 +257,7 @@ function AddGoalSheet({ items, onClose, onAdd }) {
       <div onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 480, background: 'var(--card)', borderRadius: '20px 20px 0 0', transform: sheetTransform, transition: dragging ? 'none' : 'transform 0.32s cubic-bezier(0.32,0.72,0,1)', boxShadow: '0 -8px 32px rgba(0,0,0,0.18)', padding: '10px 20px 28px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         {/* Drag handle + title = the grab region for swipe-to-dismiss */}
-        <div onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        <div {...handleProps}
           style={{ cursor: 'grab', touchAction: 'none', paddingBottom: 2 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 12px' }} />
           <p style={{ textAlign: 'center', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 14px' }}>Add Measurement Goal</p>
@@ -271,7 +266,7 @@ function AddGoalSheet({ items, onClose, onAdd }) {
         {items.length === 0 ? (
           <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14, padding: '20px 0' }}>Every measurement already has a goal.</p>
         ) : (
-          <div style={{ overflowY: 'auto', marginBottom: 14 }}>
+          <div ref={scrollRef} style={{ overflowY: 'auto', marginBottom: 14 }}>
             {items.map(it => {
               const on = selected.has(it.id);
               return (
