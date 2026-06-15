@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import RoutineAddMenu from './RoutineAddMenu';
 import RoutinePickerSheet from './RoutinePickerSheet';
+import { tapHaptic } from './haptics';
 
 export const EXERCISE_DATABASE = {
   "Chest": ["Assisted Dip","Band-Assisted Bench Press","Bar Dip","Bench Press","Bench Press Against Band","Board Press","Cable Chest Press","Clap Push-Up","Close-Grip Bench Press","Close-Grip Feet-Up Bench Press","Cobra Push-Up","Decline Bench Press","Decline Push-Up","Dumbbell Chest Fly","Dumbbell Chest Press","Dumbbell Decline Chest Press","Dumbbell Floor Press","Dumbbell Pullover","Feet-Up Bench Press","Floor Press","Incline Bench Press","Incline Dumbbell Press","Incline Push-Up","Kettlebell Floor Press","Kneeling Incline Push-Up","Kneeling Push-Up","Machine Chest Fly","Machine Chest Press","Medicine Ball Chest Pass","Pec Deck","Pin Bench Press","Plank to Push-Up","Push-Up","Push-Up Against Wall","Push-Ups With Feet in Rings","Resistance Band Chest Fly","Ring Dip","Seated Cable Chest Fly","Smith Machine Bench Press","Smith Machine Incline Bench Press","Smith Machine Reverse Grip Bench Press","Standing Cable Chest Fly","Standing Resistance Band Chest Fly"],
@@ -109,7 +110,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
       <div
         onClick={onToggle}
         style={{
-          position: 'sticky', top: '60px', zIndex: 20,
+          position: 'sticky', top: 0, zIndex: 20,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '18px', cursor: 'pointer',
           background: 'var(--card)', border: '1px solid var(--border)',
@@ -167,7 +168,13 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
   const [renameTarget, setRenameTarget] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  // Brief "Added to {routine} — Undo" toast at the bottom after adding an
+  // exercise to a routine. Holds the inserted row id so Undo can delete it.
+  const [undoAdd, setUndoAdd] = useState(null);   // { id, routineName }
+  const undoTimer = useRef(null);
   const searchInputRef = useRef(null);
+
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   // Open the create-exercise modal when the parent FAB requests it (signal = a bumped nonce);
   // the ref guards against re-firing for the same nonce (e.g. StrictMode double-invoke).
@@ -242,8 +249,28 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { error } = await supabase.from('exercises').insert([{ routine_id: routine.id, name: exercise.name, user_id: uid }]);
-    if (!error) showSuccess(`Added to ${routine.name}`);
+    const { data, error } = await supabase
+      .from('exercises')
+      .insert([{ routine_id: routine.id, name: exercise.name, user_id: uid }])
+      .select().single();
+    if (!error && data) {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      setUndoAdd({ id: data.id, routineName: routine.name });
+      undoTimer.current = setTimeout(() => setUndoAdd(null), 4000);
+    }
+  };
+
+  // Undo the most recent add by deleting the inserted exercises row.
+  const undoAddToRoutine = async () => {
+    if (!undoAdd) return;
+    tapHaptic();
+    const { id } = undoAdd;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoAdd(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    await supabase.from('exercises').delete().eq('id', id).eq('user_id', uid);
   };
 
   const deleteCustom = async (id) => {
@@ -511,6 +538,29 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Brief undo toast after adding an exercise to a routine */}
+      {undoAdd && createPortal(
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 96, display: 'flex', justifyContent: 'center', zIndex: 700, pointerEvents: 'none' }}>
+          <div style={{
+            pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 16,
+            background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+            padding: '12px 16px', maxWidth: 'calc(100% - 32px)',
+            boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
+            animation: 'exUndoIn 0.2s cubic-bezier(0.2,0.8,0.2,1) both',
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Added to {undoAdd.routineName}
+            </span>
+            <button onClick={undoAddToRoutine}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, fontSize: 14, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              Undo
+            </button>
+          </div>
+          <style>{`@keyframes exUndoIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+        </div>,
+        document.body
       )}
 
     </div>

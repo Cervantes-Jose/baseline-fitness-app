@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { tapHaptic } from './haptics';
 
 // Compact, in-row version of the app's floating "+" speed-dial. The + rotates to
 // × and a small menu pops out: up to 4 routines as "Add to {name}" plus a
@@ -12,15 +13,17 @@ const ITEM_H = 46;     // approx pill height incl. gap, for up/down placement
 const LEFT_SHIFT = 44; // nudge pills left so they don't sit on the + column
 const TOP_MARGIN = 70; // keep the menu clear of the sticky search/header band
 
-function pillStyle(isViewAll, i) {
+function pillStyle(isViewAll, i, active) {
+  const blue = isViewAll || active;   // View All is always blue; others flash blue when tapped
   return {
     display: 'flex', alignItems: 'center', maxWidth: 'min(70vw, 320px)',
-    background: isViewAll ? 'var(--accent)' : 'var(--card)',
-    color: isViewAll ? '#fff' : 'var(--text-primary)',
-    border: isViewAll ? 'none' : '1px solid var(--border)',
-    borderRadius: 22, padding: '10px 16px', fontSize: 14, fontWeight: isViewAll ? 700 : 500,
+    background: blue ? 'var(--accent)' : 'var(--card)',
+    color: blue ? '#fff' : 'var(--text-primary)',
+    border: blue ? 'none' : '1px solid var(--border)',
+    borderRadius: 22, padding: '10px 16px', fontSize: 14, fontWeight: blue ? 700 : 500,
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer',
     boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
+    transition: 'background 0.12s ease, color 0.12s ease',
     animation: `routineMenuIn 0.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 0.04}s both`,
   };
 }
@@ -28,12 +31,23 @@ function pillStyle(isViewAll, i) {
 function RoutineAddMenu({ routines = [], onAdd, onViewAll }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
+  // The tapped pill's key ('viewAll' or a routine id) — flashes blue briefly
+  // (with a haptic) before its action runs and the menu closes.
+  const [pending, setPending] = useState(null);
   const btnRef = useRef(null);
 
   const shown = routines.slice(0, MAX_ROUTINES);
   const itemCount = shown.length + 1;   // + View All
 
   const close = () => setOpen(false);
+
+  // Flash the tapped pill, buzz, then run its action and close.
+  const pick = (key, action) => {
+    if (pending != null) return;
+    tapHaptic();
+    setPending(key);
+    setTimeout(() => { setPending(null); close(); action(); }, 130);
+  };
 
   // position:fixed menu would detach from the button on scroll — close it instead
   // (also covers "tap/scroll anywhere else dismisses it"). Capture phase catches
@@ -96,11 +110,11 @@ function RoutineAddMenu({ routines = [], onAdd, onViewAll }) {
             alignItems: 'flex-end', gap: 8,
           }}>
             {shown.map((r, i) => (
-              <button key={r.id} onClick={() => { close(); onAdd(r); }} style={pillStyle(false, i)}>
+              <button key={r.id} onClick={() => pick(r.id, () => onAdd(r))} style={pillStyle(false, i, pending === r.id)}>
                 {`Add to ${r.name}`}
               </button>
             ))}
-            <button onClick={() => { close(); onViewAll(); }} style={pillStyle(true, shown.length)}>
+            <button onClick={() => pick('viewAll', onViewAll)} style={pillStyle(true, shown.length)}>
               View All
             </button>
           </div>

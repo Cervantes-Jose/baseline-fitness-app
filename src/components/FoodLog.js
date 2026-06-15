@@ -16,6 +16,7 @@ import { supabase, supabaseAnonKey } from '../supabaseClient';
 import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
 import Fab from './Fab';
+import HourPickerSheet from './HourPickerSheet';
 import {
   UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
   customServingScale, defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
@@ -297,19 +298,8 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
                         <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </button>
-                    {hourMenuOpen && (
-                      <>
-                        <div onClick={() => setHourMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '110px', maxHeight: '240px', overflowY: 'auto' }}>
-                          {HOURS.map(h => (
-                            <button key={h.value} onClick={() => { onHourChange(h.value); setHourMenuOpen(false); }}
-                              style={{ display: 'block', width: '100%', padding: '8px 14px', background: h.value === hour ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: h.value === hour ? 'var(--accent)' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                              {h.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                    <HourPickerSheet open={hourMenuOpen} hours={HOURS} value={hour}
+                      onSelect={onHourChange} onClose={() => setHourMenuOpen(false)} />
                   </div>
                 ) : (
                   /* Edit mode: hour shown read-only; use the Move button to change it. */
@@ -2036,19 +2026,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
-              {hourMenuOpen && (
-                <>
-                  <div onClick={() => setHourMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '110px', maxHeight: '240px', overflowY: 'auto' }}>
-                    {HOURS.map(h => (
-                      <button key={h.value} onClick={() => { setAddFoodHour(h.value); setHourMenuOpen(false); }}
-                        style={{ display: 'block', width: '100%', padding: '8px 14px', background: h.value === addFoodHour ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: h.value === addFoodHour ? 'var(--accent)' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        {h.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <HourPickerSheet open={hourMenuOpen} hours={HOURS} value={addFoodHour}
+                onSelect={setAddFoodHour} onClose={() => setHourMenuOpen(false)} />
             </div>
           </div>
 

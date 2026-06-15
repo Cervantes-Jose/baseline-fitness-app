@@ -3,12 +3,23 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { loadRoutinesWithStats, routineCategories, avgTimeText, daysAgoText } from './routineMeta';
 import useSheetDrag from './useSheetDrag';
+import { tapHaptic } from './haptics';
 
 // Full-screen "View All" routine picker. Mirrors the My Routines list (rich
 // tiles) minus the page's top stats widget. Slides up from the bottom and is
 // swipe-down dismissable. Tapping a routine adds `exerciseName` to it via onPick.
 function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
   const [data, setData] = useState(null);   // { routines, lastPerformed, avgDuration } | null while loading
+  // The tapped routine's id — flashes blue briefly (with a haptic) before the
+  // pick commits and the sheet closes.
+  const [pending, setPending] = useState(null);
+
+  const pick = (routine) => {
+    if (pending != null) return;
+    tapHaptic();
+    setPending(routine.id);
+    setTimeout(() => onPick(routine), 130);
+  };
   // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
   // it's scrolled to the top.
   const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: onClose });
@@ -18,6 +29,14 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
       const { data: { session } } = await supabase.auth.getSession();
       setData(await loadRoutinesWithStats(session?.user?.id));
     })();
+  }, []);
+
+  // Lock background scroll while the sheet is open (same pattern as the other
+  // portal sheets) so the page behind doesn't scroll under the overlay.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, []);
 
   const routines = data?.routines || [];
@@ -56,20 +75,23 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
           ) : (
             routines.map(r => {
               const cats = routineCategories(r);
+              const active = pending === r.id;
               return (
                 <button
                   key={r.id}
-                  onClick={() => onPick(r)}
+                  onClick={() => pick(r)}
                   style={{
-                    textAlign: 'left', background: 'var(--card)', borderRadius: 12, padding: 18,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: '1px solid var(--border)', cursor: 'pointer',
+                    textAlign: 'left', background: active ? 'var(--accent)' : 'var(--card)', borderRadius: 12, padding: 18,
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                    border: active ? '1px solid var(--accent)' : '1px solid var(--border)', cursor: 'pointer',
+                    transition: 'background 0.12s ease',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', lineHeight: 1.1 }}>{r.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: active ? '#fff' : 'var(--text-primary)', lineHeight: 1.1 }}>{r.name}</div>
                   {cats.length > 0 && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{cats.join('  •  ')}</div>
+                    <div style={{ fontSize: 12, color: active ? 'rgba(255,255,255,0.85)' : 'var(--text-muted)', marginTop: 2 }}>{cats.join('  •  ')}</div>
                   )}
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12, color: active ? 'rgba(255,255,255,0.85)' : 'var(--text-muted)', marginTop: 8 }}>
                     <span>
                       {data.lastPerformed[r.id]
                         ? <>Last performed <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{daysAgoText(data.lastPerformed[r.id])}</span></>
