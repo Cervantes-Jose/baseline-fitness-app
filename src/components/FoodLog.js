@@ -1656,11 +1656,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // Break out of the .content wrapper's 20px padding
   return (
-    <div style={{ margin: '-20px' }}>
+    <div style={{ margin: '-20px', position: 'relative' }}>
 
-      {/* Calendar button — fixed top-right, aligned with the date-nav row */}
+      {/* Calendar button — pinned to the top-right of the content (scrolls away
+          with the page, rather than floating fixed over the whole screen). */}
       <button onClick={() => setShowCalendar(true)} style={{
-        position: 'fixed', top: 0, right: 0, zIndex: 150,
+        position: 'absolute', top: 0, right: 0, zIndex: 150,
         padding: '26px 20px 8px',
         background: 'none', border: 'none', cursor: 'pointer',
         color: 'var(--accent)', display: 'flex', alignItems: 'center',

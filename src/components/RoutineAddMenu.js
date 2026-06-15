@@ -1,13 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 // Compact, in-row version of the app's floating "+" speed-dial. The + rotates to
 // × and a small menu pops out: up to 4 routines as "Add to {name}" plus a
-// "View All" entry that always appears. Anchored to the button via a portal (and
-// opening upward when near the bottom of the screen) so the category section's
-// overflow:hidden can't clip it.
+// "View All" entry that always appears. Rendered through a portal so the category
+// section's overflow:hidden can't clip it. Opens upward (dropping below only when
+// there's no room above), nudged left to clear the column of + buttons, and
+// closes on any scroll/resize since it's position:fixed and would otherwise hang.
 const MAX_ROUTINES = 4;
-const ITEM_H = 46;   // approx pill height incl. gap, for up/down placement
+const ITEM_H = 46;     // approx pill height incl. gap, for up/down placement
+const LEFT_SHIFT = 44; // nudge pills left so they don't sit on the + column
+const TOP_MARGIN = 70; // keep the menu clear of the sticky search/header band
 
 function pillStyle(isViewAll, i) {
   return {
@@ -30,21 +33,36 @@ function RoutineAddMenu({ routines = [], onAdd, onViewAll }) {
   const shown = routines.slice(0, MAX_ROUTINES);
   const itemCount = shown.length + 1;   // + View All
 
+  const close = () => setOpen(false);
+
+  // position:fixed menu would detach from the button on scroll — close it instead
+  // (also covers "tap/scroll anywhere else dismisses it"). Capture phase catches
+  // scrolls on inner containers too.
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
   const toggle = () => {
     if (!open) {
       const r = btnRef.current?.getBoundingClientRect();
       if (r) {
         const estH = itemCount * ITEM_H + 8;
-        const right = window.innerWidth - r.right;
-        const openUp = r.bottom + 6 + estH > window.innerHeight - 12;
+        const right = (window.innerWidth - r.right) + LEFT_SHIFT;
+        // Prefer opening upward; only drop below when there isn't room above.
+        const openUp = estH <= r.top - TOP_MARGIN;
         setPos(openUp
-          ? { up: true, bottom: window.innerHeight - r.top + 6, right }
+          ? { up: true, bottom: window.innerHeight - r.top - 8, right }
           : { up: false, top: r.bottom + 6, right });
       }
     }
     setOpen(o => !o);
   };
-  const close = () => setOpen(false);
 
   return (
     <>
@@ -72,7 +90,9 @@ function RoutineAddMenu({ routines = [], onAdd, onViewAll }) {
           <div style={{
             position: 'fixed', right: pos.right, zIndex: 601,
             ...(pos.up ? { bottom: pos.bottom } : { top: pos.top }),
-            display: 'flex', flexDirection: pos.up ? 'column-reverse' : 'column',
+            // Always top-to-bottom (routines then View All), whether the menu
+            // opens up or down — anchoring handles placement, order stays fixed.
+            display: 'flex', flexDirection: 'column',
             alignItems: 'flex-end', gap: 8,
           }}>
             {shown.map((r, i) => (

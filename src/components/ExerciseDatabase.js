@@ -109,7 +109,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
       <div
         onClick={onToggle}
         style={{
-          position: 'sticky', top: '60px', zIndex: 10,
+          position: 'sticky', top: '60px', zIndex: 20,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '18px', cursor: 'pointer',
           background: 'var(--card)', border: '1px solid var(--border)',
@@ -134,8 +134,9 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
         opacity: isExpanded ? 1 : 0,
         transition: 'height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease',
         willChange: 'height',
-        transform: 'translateZ(0)',
-        WebkitTransform: 'translateZ(0)',
+        // No translateZ here: a transform creates a stacking context that lets
+        // rows paint over the sticky category header. willChange:height alone
+        // does not create one, so the header (z-index 20) stays on top.
       }}>
         <div ref={contentRef} style={{
           display: 'flex', flexDirection: 'column', gap: '6px',
