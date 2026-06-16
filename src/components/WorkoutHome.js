@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import Workouts from './Workouts';
 import ExerciseDatabase from './ExerciseDatabase';
-import Measurements from './Measurements';
+import PersonalRecords from './PersonalRecords';
 import Fab from './Fab';
 
-const TABS = ['Routines', 'Exercises', 'Measurements', 'History'];
+const TABS = ['Routines', 'Exercises', 'PRs', 'History'];
 
 const APP_TAB_MAP = {
   'workout-exercises': 'Exercises',
-  'workout-measurements': 'Measurements',
+  'workout-prs': 'PRs',
   'workout-history': 'History',
   'workout-start': 'Routines',
 };
@@ -142,7 +142,6 @@ function WorkoutHome({
   const fabActions = [
     { label: 'Add Routine', onClick: () => requestAdd('routine', 'Routines') },
     { label: 'Add Exercise', onClick: () => requestAdd('exercise', 'Exercises') },
-    { label: 'Add Measurement', onClick: () => requestAdd('measurement', 'Measurements') },
   ];
 
   const workoutProps = {
@@ -247,7 +246,7 @@ function WorkoutHome({
         <Workouts key="wh-routines" resetKey={resetKey} autoCreateSignal={signalFor('routine')} onAutoCreate={clearAddReq} {...workoutProps} />
       )}
       {tab === 'Exercises' && <ExerciseDatabase autoCreateSignal={signalFor('exercise')} onAutoCreate={clearAddReq} />}
-      {tab === 'Measurements' && <Measurements metricSystem={metricSystem} autoCreateSignal={signalFor('measurement')} onAutoCreate={clearAddReq} />}
+      {tab === 'PRs' && <PersonalRecords metricSystem={metricSystem} />}
       {tab === 'History' && (
         <Workouts key="wh-history" initialView="history" {...workoutProps} />
       )}

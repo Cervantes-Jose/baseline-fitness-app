@@ -6,6 +6,7 @@ import WorkoutHome from './components/WorkoutHome';
 import UndoToast from './components/UndoToast';
 import Goals from './components/Goals';
 import DailyHabits from './components/DailyHabits';
+import Measurements from './components/Measurements';
 import Profile from './components/Profile';
 import AccountInformation from './components/AccountInformation';
 import Subscription from './components/Subscription';
@@ -284,9 +285,10 @@ const changeDate = (dir) => {
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} workoutBarVisible={!!activeWorkout && !workoutExpanded} /></div>;
       case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
       case 'profile-habits': return <DailyHabits onBack={() => setActiveTab('profile')} showToast={showToast} />;
+      case 'profile-measurements': return <Measurements metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
       case 'workout-start':
       case 'workout-exercises':
-      case 'workout-measurements':
+      case 'workout-prs':
       case 'workout-history':
         return <WorkoutHome
           appActiveTab={activeTab}
@@ -308,7 +310,7 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenMeasurements={() => setActiveTab('profile-measurements')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
       case 'profile-account': return <AccountInformation user={user} metricSystem={metricSystem} />;
       case 'profile-subscription': return <Subscription />;
       case 'profile-units': return <Units metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
@@ -338,7 +340,7 @@ const changeDate = (dir) => {
       {/* Header — only Profile sub-screens keep a header (bare blue back chevron
           stacked above the title). The dashboard renders its own greeting, and the
           top-level sections (Food Log, Workouts, Profile) have no title header. */}
-      {activeTab.startsWith('profile-') && activeTab !== 'profile-habits' && (
+      {activeTab.startsWith('profile-') && activeTab !== 'profile-habits' && activeTab !== 'profile-measurements' && (
         <div className="header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
           <button onClick={() => setActiveTab('profile')} aria-label="Back" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -429,7 +431,7 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-habits' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-units' || activeTab === 'profile-privacy' || activeTab === 'profile-terms' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-habits' || activeTab === 'profile-measurements' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-units' || activeTab === 'profile-privacy' || activeTab === 'profile-terms' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon">{tab.icon}</span>
             <span className="tab-label">{tab.label}</span>

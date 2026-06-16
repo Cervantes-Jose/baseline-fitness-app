@@ -2,6 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
 import useSwipeToDismiss from './useSwipeToDismiss';
+import Fab from './Fab';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -242,7 +243,7 @@ function MiniChart({ entries, color }) {
   );
 }
 
-function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {} }) {
+function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {}, onBack = null }) {
   const [view, setView] = useState('list');
   const [measurements, setMeasurements] = useState([]);
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -499,10 +500,25 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const orderedMeasurements = [...measurements].sort((a, b) => defaultOrder(a.name) - defaultOrder(b.name));
 
   if (view === 'list') return (
-    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 0' }}>
-        <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Measurements</p>
-      </div>
+    <div style={{ paddingBottom: onBack ? 100 : 0 }}>
+      {onBack ? (
+        <div style={{ padding: '16px 20px 0' }}>
+          <button onClick={onBack} aria-label="Back"
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, display: 'flex', marginBottom: 16 }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.5px' }}>Measurements</h1>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '28px 0 0', lineHeight: 1.4 }}>
+            Keep track of all your measurements.
+          </p>
+        </div>
+      ) : null}
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {!onBack && (
+          <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0 0' }}>
+            <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Measurements</p>
+          </div>
+        )}
 
       {renamingMeasurement && (
         <div style={{
@@ -614,7 +630,10 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
           </div>
         );
       })}
-
+      </div>
+      {onBack && (
+        <Fab label="Add Measurement" actions={[{ label: 'Add Measurement', onClick: createAndOpenMeasurement }]} />
+      )}
     </div>
   );
 

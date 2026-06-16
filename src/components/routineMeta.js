@@ -31,6 +31,11 @@ function nameToCategory() {
   return _nameToCategory;
 }
 
+// Public: an exercise's canonical category by name (e.g. for grouping Personal
+// Records). Returns 'Other' when the name isn't in the database. Reads the map
+// lazily for the same circular-import reason described above.
+export const exerciseCategory = (name) => nameToCategory()[name] || 'Other';
+
 // The unique categories represented by a routine's exercises, in canonical order.
 export const routineCategories = (routine) => {
   const byName = nameToCategory();
