@@ -74,6 +74,9 @@ export default function useSwipeToDismiss({ onDismiss, dismissThreshold = 80 }) 
           active.current = true;
           setDragging(true);
           startY.current = y;   // rebase so the sheet doesn't jump
+          e.preventDefault();   // claim the gesture; the drag tracks from the next move
+          return;               // without this, d === 0 below hits the pull-back branch
+                                // and immediately deactivates — the touch drag never sustains
         } else {
           return;               // let the body scroll natively
         }
