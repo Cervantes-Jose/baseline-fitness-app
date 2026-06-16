@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import useSwipeToDismiss from './useSwipeToDismiss';
-import HourPickerSheet from './HourPickerSheet';
 import {
   fmtNum, fmtVolume, fmtLongDate, dayKey,
-  periodRange, periodLabel, PERIOD_OPTIONS,
+  periodRange, PERIOD_OPTIONS,
 } from './prMath';
 
 const GREEN = '#22C55E';
@@ -13,6 +12,41 @@ const RED = '#EF4444';
 const LINE = '#3B82F6';
 
 const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
+
+// A small pill that opens a floating option menu styled like the app's FAB
+// speed-dial (white rounded cards that animate up; the selected one is accent).
+function DropdownPill({ value, options, onChange, align = 'right' }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find(o => o.id === value) || options[0];
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '20px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+        {current.label}
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+          <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+          <div style={{ position: 'absolute', top: '100%', [align]: 0, marginTop: '8px', zIndex: 201, display: 'flex', flexDirection: 'column', alignItems: align === 'right' ? 'flex-end' : 'flex-start', gap: '8px' }}>
+            {options.map((o, i) => {
+              const sel = o.id === value;
+              return (
+                <button key={o.id} onClick={() => { onChange(o.id); setOpen(false); }}
+                  style={{ whiteSpace: 'nowrap', minWidth: '110px', textAlign: align === 'right' ? 'right' : 'left', background: sel ? 'var(--accent)' : 'var(--card)', color: sel ? '#fff' : 'var(--text-primary)', border: sel ? 'none' : '1px solid var(--border)', borderRadius: '20px', padding: '10px 16px', fontSize: '13px', fontWeight: sel ? 700 : 500, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.14)', animation: `fabItemIn 0.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 0.04}s both` }}>
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <style>{`@keyframes fabItemIn { from { opacity: 0; transform: translateY(14px) scale(0.85); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── chart draw-in animation (same pattern used across the app's charts) ──
 function useChartDraw(ref, dep) {
@@ -133,10 +167,8 @@ function TrendChart({ points, color, formatValue }) {
 // One expandable workout row, reused by the Recent Workouts card and the View All sheet.
 function WorkoutRow({ entry, accent, hasPr }) {
   const [open, setOpen] = useState(false);
-  const { weights, totalReps, totalSets, volume } = entry.sets;
-  const mathExpr = totalSets <= 1
-    ? `${fmtNum(weights[0] || 0)}`
-    : `${weights.map(fmtNum).join('+')}÷${totalSets}`;
+  const { weights, totalReps, totalSets, volume, avgWeight } = entry.sets;
+  const avgReps = totalSets ? totalReps / totalSets : 0;
 
   const pill = (label, value) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '20px', background: 'var(--bg)', border: '1px solid var(--border)', fontSize: '12px', whiteSpace: 'nowrap' }}>
@@ -147,25 +179,27 @@ function WorkoutRow({ entry, accent, hasPr }) {
 
   return (
     <div style={{ padding: '12px', borderLeft: `3px solid ${accent ? LINE : 'transparent'}`, borderBottom: '1px solid var(--border)' }}>
-      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', cursor: 'pointer' }}>
-        <div style={{ minWidth: 0 }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)' }}>{fmtLongDate(entry.date)}</div>
           {hasPr && (
             <span style={{ display: 'inline-block', marginTop: '4px', fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 7px', borderRadius: '8px' }}>1RM</span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
             {fmtVolume(volume)}<span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>lbs</span>
           </span>
+        </div>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-muted)' }}>
             <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-        {pill('Avg Weight', mathExpr)}
-        {pill('Reps', totalReps)}
+        {pill('Avg Weight', `${fmtNum(avgWeight)} lb`)}
+        {pill('Avg Reps', fmtNum(avgReps))}
         {pill('Sets', totalSets)}
       </div>
       {open && (
@@ -187,8 +221,7 @@ function WorkoutRow({ entry, accent, hasPr }) {
 function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', onAddPr = () => {}, onClose = () => {} }) {
   const [shown, setShown] = useState(false);
   const [period, setPeriod] = useState(() => localStorage.getItem(`prPeriod_${exercise.name}`) || 'month');
-  const [periodMenuOpen, setPeriodMenuOpen] = useState(false);
-  const [metric, setMetric] = useState('volume');         // 'volume' | 'avg'
+  const [metric, setMetric] = useState('volume');         // 'volume' | 'avg' | '1rm'
   const [logOpen, setLogOpen] = useState(false);
   const [logWeight, setLogWeight] = useState('');
   const [logUnit, setLogUnit] = useState(metricSystem === 'metric' ? 'kg' : 'lbs');
@@ -247,14 +280,23 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
   const volDelta = delta(curVol, prevVol, fmtVolume);
   const countDelta = delta(curCount, prevCount, n => String(n));
 
-  // Performance Progress trend points.
-  const chartPoints = sessionsAsc.map(s => ({
-    date: s.date,
-    value: metric === 'volume' ? s.sets.volume : Math.round(s.sets.avgWeight * 10) / 10,
-  }));
-  const formatChartValue = metric === 'volume'
-    ? (v) => `${fmtVolume(v)} lbs`
-    : (v) => `${fmtNum(v)} lbs avg`;
+  // Performance Progress trend points — Volume / Avg Weight per session, or 1RM over time.
+  let chartPoints, formatChartValue, chartEmptyMsg;
+  if (metric === '1rm') {
+    chartPoints = [...prs]
+      .sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at))
+      .map(p => ({ date: new Date(p.recorded_at), value: Number(p.weight) }));
+    formatChartValue = (v) => `${fmtNum(v)} lbs`;
+    chartEmptyMsg = 'Log at least two 1RMs to see your progress.';
+  } else if (metric === 'avg') {
+    chartPoints = sessionsAsc.map(s => ({ date: s.date, value: Math.round(s.sets.avgWeight * 10) / 10 }));
+    formatChartValue = (v) => `${fmtNum(v)} lbs avg`;
+    chartEmptyMsg = 'Log at least two sessions to see your progress.';
+  } else {
+    chartPoints = sessionsAsc.map(s => ({ date: s.date, value: s.sets.volume }));
+    formatChartValue = (v) => `${fmtVolume(v)} lbs`;
+    chartEmptyMsg = 'Log at least two sessions to see your progress.';
+  }
 
   const recent = sessionsDesc.slice(0, 4);
 
@@ -310,7 +352,7 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
             {logOpen && (
               <>
                 <div onClick={() => setLogOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', zIndex: 21, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '14px', padding: '14px', boxShadow: '0 8px 28px rgba(0,0,0,0.18)', width: '230px' }}>
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', zIndex: 21, background: 'var(--card)', border: '1.5px solid var(--accent)', borderRadius: '8px', padding: '14px', boxShadow: '0 8px 28px rgba(0,0,0,0.18)', width: '230px' }}>
                   <p style={{ ...sectionLabel, marginBottom: '10px' }}>Log 1 Rep Max</p>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <input autoFocus value={logWeight} onChange={e => setLogWeight(e.target.value)} inputMode="decimal" placeholder="Weight"
@@ -339,24 +381,9 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
         <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 16px 40px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Overview */}
           <div className="card-flat" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: '14px' }}>
-              <div style={{ position: 'relative' }}>
-                <button onClick={() => setPeriodMenuOpen(o => !o)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                  {periodLabel(period)}
-                  <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: periodMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-                <HourPickerSheet
-                  open={periodMenuOpen}
-                  hours={PERIOD_OPTIONS.map(p => ({ label: p.label, value: p.id }))}
-                  value={period}
-                  onSelect={(v) => setPeriod(v)}
-                  onClose={() => setPeriodMenuOpen(false)}
-                  align="right"
-                />
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <p style={sectionLabel}>Overview</p>
+              <DropdownPill value={period} options={PERIOD_OPTIONS} onChange={setPeriod} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
               {overviewCol(
@@ -387,20 +414,17 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
           <div className="card-flat" style={{ padding: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
               <p style={sectionLabel}>Performance Progress</p>
-              <div style={{ display: 'flex', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '20px', padding: '2px', flexShrink: 0 }}>
-                {[{ id: 'volume', label: 'Volume' }, { id: 'avg', label: 'Avg Weight' }].map(o => (
-                  <button key={o.id} onClick={() => setMetric(o.id)}
-                    style={{ padding: '5px 12px', borderRadius: '16px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '700', background: metric === o.id ? 'var(--accent)' : 'transparent', color: metric === o.id ? '#fff' : 'var(--text-secondary)', transition: 'background 0.15s ease' }}>
-                    {o.label}
-                  </button>
-                ))}
-              </div>
+              <DropdownPill
+                value={metric}
+                options={[{ id: 'volume', label: 'Volume' }, { id: 'avg', label: 'Avg Weight' }, { id: '1rm', label: '1RM' }]}
+                onChange={setMetric}
+              />
             </div>
             {chartPoints.length >= 2 ? (
               <TrendChart points={chartPoints} color={LINE} formatValue={formatChartValue} />
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '28px 0 12px' }}>
-                Log at least two sessions to see your progress.
+                {chartEmptyMsg}
               </p>
             )}
           </div>
