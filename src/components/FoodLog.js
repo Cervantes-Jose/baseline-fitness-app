@@ -469,7 +469,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
   const [addFoodOpen, setAddFoodOpen] = useState(false);   // drives the slide-up transform
   // Swipe-to-dismiss for the Add Food screen (arrow defers to closeAddFood, defined below).
-  const addFood = useSwipeToDismiss({ onDismiss: () => closeAddFood(), dismissFraction: 0.2 });
+  const addFood = useSwipeToDismiss({ onDismiss: () => closeAddFood() });
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in Add Food
   const [searchQuery, setSearchQuery] = useState('');

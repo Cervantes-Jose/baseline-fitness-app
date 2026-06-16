@@ -5,8 +5,11 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 // Rules:
 //   - A downward swipe works anywhere on the sheet, but only once the scroll
 //     content is at the very top (so the body scrolls normally otherwise).
-//   - Dragging past `dismissFraction` of the sheet's height and releasing
-//     dismisses it; releasing before that snaps it back to fully open.
+//   - Dragging past `dismissThreshold` pixels and releasing dismisses it;
+//     releasing before that snaps it back to fully open. A fixed distance (not
+//     a fraction of height) keeps the feel consistent across short and
+//     full-screen sheets — a fraction of a tall sheet demands an unnaturally
+//     long drag.
 //   - `dragY` tracks the live offset so the consumer can translateY the sheet
 //     and the user sees it move; `dragging` is true while a drag is in progress
 //     (so the consumer can drop its transition for 1:1 finger tracking).
@@ -22,7 +25,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 // swipe works unconditionally. Touch drives the mobile gesture (native
 // listeners so it can preventDefault and take over from the browser's scroll);
 // `onPointerDown` adds the equivalent mouse drag on desktop.
-export default function useSwipeToDismiss({ onDismiss, dismissFraction = 0.5 }) {
+export default function useSwipeToDismiss({ onDismiss, dismissThreshold = 80 }) {
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const sheetRef = useRef(null);   // the sheet element: translated + measured for the threshold
@@ -46,14 +49,13 @@ export default function useSwipeToDismiss({ onDismiss, dismissFraction = 0.5 }) 
   // when it reopens).
   const end = useCallback(() => {
     if (active.current) {
-      const h = sheetRef.current?.offsetHeight || 0;
-      if (h > 0 && dragYRef.current > h * dismissFraction) onDismiss();
+      if (dragYRef.current > dismissThreshold) onDismiss();
       setDrag(0);
     }
     startY.current = null;
     active.current = false;
     setDragging(false);
-  }, [onDismiss, dismissFraction]);
+  }, [onDismiss, dismissThreshold]);
 
   // Touch gesture: scroll first, then hand off into a sheet drag once a downward
   // pull starts while the body is at the top.

@@ -612,7 +612,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [checkedSets, setCheckedSets] = useState(savedLog?.checkedSets || {});
   const [expandedExId, setExpandedExId] = useState(savedLog?.expandedExId ?? null);
   // Swipe-to-dismiss for the active-workout logging modal (collapses to the mini bar).
-  const logging = useSwipeToDismiss({ onDismiss: onCollapse, dismissFraction: 0.2 });
+  const logging = useSwipeToDismiss({ onDismiss: onCollapse });
   const [editMode, setEditMode] = useState(false);
   const [selectedSessions, setSelectedSessions] = useState(new Set());
   const [calendarView, setCalendarView] = useState(false);
@@ -635,7 +635,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [selectedPickerExercises, setSelectedPickerExercises] = useState(new Set());
   const [pickerCustomExercises, setPickerCustomExercises] = useState([]);
   // Swipe-to-dismiss for the exercise picker sheet (arrow defers to closeExercisePicker, defined below).
-  const picker = useSwipeToDismiss({ onDismiss: () => closeExercisePicker(), dismissFraction: 0.2 });
+  const picker = useSwipeToDismiss({ onDismiss: () => closeExercisePicker() });
   const pickerSearchInputRef = useRef(null);
 
   const daysAgoText = (dateStr) => {
