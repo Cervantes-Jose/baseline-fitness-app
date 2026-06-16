@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
@@ -291,9 +291,8 @@ function Nutrition({ selectedDate }) {
   };
 
   const closeMini = () => { setMiniOpen(false); setTimeout(() => setMiniDate(null), 350); };
-  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
-  // it's scrolled to the top.
-  const mini = useSheetDrag({ onDismiss: closeMini, threshold: 80 });
+  // Swipe down anywhere on the sheet (once scrolled to the top) to dismiss.
+  const mini = useSwipeToDismiss({ onDismiss: closeMini });
 
   const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
 
@@ -312,15 +311,14 @@ function Nutrition({ selectedDate }) {
     return (
       <>
         <div onClick={closeMini} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600 }} />
-        <div style={{
+        <div ref={mini.sheetRef} onPointerDown={mini.onPointerDown} style={{
           position: 'fixed', bottom: 0, left: '50%', transform: `translateX(-50%) translateY(${miniOpen ? mini.dragY : window.innerHeight}px)`,
           transition: mini.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           width: '100%', maxWidth: 480, maxHeight: '75vh',
           background: 'var(--bg)', borderRadius: '24px 24px 0 0', zIndex: 601,
           boxShadow: '0 -4px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column',
         }}>
-          <div {...mini.handleProps}
-            style={{ height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+          <div style={{ height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, userSelect: 'none' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
           <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>

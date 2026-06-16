@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { EXERCISE_DATABASE, CATEGORIES } from './ExerciseDatabase';
 import { queueWorkoutSave, getQueuedHistoryItems, isNetworkError } from './offlineQueue';
@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 // Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
 // once; if a name appears in multiple categories it's attributed to the first
@@ -327,6 +328,25 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
   // Holds each input's DOM node keyed `${idx}-weight` / `${idx}-reps`.
   const inputRefs = useRef({});
 
+  // Animate expand/collapse to the body's *measured* height rather than a fixed
+  // max-height cap. The cap (e.g. 2000px) made the timing asymmetric — short
+  // cards collapsed with a long delay then a fast snap. `bodyRef` is on the
+  // content (always laid out at full height even while clipped), so this stays
+  // correct as sets/rest rows are added or removed.
+  const bodyRef = useRef(null);
+  const [bodyH, setBodyH] = useState(0);
+  // Measure once and then on any content size change (sets/rest rows added or
+  // removed), so the expand/collapse always animates to the exact height.
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const measure = () => setBodyH(el.scrollHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Collapsing the card (e.g. opening another exercise) also exits edit mode.
   useEffect(() => { if (!isExpanded) setEditMode(false); }, [isExpanded]);
 
@@ -394,8 +414,8 @@ function LoggingExerciseCard({ ex, sessionLog, updateSet, addSet, deleteSet, che
           </svg>
         )}
       </div>
-      <div style={{ maxHeight: isExpanded ? '2000px' : '0px', overflow: 'hidden', transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-        <div style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
+      <div style={{ maxHeight: isExpanded ? bodyH : 0, overflow: 'hidden', transition: isExpanded ? 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)' : 'max-height 0.4s cubic-bezier(0.33, 0, 0.2, 1)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+        <div ref={bodyRef} style={{ padding: '0 16px 16px', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: SET_GRID, gap: '8px', marginBottom: '8px', borderTop: '1px solid var(--border)', paddingTop: '12px', ...shrink }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Set</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Prev</div>
@@ -591,8 +611,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [restStatus, setRestStatus] = useState(savedLog?.restStatus || {});
   const [checkedSets, setCheckedSets] = useState(savedLog?.checkedSets || {});
   const [expandedExId, setExpandedExId] = useState(savedLog?.expandedExId ?? null);
-  const [dragY, setDragY] = useState(0);
-  const dragStartY = useRef(null);
+  // Swipe-to-dismiss for the active-workout logging modal (collapses to the mini bar).
+  const logging = useSwipeToDismiss({ onDismiss: onCollapse, dismissFraction: 0.2 });
   const [editMode, setEditMode] = useState(false);
   const [selectedSessions, setSelectedSessions] = useState(new Set());
   const [calendarView, setCalendarView] = useState(false);
@@ -614,8 +634,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [expandedPickerCategories, setExpandedPickerCategories] = useState(new Set());
   const [selectedPickerExercises, setSelectedPickerExercises] = useState(new Set());
   const [pickerCustomExercises, setPickerCustomExercises] = useState([]);
-  const [pickerDragY, setPickerDragY] = useState(0);
-  const pickerDragStartY = useRef(null);
+  // Swipe-to-dismiss for the exercise picker sheet (arrow defers to closeExercisePicker, defined below).
+  const picker = useSwipeToDismiss({ onDismiss: () => closeExercisePicker(), dismissFraction: 0.2 });
   const pickerSearchInputRef = useRef(null);
 
   const daysAgoText = (dateStr) => {
@@ -1269,7 +1289,6 @@ const updateSet = (exId, setIdx, field, value) => {
     setExercisePickerSearch('');
     setSelectedPickerExercises(new Set());
     setExpandedPickerCategories(new Set());
-    setPickerDragY(0);
     setShowExercisePicker(true);
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
@@ -1313,21 +1332,6 @@ const updateSet = (exId, setIdx, field, value) => {
     closeExercisePicker();
   };
 
-  const onPickerPointerDown = (e) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    pickerDragStartY.current = e.clientY;
-  };
-  const onPickerPointerMove = (e) => {
-    if (pickerDragStartY.current === null) return;
-    setPickerDragY(Math.max(0, e.clientY - pickerDragStartY.current));
-  };
-  const onPickerPointerUp = (e) => {
-    if (pickerDragStartY.current === null) return;
-    const dy = Math.max(0, e.clientY - pickerDragStartY.current);
-    pickerDragStartY.current = null;
-    setPickerDragY(0);
-    if (dy > 80) closeExercisePicker();
-  };
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
 
@@ -1381,36 +1385,17 @@ const updateSet = (exId, setIdx, field, value) => {
       sum + (sessionLog[ex.id] || []).reduce((s, set, idx) =>
         s + (checkedSets[ex.id]?.[idx] ? (Number(set.weight) || 0) * (Number(set.reps) || 0) : 0), 0), 0);
 
-    const onHandlePointerDown = (e) => {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragStartY.current = e.clientY;
-    };
-    const onHandlePointerMove = (e) => {
-      if (dragStartY.current === null) return;
-      setDragY(Math.max(0, e.clientY - dragStartY.current));
-    };
-    const onHandlePointerUp = (e) => {
-      if (dragStartY.current === null) return;
-      const dy = Math.max(0, e.clientY - dragStartY.current);
-      dragStartY.current = null;
-      setDragY(0);
-      if (dy > 80) onCollapse();
-    };
-
     loggingModal = (
-      <div style={{
+      <div ref={logging.sheetRef} onPointerDown={logging.onPointerDown} style={{
         position: 'fixed', inset: 0, zIndex: 350,
         background: 'var(--bg)',
-        transform: workoutExpanded ? `translateY(${dragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
-        transition: dragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: workoutExpanded ? `translateY(${logging.dragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
+        transition: logging.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         willChange: 'transform',
         display: 'flex', flexDirection: 'column',
       }}>
-        {/* Drag handle */}
+        {/* Drag handle — swipe down anywhere on the sheet (once the list is at the top) to collapse */}
         <div
-          onPointerDown={onHandlePointerDown}
-          onPointerMove={onHandlePointerMove}
-          onPointerUp={onHandlePointerUp}
           style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
         </div>
@@ -1453,7 +1438,7 @@ const updateSet = (exId, setIdx, field, value) => {
         </div>
 
         {/* Exercise cards */}
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div ref={logging.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeRoutine.exercises.map(ex => renderLoggingCard(ex))}
         </div>
 
@@ -1499,18 +1484,15 @@ const updateSet = (exId, setIdx, field, value) => {
 
   // Exercise picker bottom sheet — shared by the exercises view and the active-workout logging modal
   const exercisePickerSheet = showExercisePicker && (
-    <div style={{
+    <div ref={picker.sheetRef} onPointerDown={picker.onPointerDown} style={{
       position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
-      transform: pickerOpen ? `translateY(${pickerDragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
-      transition: pickerDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      transform: pickerOpen ? `translateY(${picker.dragY}px) translateZ(0)` : 'translateY(100%) translateZ(0)',
+      transition: picker.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
       willChange: 'transform',
       display: 'flex', flexDirection: 'column',
     }}>
-      {/* Drag handle — full 60px touch area */}
+      {/* Drag handle — full 60px touch area; swipe down anywhere on the sheet (once the list is at the top) to dismiss */}
       <div
-        onPointerDown={onPickerPointerDown}
-        onPointerMove={onPickerPointerMove}
-        onPointerUp={onPickerPointerUp}
         style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}
       >
         <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
@@ -1527,7 +1509,7 @@ const updateSet = (exId, setIdx, field, value) => {
         />
       </div>
       {/* Scrollable exercise list */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', paddingBottom: '100px' }}>
+      <div ref={picker.scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 16px', paddingBottom: '100px' }}>
         {pickerSearchResults ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {pickerSearchResults.length === 0

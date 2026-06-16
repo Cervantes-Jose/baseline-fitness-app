@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import TermsOfService from './TermsOfService';
 import PrivacyPolicy from './PrivacyPolicy';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 // Bottom-up sheet that shows a legal document on the auth screen. Opened from
 // the "Terms of Service" / "Privacy Policy" links under the Sign up button.
@@ -21,7 +21,7 @@ export default function LegalSheet({ doc, onClose = () => {} }) {
 
   // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the document
   // once it's scrolled to the top.
-  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: handleClose, threshold: 120 });
+  const { dragY, dragging, scrollRef, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: handleClose });
 
   useEffect(() => {
     if (!doc) { setOpen(false); return; }
@@ -48,7 +48,9 @@ export default function LegalSheet({ doc, onClose = () => {} }) {
       }}
     >
       <div
+        ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={onPointerDown}
         style={{
           background: 'var(--bg)',
           borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -58,10 +60,9 @@ export default function LegalSheet({ doc, onClose = () => {} }) {
           boxShadow: '0 -8px 30px rgba(0,0,0,0.25)',
         }}
       >
-        {/* Grab handle + title — always a drag target */}
+        {/* Grab handle + title */}
         <div
-          {...handleProps}
-          style={{ padding: '10px 16px 12px', flexShrink: 0, cursor: 'grab', touchAction: 'none' }}
+          style={{ padding: '10px 16px 12px', flexShrink: 0 }}
         >
           <div style={{ width: 40, height: 5, borderRadius: 3, background: 'var(--border)', margin: '0 auto 10px' }} />
           <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{title}</h2>

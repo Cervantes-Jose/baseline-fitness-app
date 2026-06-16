@@ -6,7 +6,7 @@ import {
   weekProgress, monthProgress, currentStreak, longestStreak, daysTrackedThisMonth,
   habitSubtitle,
 } from './habitMath';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -43,14 +43,13 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   }, [showAllHistory]);
 
   const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
-  const hist = useSheetDrag({ onDismiss: closeAllHistory, threshold: 80 });
+  const hist = useSwipeToDismiss({ onDismiss: closeAllHistory });
 
   const requestClose = () => setShown(false);
   const onSheetTransitionEnd = (e) => { if (e.propertyName === 'transform' && !shown) onBack(); };
 
-  // Swipe-to-dismiss: drag the header, or swipe down anywhere on the body once
-  // it's scrolled to the top.
-  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: requestClose, threshold: 120 });
+  // Swipe down anywhere on the body (once scrolled to the top) to dismiss.
+  const { dragY, dragging, scrollRef, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: requestClose });
 
   const loadLogs = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -161,7 +160,7 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
         opacity: shown ? 1 : 0, transition: 'opacity 0.28s ease',
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }}>
-      <div onClick={e => e.stopPropagation()} onTransitionEnd={onSheetTransitionEnd}
+      <div ref={sheetRef} onClick={e => e.stopPropagation()} onPointerDown={onPointerDown} onTransitionEnd={onSheetTransitionEnd}
         style={{
           width: '100%', maxWidth: 480, height: '100vh', background: 'var(--bg)', borderRadius: '18px 18px 0 0',
           display: 'flex', flexDirection: 'column',
@@ -169,9 +168,9 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
           transition: dragging ? 'none' : 'transform 0.34s cubic-bezier(0.32, 0.72, 0, 1)',
           boxShadow: '0 -8px 32px rgba(0,0,0,0.18)', overflow: 'hidden',
         }}>
-        {/* Grabber + header (drag target) */}
-        <div {...handleProps}
-          style={{ padding: '10px 16px 0', flexShrink: 0, touchAction: 'none' }}>
+        {/* Grabber + header */}
+        <div
+          style={{ padding: '10px 16px 0', flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 10px' }} />
           {/* No back button — swipe down (or tap the backdrop) dismisses the sheet. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 14 }}>
@@ -284,14 +283,13 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
 
       {/* View All — full-screen bottom sheet (mirrors the measurements detail history sheet) */}
       {showAllHistory && (
-        <div onClick={e => e.stopPropagation()} style={{
+        <div ref={hist.sheetRef} onClick={e => e.stopPropagation()} onPointerDown={hist.onPointerDown} style={{
           position: 'fixed', inset: 0, zIndex: 760, background: 'var(--bg)',
           transform: historyOpen ? `translateY(${hist.dragY}px)` : 'translateY(100%)',
           transition: hist.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
           display: 'flex', flexDirection: 'column',
         }}>
-          <div {...hist.handleProps}
-            style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+          <div style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, userSelect: 'none' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
           <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>

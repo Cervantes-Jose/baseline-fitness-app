@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -271,7 +271,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
   // Swipe-to-dismiss for the View All history sheet: drag the handle, or swipe
   // down anywhere on the list once it's scrolled to the top.
-  const hist = useSheetDrag({ onDismiss: closeAllHistory, threshold: 80 });
+  const hist = useSwipeToDismiss({ onDismiss: closeAllHistory });
 
   useEffect(() => {
     if (showAllHistory) {
@@ -869,14 +869,13 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
 
         {/* View All — full-screen bottom sheet */}
         {showAllHistory && (
-          <div style={{
+          <div ref={hist.sheetRef} onPointerDown={hist.onPointerDown} style={{
             position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
             transform: historyOpen ? `translateY(${hist.dragY}px)` : 'translateY(100%)',
             transition: hist.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
             display: 'flex', flexDirection: 'column',
           }}>
-            <div {...hist.handleProps}
-              style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
+            <div style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, userSelect: 'none' }}>
               <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
             </div>
             <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>

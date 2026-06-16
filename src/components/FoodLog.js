@@ -17,6 +17,7 @@ import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
 import Fab from './Fab';
 import HourPickerSheet from './HourPickerSheet';
+import useSwipeToDismiss from './useSwipeToDismiss';
 import {
   UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
   customServingScale, defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
@@ -63,6 +64,9 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 function CalendarModal({ selected, onSelect, onClose }) {
   const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
 
+  // Swipe down anywhere on the sheet to dismiss (no scroll body, so always armed).
+  const { dragY, dragging, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: onClose });
+
   // Lock background scroll while the calendar sheet is open (same pattern as the
   // other portal/overlay sheets) so the page behind doesn't scroll under it.
   useEffect(() => {
@@ -83,14 +87,19 @@ function CalendarModal({ selected, onSelect, onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500, overflow: 'hidden' }} />
-      <div style={{
-        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+      <div ref={sheetRef} onPointerDown={onPointerDown} style={{
+        position: 'fixed', bottom: 0, left: '50%',
+        transform: `translateX(-50%) translateY(${dragY}px)`,
+        transition: dragging ? 'none' : 'transform 0.25s ease',
         width: '100%', maxWidth: 480,
         background: 'var(--card)', borderRadius: '24px 24px 0 0',
         padding: '12px 20px 44px', zIndex: 501,
         boxShadow: '0 -4px 24px rgba(0,0,0,0.12)',
       }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 20px' }} />
+        {/* Grab handle — swipe down anywhere on the sheet to dismiss. */}
+        <div style={{ padding: '4px 0 16px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <button onClick={() => setMonth(new Date(year, monthIdx - 1, 1))} style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -172,7 +181,7 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
 
 // ─── SERVING / MACRO HELPERS ─────────────────────────────────
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onServings, onBack, hideBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
+function FoodDetailView({ scrollRef, food, serving, unit, servings, onServing, onUnit, onServings, onBack, hideBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in the detail view
@@ -264,7 +273,7 @@ function FoodDetailView({ food, serving, unit, servings, onServing, onUnit, onSe
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           {hideBack ? (
             /* Opened from a main tab — no Back button; slide the sheet down to dismiss. */
@@ -458,9 +467,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [loading, setLoading] = useState(true);
 
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
-  const [addFoodOpen, setAddFoodOpen] = useState(false);   // drives the slide-up / drag transform
-  const [addFoodDragY, setAddFoodDragY] = useState(0);
-  const addFoodDragStart = useRef(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);   // drives the slide-up transform
+  // Swipe-to-dismiss for the Add Food screen (arrow defers to closeAddFood, defined below).
+  const addFood = useSwipeToDismiss({ onDismiss: () => closeAddFood(), dismissFraction: 0.2 });
   const [addFoodHour, setAddFoodHour] = useState(currentHour);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in Add Food
   const [searchQuery, setSearchQuery] = useState('');
@@ -742,7 +751,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCustomEdit(null);
     setCustomEditing(false);
     setAddFoodTab('recent');
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
   };
 
@@ -754,7 +762,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!c || !c.source) return;
     setAddFoodMealMode(true);
     setEditingMealComponentIdx(idx);
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
     if (c.source.isCustom) openCustomDetail(c.source, false);
     else openDetail(c.source);
@@ -819,7 +826,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Log a saved meal: open the Add Food sheet straight into its detail at one serving.
   const openMealDetail = (meal) => {
     setAddFoodHour(currentHour);
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
     openDetail(mealAsFood(meal));
   };
@@ -1126,12 +1132,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
 
-  const openAddFood = (hour) => { setAddFoodHour(hour); setAddFoodDragY(0); setShowAddFoodScreen(true); };
+  const openAddFood = (hour) => { setAddFoodHour(hour); setShowAddFoodScreen(true); };
 
   // From the Favorites tab: open the Add Food sheet straight into this food's detail.
   const openFavoriteDetail = (fav) => {
     setAddFoodHour(currentHour);
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
     if (fav.isCustom) openCustomDetail(fav.food, false);
     else openDetail(fav.food);
@@ -1143,7 +1148,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // already open — setShowAddFoodScreen(true) is a no-op in that case.
   const openCustomFoodDetail = (food, startEditing = false) => {
     setAddFoodHour(currentHour);
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
     openCustomDetail(food, startEditing);
     setCustomFromMain(true);   // override: this open originated on the main Custom Foods tab
@@ -1165,7 +1169,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     // bakes the count into its total, so 1 reproduces them correctly.
     const servings = String(entry.servings != null ? entry.servings : 1);
     setAddFoodHour(entry.hour);
-    setAddFoodDragY(0);
     setShowAddFoodScreen(true);
     setCustomEdit(null);
     setCustomEditing(false);
@@ -1212,7 +1215,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const closeAddFood = () => {
     stopScanner();                   // ensure camera is released if the sheet closes
     setAddFoodOpen(false);           // slide down
-    setAddFoodDragY(0);
     setAddFoodMealMode(false);       // leave meal-pick mode if it was on
     setTimeout(() => {               // unmount + reset after the slide-out finishes
       setShowAddFoodScreen(false);
@@ -1336,22 +1338,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       showToast('Could not look up product', null, null);
       setScanning(false);
     }
-  };
-
-  const onAddFoodPointerDown = (e) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    addFoodDragStart.current = e.clientY;
-  };
-  const onAddFoodPointerMove = (e) => {
-    if (addFoodDragStart.current === null) return;
-    setAddFoodDragY(Math.max(0, e.clientY - addFoodDragStart.current));
-  };
-  const onAddFoodPointerUp = (e) => {
-    if (addFoodDragStart.current === null) return;
-    const dy = Math.max(0, e.clientY - addFoodDragStart.current);
-    addFoodDragStart.current = null;
-    if (dy > 80) closeAddFood();
-    else setAddFoodDragY(0);
   };
 
   // Instant check from a recent/custom row — adds the food at its saved serving.
@@ -1968,28 +1954,26 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
       {/* ─── ADD FOOD SCREEN ────────────────────────────────── */}
       {showAddFoodScreen && (
-        <div style={{
+        <div ref={addFood.sheetRef} onPointerDown={addFood.onPointerDown} style={{
           position: 'fixed', inset: 0, zIndex: 400, background: 'var(--bg)',
           display: 'flex', flexDirection: 'column',
-          transform: addFoodOpen ? `translateY(${addFoodDragY}px)` : 'translateY(100%)',
-          transition: addFoodDragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          transform: addFoodOpen ? `translateY(${addFood.dragY}px)` : 'translateY(100%)',
+          transition: addFood.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
         }}>
           <style>{`
             @keyframes slideUpBar  { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
             @keyframes spin        { to { transform: rotate(360deg); } }
           `}</style>
 
-          {/* Drag handle — drag down to dismiss */}
+          {/* Drag handle — swipe down anywhere on the screen (once the body is at the top) to dismiss */}
           <div
-            onPointerDown={onAddFoodPointerDown}
-            onPointerMove={onAddFoodPointerMove}
-            onPointerUp={onAddFoodPointerUp}
             style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', flexShrink: 0, userSelect: 'none', touchAction: 'none' }}>
             <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
           </div>
 
           {detailFood ? (
             <FoodDetailView
+              scrollRef={addFood.scrollRef}
               food={detailFood}
               serving={detailServing}
               unit={detailUnit}
@@ -2090,7 +2074,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             </div>
           )}
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
+          <div ref={addFood.scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 20px 20px' }}>
             {isSearchActive ? (
               /* Search overrides the pills: custom matches first, then live results. */
               <>

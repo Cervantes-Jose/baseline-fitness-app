@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_MEASUREMENT_NAMES, getDefaultUnit } from './Measurements';
 import { GOOD, BAD } from './goalColor';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 
 // A measurement's `goal` (numeric, nullable) lives on the `measurements` row — it's
 // user-owned target data, covered by the table's owner RLS policy. Weight/Body Fat are
@@ -233,10 +233,10 @@ function AddGoalSheet({ items, onClose, onAdd }) {
   const [selected, setSelected] = useState(() => new Set());
   const [closing, setClosing] = useState(false);
 
-  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
-  // it's scrolled to the top. Dismiss slides the sheet down, then unmounts.
+  // Swipe down anywhere on the sheet (once scrolled to the top) to dismiss;
+  // dismiss slides the sheet down, then unmounts.
   const dismiss = () => { setClosing(true); setTimeout(onClose, 280); };
-  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: dismiss, threshold: 100 });
+  const { dragY, dragging, scrollRef, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: dismiss });
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
@@ -254,11 +254,10 @@ function AddGoalSheet({ items, onClose, onAdd }) {
   return createPortal(
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.4)', opacity: (shown && !closing) ? 1 : 0, transition: 'opacity 0.28s ease', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()}
+      <div ref={sheetRef} onClick={e => e.stopPropagation()} onPointerDown={onPointerDown}
         style={{ width: '100%', maxWidth: 480, background: 'var(--card)', borderRadius: '20px 20px 0 0', transform: sheetTransform, transition: dragging ? 'none' : 'transform 0.32s cubic-bezier(0.32,0.72,0,1)', boxShadow: '0 -8px 32px rgba(0,0,0,0.18)', padding: '10px 20px 28px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-        {/* Drag handle + title = the grab region for swipe-to-dismiss */}
-        <div {...handleProps}
-          style={{ cursor: 'grab', touchAction: 'none', paddingBottom: 2 }}>
+        {/* Drag handle + title */}
+        <div style={{ paddingBottom: 2 }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 12px' }} />
           <p style={{ textAlign: 'center', fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 14px' }}>Add Measurement Goal</p>
         </div>

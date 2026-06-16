@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import { loadRoutinesWithStats, routineCategories, avgTimeText, daysAgoText } from './routineMeta';
-import useSheetDrag from './useSheetDrag';
+import useSwipeToDismiss from './useSwipeToDismiss';
 import { tapHaptic } from './haptics';
 
 // Full-screen "View All" routine picker. Mirrors the My Routines list (rich
@@ -20,9 +20,8 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
     setPending(routine.id);
     setTimeout(() => onPick(routine), 130);
   };
-  // Swipe-to-dismiss: drag the handle, or swipe down anywhere on the list once
-  // it's scrolled to the top.
-  const { dragY, dragging, scrollRef, handleProps } = useSheetDrag({ onDismiss: onClose });
+  // Swipe down anywhere on the sheet (once the list is scrolled to the top) to dismiss.
+  const { dragY, dragging, scrollRef, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: onClose });
 
   useEffect(() => {
     (async () => {
@@ -48,7 +47,9 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
       onClick={onClose}
     >
       <div
+        ref={sheetRef}
         onClick={e => e.stopPropagation()}
+        onPointerDown={onPointerDown}
         style={{
           background: 'var(--bg)', width: '100%', maxWidth: 480, height: '92vh', marginTop: 'auto',
           borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -57,10 +58,9 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
           boxShadow: '0 -6px 24px rgba(0,0,0,0.18)',
         }}
       >
-        {/* Drag handle + header — always a drag zone */}
+        {/* Drag handle + header */}
         <div
-          {...handleProps}
-          style={{ flexShrink: 0, padding: '10px 16px 8px', cursor: 'grab', touchAction: 'none' }}
+          style={{ flexShrink: 0, padding: '10px 16px 8px' }}
         >
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 12px' }} />
           <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Add to Routine</p>
