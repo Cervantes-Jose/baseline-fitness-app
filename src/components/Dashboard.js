@@ -6,6 +6,15 @@ import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
 import HabitsWidget from './HabitsWidget';
 import { goalTrend } from './goalColor';
+import { weeklyTrendDelta, parseEntryDate } from './trendMath';
+import RangePopover from './RangePopover';
+
+// Short "Jun 17" label that treats a 'YYYY-MM-DD' date as local midnight (so it
+// never slips a day in negative-UTC timezones).
+const fmtShort = (s) => {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 // Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
 // `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
@@ -107,7 +116,7 @@ function LineChart({ data, color, height = 80 }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
         {dateLabels.map((d, i) => (
           <span key={i} style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            {new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            {fmtShort(d.date)}
           </span>
         ))}
       </div>
@@ -120,12 +129,11 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
   const [range, setRange] = useState('7D');
   const [entries, setEntries] = useState([]);
 
+  // Fetch the measurement's full history once (range-independent). The trend delta
+  // is computed over all of it — exactly like the in-app detail card — while only
+  // the chart is sliced to the selected 7D/14D window. Keying the fetch on range
+  // would have starved the prior-week comparison and reintroduced the old math.
   useEffect(() => {
-    const days = range === '7D' ? 7 : 14;
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    const sinceStr = since.toISOString();
-
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
@@ -140,33 +148,35 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
 
       const { data } = await supabase
         .from('measurement_entries')
-        .select('value, created_at, unit')
+        .select('value, date, created_at, unit')
         .eq('user_id', uid)
         .eq('measurement_id', mData[0].id)
-        .gte('created_at', sinceStr)
         .order('created_at', { ascending: true });
 
       if (data) {
-        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.created_at, unit: e.unit || '' })));
+        // Prefer the logged `date` (what the in-app math keys off of); fall back to
+        // created_at for any legacy rows missing it.
+        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.date || e.created_at, unit: e.unit || '' })));
       }
     })();
-  }, [range, measurementName]);
+  }, [measurementName]);
+
+  // Sort ascending by day so both the delta and the chart read chronologically
+  // (mirrors the in-app detail, which sorts allEntries the same way).
+  const sorted = [...entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
 
   // Unit comes from the measurement's own latest entry (each measurement stores its
   // own unit), falling back to whatever the caller passed.
-  const unit = entries.length ? (entries[entries.length - 1].unit || unitProp) : unitProp;
+  const unit = sorted.length ? (sorted[sorted.length - 1].unit || unitProp) : unitProp;
+  const latest = sorted.length > 0 ? sorted[sorted.length - 1].value : null;
 
-  const latest = entries.length > 0 ? entries[entries.length - 1].value : null;
-  const first = entries.length > 1 ? entries[0].value : null;
+  // Chart shows just the selected range; the delta below uses the full history.
+  const days = range === '7D' ? 7 : 14;
+  const sinceMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - days * 86400000; })();
+  const rangeEntries = sorted.filter(e => parseEntryDate(e.date) >= sinceMs);
 
-  // Only show trend if there are at least 2 entries and the earliest is at least 3 days ago
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const firstDate = first !== null ? new Date(entries[0].date) : null;
-  const daysSinceFirst = firstDate ? Math.round((today - firstDate) / 86400000) : 0;
-  const showTrend = first !== null && daysSinceFirst >= 3;
-
-  const diff = showTrend ? (latest - first) : null;
+  // Shared weekly trend delta (see trendMath.js) — identical to Measurements/Nutrition.
+  const { diff, showDelta, compareLabel } = weeklyTrendDelta(sorted);
   // Direction of the arrow is just the sign of the change; the color is whether that
   // change moves toward the goal (green) or away (red) — neutral when no goal is set.
   const trend = goalTrend(diff, latest, goal);
@@ -175,16 +185,7 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
     <div style={{ background: 'var(--card)', borderRadius: 20, border: '1px solid var(--border)', padding: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', marginBottom: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['7D', '14D'].map(r => (
-            <button key={r} onClick={() => setRange(r)} style={{
-              fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 8, border: 'none',
-              background: range === r ? color : 'var(--bg)',
-              color: range === r ? '#fff' : 'var(--text-muted)',
-              cursor: 'pointer',
-            }}>{r}</button>
-          ))}
-        </div>
+        <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
       </div>
 
       {latest !== null ? (
@@ -192,12 +193,12 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1, marginBottom: 2 }}>
             {latest} <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>{unit}</span>
           </div>
-          {diff !== null && (
+          {showDelta && (
             <div style={{ fontSize: 12, color: trend.color, marginBottom: 8, fontWeight: 600 }}>
-              {diff < 0 ? '▼' : diff > 0 ? '▲' : '–'} {Math.abs(diff).toFixed(1)} {unit} vs {range === '7D' ? '7 days' : '14 days'} ago
+              {diff < 0 ? '▼' : diff > 0 ? '▲' : '–'} {Math.abs(diff).toFixed(1)} {unit} {compareLabel}
             </div>
           )}
-          <LineChart data={entries} color={color} height={72} />
+          <LineChart data={rangeEntries} color={color} height={72} />
         </>
       ) : (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingTop: 8 }}>No data yet</div>

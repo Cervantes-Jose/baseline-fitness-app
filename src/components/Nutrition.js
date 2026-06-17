@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import useSwipeToDismiss from './useSwipeToDismiss';
+import { goalTrend } from './goalColor';
+import { weeklyTrendDelta } from './trendMath';
+import RangePopover from './RangePopover';
 
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
@@ -205,7 +208,6 @@ function Nutrition({ selectedDate }) {
   const [rows, setRows] = useState([]);          // raw windowed food_entries rows ({ date, hour, food, name })
   const [selectedNutrient, setSelectedNutrient] = useState(null); // { name, unit, color }
   const [range, setRange] = useState('7D');
-  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
 
   // Food-log mini view (bottom sheet) for a tapped history date.
   const [miniDate, setMiniDate] = useState(null);
@@ -367,6 +369,11 @@ function Nutrition({ selectedDate }) {
     const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
     const history = descEntries.slice(0, 14);
 
+    // Weekly trend delta — shared with Measurements and the dashboard trend widgets
+    // (see trendMath.js). anchorMs is the Food Log date (defaults to today), the same
+    // "as of" anchor the other surfaces use.
+    const { diff, showDelta, compareLabel } = weeklyTrendDelta(allEntries, anchorMs);
+
     return (
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button onClick={() => setView('list')}
@@ -380,28 +387,7 @@ function Nutrition({ selectedDate }) {
         <div className="card-flat">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={sectionLabel}>Trend</p>
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setRangeMenuOpen(o => !o)}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                {range}
-                <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: rangeMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                  <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {rangeMenuOpen && (
-                <>
-                  <div onClick={() => setRangeMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '70px' }}>
-                    {['7D', '14D'].map(opt => (
-                      <button key={opt} onClick={() => { setRange(opt); setRangeMenuOpen(false); }}
-                        style={{ display: 'block', width: '100%', padding: '8px 14px', background: opt === range ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: opt === range ? 'var(--accent)' : 'var(--text-primary)' }}>
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
           </div>
 
           {allEntries.length === 0 ? (
@@ -412,6 +398,17 @@ function Nutrition({ selectedDate }) {
                 {fmtNum(latestEntry.value)}<span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
+              {showDelta && (() => {
+                const trend = goalTrend(diff, Number(latestEntry.value), null);
+                return (
+                  <div style={{ marginTop: '10px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: trend.soft, color: trend.color, fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
+                      {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}<span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
+                    </span>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
+                  </div>
+                );
+              })()}
               {rangeEntries.length > 0
                 ? <DetailChart entries={rangeEntries} color={color} />
                 : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>No entries in the last {days} days</p>

@@ -97,7 +97,7 @@ function prefillSetsFor(ex) {
 }
 const REST_STEP_SECONDS = 30;    // +/- buttons adjust by 30s
 
-function SortableExercise({ ex, number, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
+function SortableExercise({ ex, exerciseEditMode, isSelected, onToggleSelect, sessionLog, updateSet, addSet, deleteSet, isCustom = false, restTimers = [], addRest, changeRest, deleteRest }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
   const [expanded, setExpanded] = useState(false);
   // Which rest slot (set index) is being manually edited, and its draft text.
@@ -186,11 +186,6 @@ function SortableExercise({ ex, number, exerciseEditMode, isSelected, onToggleSe
                 {isSelected && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3L11.5 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </div>
             </button>
-          )}
-          {typeof number === 'number' && (
-            <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', flexShrink: 0 }}>
-              {number}
-            </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1134,11 +1129,24 @@ const updateSet = (exId, setIdx, field, value) => {
 
   const toggleCheck = (exId, setIdx) => {
     const nowChecked = !checkedSets[exId]?.[setIdx];
+    const nextArr = [...(checkedSets[exId] || [])];
+    nextArr[setIdx] = nowChecked;
     setCheckedSets(prev => {
       const arr = [...(prev[exId] || [])];
       arr[setIdx] = nowChecked;
       return { ...prev, [exId]: arr };
     });
+    // Completing the final set of an exercise (every set now checked) auto-advances:
+    // collapse this card and expand the next exercise in the routine, so the user
+    // flows straight into it. Only fires on check (not uncheck) and only when a next
+    // exercise exists — the last exercise stays put.
+    const totalSets = (sessionLog[exId] || []).length;
+    if (nowChecked && totalSets > 0 && nextArr.filter(Boolean).length >= totalSets) {
+      const exOrder = activeRoutine?.exercises || [];
+      const pos = exOrder.findIndex(e => e.id === exId);
+      const next = pos >= 0 ? exOrder[pos + 1] : null;
+      if (next) setExpandedExId(next.id);
+    }
     // Auto-start / cancel the rest configured after this set (if any).
     const dur = restTimersRef.current[exId]?.[setIdx];
     if (typeof dur === 'number' && dur > 0) {
@@ -1753,8 +1761,8 @@ const updateSet = (exId, setIdx, field, value) => {
     </div>
   );
 
-  const renderConfigExercise = (ex, number) => (
-    <SortableExercise key={ex.id} ex={ex} number={number} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} isCustom={customExerciseNames.has(ex.name)} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
+  const renderConfigExercise = (ex) => (
+    <SortableExercise key={ex.id} ex={ex} exerciseEditMode={exerciseEditMode} isSelected={selectedExercises.has(ex.id)} onToggleSelect={() => setSelectedExercises(prev => { const next = new Set(prev); next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id); return next; })} sessionLog={sessionLog} updateSet={updateSet} addSet={addSet} deleteSet={deleteSet} isCustom={customExerciseNames.has(ex.name)} restTimers={restTimers[ex.id] || []} addRest={addRest} changeRest={changeRest} deleteRest={deleteRest} />
   );
 
   if (view === 'exercises') return (
@@ -1794,7 +1802,7 @@ const updateSet = (exId, setIdx, field, value) => {
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={activeRoutine.exercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-          {activeRoutine.exercises.map((ex, i) => renderConfigExercise(ex, i + 1))}
+          {activeRoutine.exercises.map((ex) => renderConfigExercise(ex))}
         </SortableContext>
       </DndContext>
 

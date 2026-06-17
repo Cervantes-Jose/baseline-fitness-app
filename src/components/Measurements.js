@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
+import { weeklyTrendDelta } from './trendMath';
+import RangePopover from './RangePopover';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import Fab from './Fab';
 
@@ -128,6 +130,13 @@ function MeasurementCalendar({ selected, onSelect, onClose }) {
   const days = [];
   for (let i = 0; i < firstDay; i++) days.push(null);
   for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, monthIdx, d));
+
+  // Lock background scroll while the sheet is open so the page behind can't move under it.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   return (
     <>
@@ -265,7 +274,6 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const [editingEntry, setEditingEntry] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [range, setRange] = useState('7D');
-  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -654,33 +662,9 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const sinceMs = since.getTime();
     const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
 
-    // Trend delta. Once there's a full two weeks of data we compare weekly averages:
-    // this week (last 7 days) vs last week (the 7 days before that), both anchored on
-    // today. Averaging smooths out daily water-weight noise into a clean per-week rate
-    // (e.g. "2 lbs down on average = 2 lbs/week"). Until both windows have entries we
-    // fall back to the latest-vs-earlier-entry comparison.
-    const dayMs = 24 * 60 * 60 * 1000;
-    const todayMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
-    const week1Start = todayMs - 7 * dayMs;   // this week: [today-7, today]
-    const week2Start = todayMs - 14 * dayMs;  // last week: [today-14, today-7)
-    const thisWeek = allEntries.filter(e => parseEntryDate(e.date) >= week1Start);
-    const lastWeek = allEntries.filter(e => { const t = parseEntryDate(e.date); return t >= week2Start && t < week1Start; });
-    const avg = arr => arr.reduce((s, e) => s + Number(e.value), 0) / arr.length;
-
-    let diff = 0;
-    let showDelta = false;
-    let compareLabel = '';
-    if (thisWeek.length > 0 && lastWeek.length > 0) {
-      diff = avg(thisWeek) - avg(lastWeek);
-      showDelta = true;
-      compareLabel = 'vs last week avg';
-    } else if (allEntries.length >= 2) {
-      // Fallback: latest vs earliest-in-range, or the entry just before the latest.
-      const compareEntry = rangeEntries.length >= 2 ? rangeEntries[0] : allEntries[allEntries.length - 2];
-      diff = Number(latestEntry.value) - Number(compareEntry.value);
-      showDelta = true;
-      compareLabel = `vs ${fmtListDate(compareEntry.date)}`;
-    }
+    // Weekly trend delta — shared with Nutrition and the dashboard trend widgets
+    // (see trendMath.js) so all three always show the identical number.
+    const { diff, showDelta, compareLabel } = weeklyTrendDelta(allEntries);
     const last7 = descEntries.slice(0, 7);
 
     const renderEntryRow = (entry, i, arr, accent) => {
@@ -750,28 +734,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         <div className="card-flat">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={sectionLabel}>Trend</p>
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setRangeMenuOpen(o => !o)}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                {range}
-                <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: rangeMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                  <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {rangeMenuOpen && (
-                <>
-                  <div onClick={() => setRangeMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 11, minWidth: '70px' }}>
-                    {['7D', '14D'].map(opt => (
-                      <button key={opt} onClick={() => { setRange(opt); setRangeMenuOpen(false); }}
-                        style={{ display: 'block', width: '100%', padding: '8px 14px', background: opt === range ? 'var(--accent-light)' : 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: opt === range ? 'var(--accent)' : 'var(--text-primary)' }}>
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
           </div>
 
           {allEntries.length === 0 ? (
