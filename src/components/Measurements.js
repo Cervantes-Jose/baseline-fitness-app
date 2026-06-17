@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
 import { weeklyTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
+import MonthOverviewCalendar from './MonthOverviewCalendar';
+import { ymd } from './habitMath';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import Fab from './Fab';
 
@@ -277,7 +279,11 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const [showCalendar, setShowCalendar] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const closeAllHistory = () => { setHistoryOpen(false); setTimeout(() => setShowAllHistory(false), 350); };
+  // View All sheet: toggle between the flat history list and a month-overview
+  // calendar of logged days; tapping a logged day reveals that day's entry.
+  const [historyCalendar, setHistoryCalendar] = useState(false);
+  const [dayModal, setDayModal] = useState(null); // { label, entries } | null
+  const closeAllHistory = () => { setHistoryOpen(false); setHistoryCalendar(false); setDayModal(null); setTimeout(() => setShowAllHistory(false), 350); };
   // Swipe-to-dismiss for the View All history sheet: drag the handle, or swipe
   // down anywhere on the list once it's scrolled to the top.
   const hist = useSwipeToDismiss({ onDismiss: closeAllHistory });
@@ -653,6 +659,12 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const allEntries = [...activeMeasurement.entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
     const descEntries = [...allEntries].reverse();
     const latestEntry = allEntries[allEntries.length - 1] || null;
+
+    // Group entries by calendar day for the View All month-overview calendar.
+    const entryDayKey = (e) => ymd(new Date(parseEntryDate(e.date)));
+    const entriesByDay = {};
+    allEntries.forEach(e => { (entriesByDay[entryDayKey(e)] = entriesByDay[entryDayKey(e)] || []).push(e); });
+    const entryDays = new Set(Object.keys(entriesByDay));
     const goal = activeMeasurement.goal == null || activeMeasurement.goal === '' ? null : Number(activeMeasurement.goal);
 
     const days = range === '7D' ? 7 : 14;
@@ -861,12 +873,56 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
               <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--border)' }} />
             </div>
             <div style={{ padding: '0 20px 12px', flexShrink: 0 }}>
-              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>{activeMeasurement.name}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>{activeMeasurement.name}</h2>
+                {/* Calendar toggle — switches the list for a month-overview of logged days. */}
+                <button onClick={() => setHistoryCalendar(v => !v)} aria-label="Toggle calendar"
+                  style={{ background: historyCalendar ? 'var(--accent-light)' : 'none', border: historyCalendar ? '1px solid var(--border)' : '1px solid transparent', borderRadius: '8px', cursor: 'pointer', padding: '6px', color: 'var(--accent)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
               <p style={{ ...sectionLabel, marginTop: '6px' }}>History</p>
             </div>
             <div ref={hist.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 32px' }}>
-              {descEntries.map((entry, i, arr) => renderEntryRow(entry, i, arr, i === 0))}
+              {historyCalendar ? (
+                <div className="card-flat" style={{ padding: '16px' }}>
+                  <MonthOverviewCalendar
+                    markedDays={entryDays}
+                    onSelectDay={(key) => {
+                      const dayEntries = entriesByDay[key];
+                      if (dayEntries && dayEntries.length) {
+                        const d = new Date(key + 'T00:00:00');
+                        setDayModal({ label: d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), entries: dayEntries });
+                      }
+                    }}
+                  />
+                </div>
+              ) : (
+                descEntries.map((entry, i, arr) => renderEntryRow(entry, i, arr, i === 0))
+              )}
             </div>
+
+            {/* Day detail — tapping a logged day in the calendar shows that day's entry. */}
+            {dayModal && (
+              <div onClick={() => setDayModal(null)}
+                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: '20px' }}>
+                <div onClick={e => e.stopPropagation()}
+                  style={{ background: 'var(--card)', border: '1.5px solid var(--accent)', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '320px', animation: 'restTileIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{dayModal.label}</span>
+                    <button onClick={() => setDayModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '20px', lineHeight: 1, padding: 0 }}>×</button>
+                  </div>
+                  {dayModal.entries.map((entry) => (
+                    <div key={entry.id} style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', padding: '4px 0' }}>
+                      {entry.value}{entry.unit ? <span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{entry.unit}</span> : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

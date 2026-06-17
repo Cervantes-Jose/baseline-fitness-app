@@ -17,6 +17,8 @@ import Nutrition from './Nutrition';
 import MealBuilder from './MealBuilder';
 import Fab from './Fab';
 import HourPickerSheet from './HourPickerSheet';
+import MonthOverviewCalendar from './MonthOverviewCalendar';
+import { ymd, parseYmd } from './habitMath';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import {
   UNIT_TO_GRAMS, SERVING_UNITS, baseGramsOf, servingToGrams, scaleOf, computeMacros,
@@ -58,12 +60,11 @@ const ADD_FOOD_PILLS = [
   { id: 'meals', label: 'Meals' },
   { id: 'custom', label: 'Custom Foods' },
 ];
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
 // ─── CALENDAR MODAL ─────────────────────────────────────────
-function CalendarModal({ selected, onSelect, onClose }) {
-  const [month, setMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
-
+// Bottom sheet wrapping the shared month-overview calendar. Days food was logged
+// show a filled circle (same style as Daily Habits); tapping any day navigates
+// the log to that date.
+function CalendarModal({ selected, loggedDays, onSelect, onClose }) {
   // Swipe down anywhere on the sheet to dismiss (no scroll body, so always armed).
   const { dragY, dragging, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: onClose });
 
@@ -74,15 +75,6 @@ function CalendarModal({ selected, onSelect, onClose }) {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
-  const year = month.getFullYear();
-  const monthIdx = month.getMonth();
-  const firstDay = new Date(year, monthIdx, 1).getDay();
-  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-  const todayStr = new Date().toDateString();
-
-  const days = [];
-  for (let i = 0; i < firstDay; i++) days.push(null);
-  for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, monthIdx, d));
 
   return (
     <>
@@ -100,41 +92,13 @@ function CalendarModal({ selected, onSelect, onClose }) {
         <div style={{ padding: '4px 0 16px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <button onClick={() => setMonth(new Date(year, monthIdx - 1, 1))} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-secondary)', fontSize: 22, padding: '4px 10px', lineHeight: 1,
-          }}>‹</button>
-          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-            {MONTH_NAMES[monthIdx]} {year}
-          </span>
-          <button onClick={() => setMonth(new Date(year, monthIdx + 1, 1))} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-secondary)', fontSize: 22, padding: '4px 10px', lineHeight: 1,
-          }}>›</button>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 6 }}>
-          {['S','M','T','W','T','F','S'].map((d, i) => (
-            <div key={i} style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, padding: '2px 0' }}>{d}</div>
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-          {days.map((d, i) => {
-            if (!d) return <div key={i} />;
-            const isToday = d.toDateString() === todayStr;
-            const isSel = d.toDateString() === selected.toDateString();
-            return (
-              <button key={i} onClick={() => onSelect(d)} style={{
-                aspectRatio: '1', borderRadius: '50%', border: 'none',
-                background: isSel ? 'var(--accent)' : isToday ? 'var(--accent-light)' : 'transparent',
-                color: isSel ? '#fff' : isToday ? 'var(--accent)' : 'var(--text-primary)',
-                fontWeight: isSel || isToday ? 700 : 400,
-                fontSize: 14, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{d.getDate()}</button>
-            );
-          })}
-        </div>
+        <MonthOverviewCalendar
+          markedDays={loggedDays}
+          selectedDay={ymd(selected)}
+          selectableUnmarked
+          allowFuture
+          onSelectDay={(key) => onSelect(parseYmd(key))}
+        />
       </div>
     </>
   );
@@ -462,6 +426,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const [date, setDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
+  // Days (YYYY-MM-DD) that have at least one food entry — drives the filled
+  // circles in the calendar. Refreshed each time the calendar opens. food_entries.date
+  // is stored as a locale date string, so convert each to a ymd key.
+  const [loggedDates, setLoggedDates] = useState(() => new Set());
   const [activeFilter, setActiveFilter] = useState('Add Food');
   const [foods, setFoods] = useState({});
   const [loading, setLoading] = useState(true);
@@ -562,6 +530,19 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFoods(); }, [date]);
+
+  // Refresh the set of logged days whenever the calendar opens, so the filled
+  // circles reflect any foods just added/removed.
+  useEffect(() => {
+    if (!showCalendar) return;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase.from('food_entries').select('date').eq('user_id', uid);
+      if (data) setLoggedDates(new Set(data.map(r => ymd(new Date(r.date)))));
+    })();
+  }, [showCalendar]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); loadLastPortions(); }, []);
@@ -1947,6 +1928,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       {showCalendar && (
         <CalendarModal
           selected={date}
+          loggedDays={loggedDates}
           onSelect={d => { setDate(d); setShowCalendar(false); }}
           onClose={() => setShowCalendar(false)}
         />

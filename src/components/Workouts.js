@@ -18,6 +18,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import useSwipeToDismiss from './useSwipeToDismiss';
+import MonthOverviewCalendar from './MonthOverviewCalendar';
+import { ymd, parseYmd } from './habitMath';
 
 // Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
 // once; if a name appears in multiple categories it's attributed to the first
@@ -1831,29 +1833,13 @@ const updateSet = (exId, setIdx, field, value) => {
   );
 
   if (view === 'history') {
+    // Group completed sessions by calendar day (YYYY-MM-DD) for the month-overview calendar.
     const workoutDayMap = {};
     history.forEach(session => {
-      if (!workoutDayMap[session.date]) workoutDayMap[session.date] = [];
-      workoutDayMap[session.date].push(session);
+      const key = ymd(new Date(session.date));
+      (workoutDayMap[key] = workoutDayMap[key] || []).push(session);
     });
-    const todayDate = new Date();
-    const months = [];
-    for (let i = 0; i <= 5; i++) {
-      const d = new Date(todayDate.getFullYear(), todayDate.getMonth() - i, 1);
-      months.push({ year: d.getFullYear(), month: d.getMonth() });
-    }
-    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const DAY_LABELS = ['S','M','T','W','T','F','S'];
-    const buildMonthCells = (year, month) => {
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const cells = [];
-      for (let i = 0; i < firstDay; i++) cells.push({ day: null, inMonth: false });
-      for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, inMonth: true });
-      const rem = cells.length % 7;
-      if (rem > 0) for (let d = 1; d <= 7 - rem; d++) cells.push({ day: d, inMonth: false });
-      return cells;
-    };
+    const workoutDays = new Set(Object.keys(workoutDayMap));
     const isAllSelected = history.length > 0 && history.every(s => selectedSessions.has(s.id));
 
     return (
@@ -1916,43 +1902,19 @@ const updateSet = (exId, setIdx, field, value) => {
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>No completed workouts yet.</p>
         )}
 
-        {/* Calendar view */}
-        {calendarView && !editMode && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {months.map(({ year, month }) => {
-              const cells = buildMonthCells(year, month);
-              return (
-                <div key={`${year}-${month}`}>
-                  <div style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '12px' }}>
-                    {MONTH_NAMES[month]} {year}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: '4px' }}>
-                    {DAY_LABELS.map((d, i) => (
-                      <div key={i} style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>{d}</div>
-                    ))}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px' }}>
-                    {cells.map((cell, i) => {
-                      if (!cell.inMonth) return (
-                        <div key={i} style={{ minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {cell.day && <span style={{ fontSize: '13px', color: 'var(--border)' }}>{cell.day}</span>}
-                        </div>
-                      );
-                      const dateStr = new Date(year, month, cell.day).toLocaleDateString();
-                      const daySessions = workoutDayMap[dateStr];
-                      const hasWorkout = !!(daySessions && daySessions.length > 0);
-                      return (
-                        <div key={i}
-                          onClick={hasWorkout ? () => setCalendarDayModal({ date: dateStr, sessions: daySessions }) : undefined}
-                          style={{ minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: hasWorkout ? '#22C55E' : 'transparent', cursor: hasWorkout ? 'pointer' : 'default' }}>
-                          <span style={{ fontSize: '14px', fontWeight: hasWorkout ? '700' : '400', color: hasWorkout ? 'white' : 'var(--text-primary)' }}>{cell.day}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+        {/* Calendar view — month-overview style (matches Daily Habits). Days with a
+            completed workout show a filled circle; tap one to see that day's sessions. */}
+        {calendarView && !editMode && history.length > 0 && (
+          <div className="card-flat" style={{ padding: '16px' }}>
+            <MonthOverviewCalendar
+              markedDays={workoutDays}
+              onSelectDay={(key) => {
+                const sessions = workoutDayMap[key];
+                if (sessions && sessions.length) {
+                  setCalendarDayModal({ date: parseYmd(key).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), sessions });
+                }
+              }}
+            />
           </div>
         )}
 
@@ -2001,7 +1963,7 @@ const updateSet = (exId, setIdx, field, value) => {
         {calendarDayModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: '20px' }}
             onClick={() => setCalendarDayModal(null)}>
-            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '340px', maxHeight: '70vh', overflowY: 'auto' }}
+            <div style={{ background: 'var(--card)', border: '1.5px solid var(--accent)', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '340px', maxHeight: '70vh', overflowY: 'auto', animation: 'restTileIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <span style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{calendarDayModal.date}</span>
