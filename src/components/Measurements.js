@@ -3,6 +3,9 @@ import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
 import { weeklyTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
+import TrendCompareChart from './TrendCompareChart';
+import CompareSheet from './CompareSheet';
+import { loadCompareCatalog, findCatalogItem } from './compareSources';
 import MonthOverviewCalendar from './MonthOverviewCalendar';
 import { ymd } from './habitMath';
 import useSwipeToDismiss from './useSwipeToDismiss';
@@ -57,67 +60,6 @@ function useChartDraw(ref, dep) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dep]);
   return drawn;
-}
-
-// Full-width detail trend chart: gradient fill + line + dots, matching the Dashboard chart style.
-// Measures its own width so dots stay round at a fixed 120px height.
-function DetailChart({ entries, color }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const H = 120, padX = 6, padTop = 12, padBottom = 10;
-  const cW = Math.max(0, width - padX * 2);
-  const cH = H - padTop - padBottom;
-  const values = entries.map(e => Number(e.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = (max - min) || 1;
-  const pts = entries.map((e, i) => {
-    const x = padX + (entries.length === 1 ? cW / 2 : (i / (entries.length - 1)) * cW);
-    const y = padTop + (1 - (Number(e.value) - min) / range) * cH;
-    return [x, y];
-  });
-  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
-  const fillPath = pts.length ? `${linePath} L${pts[pts.length - 1][0]},${padTop + cH} L${pts[0][0]},${padTop + cH} Z` : '';
-  const gradId = `mgrad-${color.replace('#', '')}`;
-  const labelEntries = entries.length <= 1
-    ? entries
-    : [entries[0], entries[Math.floor((entries.length - 1) / 2)], entries[entries.length - 1]];
-
-  const drawn = useChartDraw(lineRef, `${width}:${linePath}`);
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '14px' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {entries.length > 1 && <path d={fillPath} fill={`url(#${gradId})`} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.7s ease' }} />}
-          {entries.length > 1 && <path ref={lineRef} d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
-          {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3.5" fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.3 + i * 0.05}s` }} />)}
-        </svg>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-        {labelEntries.map((e, i) => (
-          <span key={i} style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{fmtListDate(e.date)}</span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // Bottom-sheet calendar, same pattern as FoodLog's date picker.
@@ -276,6 +218,12 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   const [editingEntry, setEditingEntry] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [range, setRange] = useState('7D');
+  // Trend comparison: a cross-domain series (measurement / nutrition / PR) overlaid
+  // on the detail chart. Cleared whenever you leave detail so it never "sticks".
+  const [compareId, setCompareId] = useState(null);
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  const [compareCatalog, setCompareCatalog] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -294,6 +242,23 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       return () => cancelAnimationFrame(id);
     }
   }, [showAllHistory]);
+
+  // Leaving the detail screen drops any active comparison (and its loaded catalog).
+  useEffect(() => {
+    if (view !== 'detail') { setCompareId(null); setCompareSheetOpen(false); setCompareCatalog(null); }
+  }, [view]);
+
+  // Load the cross-domain compare catalog the first time the picker is opened in
+  // this detail session; the active measurement is excluded from the list.
+  useEffect(() => {
+    if (!compareSheetOpen || compareCatalog || !activeMeasurement) return;
+    let cancelled = false;
+    setCompareLoading(true);
+    loadCompareCatalog({ excludeId: `meas:${activeMeasurement.id}` })
+      .then(cat => { if (!cancelled) setCompareCatalog(cat); })
+      .finally(() => { if (!cancelled) setCompareLoading(false); });
+    return () => { cancelled = true; };
+  }, [compareSheetOpen, compareCatalog, activeMeasurement]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -412,6 +377,8 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const lastUnit = m.entries.length ? m.entries[m.entries.length - 1].unit : '';
     setNewUnit(lastUnit || getDefaultUnit(m.name, metricSystem));
     setRange('7D');
+    setCompareId(null);
+    setCompareCatalog(null);
     setView('detail');
   };
 
@@ -674,6 +641,19 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const sinceMs = since.getTime();
     const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
 
+    // Comparison overlay: any series from the cross-domain catalog (measurement /
+    // nutrition / PR), sliced to the same window and normalized independently in
+    // the chart (different units are expected — we compare shape, not magnitude).
+    const compareItem = compareId ? findCatalogItem(compareCatalog, compareId) : null;
+    const compareData = compareItem ? {
+      entries: [...compareItem.entries]
+        .sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date))
+        .filter(e => parseEntryDate(e.date) >= sinceMs),
+      color: compareItem.color,
+      unit: compareItem.unit,
+      label: compareItem.label,
+    } : null;
+
     // Weekly trend delta — shared with Nutrition and the dashboard trend widgets
     // (see trendMath.js) so all three always show the identical number.
     const { diff, showDelta, compareLabel } = weeklyTrendDelta(allEntries);
@@ -746,7 +726,28 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         <div className="card-flat">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={sectionLabel}>Trend</p>
-            <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button onClick={() => setCompareSheetOpen(true)} style={{
+                display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '20px',
+                border: compareItem ? `1px solid ${compareData.color}` : '1px solid var(--border)',
+                background: 'var(--bg)', color: compareItem ? compareData.color : 'var(--text-secondary)',
+                fontSize: '12px', fontWeight: '700', cursor: 'pointer', maxWidth: '150px',
+              }}>
+                {compareItem ? (
+                  <>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: compareData.color, flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{compareData.label}</span>
+                    <span onClick={(e) => { e.stopPropagation(); setCompareId(null); }} style={{ marginLeft: '2px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}>×</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M20 19H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    Compare
+                  </>
+                )}
+              </button>
+              <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
+            </div>
           </div>
 
           {allEntries.length === 0 ? (
@@ -787,7 +788,10 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
                 })()}
               </div>
               {rangeEntries.length > 0
-                ? <DetailChart entries={rangeEntries} color={color} />
+                ? <TrendCompareChart
+                    base={{ entries: rangeEntries, color, unit: latestEntry.unit, label: activeMeasurement.name || 'This' }}
+                    compare={compareData}
+                  />
                 : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>No entries in the last {days} days</p>
               }
             </>
@@ -850,6 +854,18 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
             }} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>Edit</button>
             <button onClick={() => deleteEntry(entryMenuOpen)} style={{ display: 'block', width: '100%', padding: '12px 16px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#ff4444' }}>Delete</button>
           </div>
+        )}
+
+        {/* Compare picker */}
+        {compareSheetOpen && (
+          <CompareSheet
+            catalog={compareCatalog}
+            loading={compareLoading}
+            selectedId={compareId}
+            onSelect={setCompareId}
+            onRemove={() => setCompareId(null)}
+            onClose={() => setCompareSheetOpen(false)}
+          />
         )}
 
         {/* Calendar date picker */}

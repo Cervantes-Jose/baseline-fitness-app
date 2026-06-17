@@ -69,8 +69,6 @@ const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
 const [calorieGoal, setCalorieGoal] = useState(2000);
-// eslint-disable-next-line no-unused-vars
-const [stepsGoal] = useState(10000); // TODO: move to Goals tab settings when built
 const [proteinGoal, setProteinGoal] = useState(180);
 const [carbsGoal, setCarbsGoal] = useState(200);
 const [fatsGoal, setFatsGoal] = useState(60);

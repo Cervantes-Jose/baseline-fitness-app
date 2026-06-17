@@ -1,6 +1,3 @@
-// Requires custom_exercises table in Supabase:
-// create table custom_exercises (id uuid default uuid_generate_v4() primary key, name text, category text, created_at timestamp default now());
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';

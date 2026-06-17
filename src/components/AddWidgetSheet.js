@@ -4,9 +4,6 @@ import { createPortal } from 'react-dom';
 // Bottom sheet for adding widgets to the dashboard. Categories (Food, Measurements)
 // expand to reveal each widget in its real, full form; tap to multi-select, then
 // "Add" drops them onto the dashboard. Slides up/down smoothly via a transform.
-//
-// TODO (next step): press-and-hold a preview to dismiss the sheet and continue
-// dragging that widget straight onto the editing canvas.
 export default function AddWidgetSheet({ open, onClose, catalog, placedSet, renderPreview, isHalf, onAdd }) {
   const [mounted, setMounted] = useState(open);
   const [shown, setShown] = useState(false);

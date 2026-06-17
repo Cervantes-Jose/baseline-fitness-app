@@ -1,16 +1,3 @@
-// Requires custom_foods table in Supabase:
-// create table custom_foods (id uuid default uuid_generate_v4() primary key, name text, calories numeric, protein numeric, carbs numeric, fats numeric, created_at timestamp default now());
-// grant select, insert, update, delete on public.custom_foods to anon, authenticated, service_role;
-// alter table public.custom_foods enable row level security;
-// create policy "Allow all for now" on public.custom_foods for all using (true) with check (true);
-// Remembered serving (added later): alter table public.custom_foods add column saved_serving numeric, add column saved_unit text;
-// Editable micronutrients (added later): alter table public.custom_foods add column micros jsonb;
-//
-// Favorites table:
-// create table public.favorite_foods (id uuid default gen_random_uuid() primary key, name text not null, is_custom boolean default false, food jsonb not null, created_at timestamptz default now());
-// grant select, insert, update, delete on public.favorite_foods to anon, authenticated, service_role;
-// alter table public.favorite_foods enable row level security;
-// create policy "Allow all for now" on public.favorite_foods for all using (true) with check (true);
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, supabaseAnonKey } from '../supabaseClient';
 import Nutrition from './Nutrition';
