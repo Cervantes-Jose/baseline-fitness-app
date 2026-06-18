@@ -503,6 +503,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [searchError, setSearchError] = useState(null);
   const searchDebounceRef = useRef(null);
   const searchAbortRef = useRef(null);
+  // Monotonic id for each fired search. Only the latest may write results/loading,
+  // so a slow or superseded response can never overwrite a newer query's results.
+  const searchSeqRef = useRef(0);
 
   const isToday = date.toDateString() === new Date().toDateString();
   const dateStr = date.toLocaleDateString();
@@ -978,20 +981,28 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const searchFoods = async (query) => {
+    // Abort any in-flight request and capture THIS request's controller locally —
+    // never read searchAbortRef.current after an await (two overlapping calls could
+    // otherwise share a controller and cross-wire their abort signals).
     if (searchAbortRef.current) searchAbortRef.current.abort();
-    searchAbortRef.current = new AbortController();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const seq = ++searchSeqRef.current;   // tag this as the latest search
+    const isStale = () => seq !== searchSeqRef.current;
     setSearchLoading(true);
     setSearchError(null);
     try {
       // Send the user's JWT (not the public anon key) so the function can
       // identify the account and apply per-user rate limits server-side.
       const { data: { session } } = await supabase.auth.getSession();
+      if (isStale()) return;
       const token = session?.access_token;
       if (!token) { setSearchError('Search unavailable'); setSearchResults(null); return; }
       const res = await fetch(
         `${FOOD_SEARCH_URL}?query=${encodeURIComponent(query)}`,
-        { headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey }, signal: searchAbortRef.current.signal }
+        { headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey }, signal: controller.signal }
       );
+      if (isStale()) return;   // a newer search has superseded this one — drop its result
       if (res.status === 429) {
         setSearchError('Too many searches — please slow down and try again in a moment.');
         setSearchResults(null);
@@ -999,13 +1010,16 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (isStale()) return;
       setSearchResults(Array.isArray(data) ? data : (data.foods || []));
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (err.name === 'AbortError' || isStale()) return;
       setSearchError('Search unavailable');
       setSearchResults(null);
     } finally {
-      setSearchLoading(false);
+      // Only the latest search controls the spinner, so a superseded request
+      // finishing can't switch it off while the current one is still loading.
+      if (!isStale()) setSearchLoading(false);
     }
   };
 

@@ -14,15 +14,16 @@ import Units from './components/Units';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AuthScreen from './components/AuthScreen';
+import TabIcon from './components/TabIcons';
 import { supabase } from './supabaseClient';
 import { flushWorkoutQueue } from './components/offlineQueue';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
-  { id: 'dashboard', label: 'Home', icon: '⌂' },
-  { id: 'food-log', label: 'Add Food', icon: '+' },
-  { id: 'workout-start', label: 'Workout', icon: '▸' },
-  { id: 'profile', label: 'Profile', icon: '○' },
+  { id: 'dashboard', label: 'Home', icon: 'home' },
+  { id: 'food-log', label: 'Add Food', icon: 'plus' },
+  { id: 'workout-start', label: 'Workout', icon: 'dumbbell' },
+  { id: 'profile', label: 'Profile', icon: 'person' },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────
@@ -431,7 +432,7 @@ const changeDate = (dir) => {
           <button key={tab.id}
             className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-habits' || activeTab === 'profile-measurements' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-units' || activeTab === 'profile-privacy' || activeTab === 'profile-terms' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
-            <span className="tab-icon">{tab.icon}</span>
+            <span className="tab-icon"><TabIcon name={tab.icon} /></span>
             <span className="tab-label">{tab.label}</span>
           </button>
         ))}

@@ -130,13 +130,52 @@ serve(async (req) => {
         return 0;
       })
       .map((f: any) => {
-        const getNutrient = (name: string) => {
-  const n = f.foodNutrients?.find((n: any) =>
-    n.nutrientName?.toLowerCase().includes(name) ||
-    n.name?.toLowerCase().includes(name)
-  );
-  return n ? Math.round((n.value ?? 0) * 10) / 10 : 0;
-};
+        const round1 = (v: number) => Math.round((v ?? 0) * 10) / 10;
+
+        // USDA returns macros in two different bases:
+        //  - foodNutrients[]: per 100 g (Foundation / SR Legacy / Survey)
+        //  - labelNutrients{}: per the product's *label serving* (Branded)
+        // The client scales everything relative to servingSize, so macros and
+        // servingSize must share ONE basis. Branded foods carry labelNutrients
+        // (and often have only those, so reading foodNutrients dropped them).
+        const label = f.labelNutrients;
+        const hasLabel = !!label && [
+          label.calories?.value, label.protein?.value,
+          label.carbohydrates?.value, label.fat?.value,
+        ].some((v: any) => typeof v === "number" && v > 0);
+
+        // Per-100 g read from foodNutrients. Energy appears as both kcal and kJ —
+        // always take the kcal entry so calories aren't ~4.2× too high.
+        const fromFoodNutrients = (name: string) => {
+          const matches = (f.foodNutrients ?? []).filter((n: any) =>
+            (n.nutrientName ?? n.name ?? "").toLowerCase().includes(name)
+          );
+          const pick = name === "energy"
+            ? (matches.find((n: any) =>
+                (n.unitName ?? n.unit ?? "").toUpperCase() === "KCAL") ?? matches[0])
+            : matches[0];
+          return pick ? round1(pick.value) : 0;
+        };
+
+        let calories: number, protein: number, carbs: number, fats: number;
+        let baseSize: number, baseUnit: string;
+        if (hasLabel) {
+          // Per-serving basis: pair label macros with the label serving size.
+          calories = round1(label.calories?.value);
+          protein = round1(label.protein?.value);
+          carbs = round1(label.carbohydrates?.value);
+          fats = round1(label.fat?.value);
+          baseSize = f.servingSize ?? 100;
+          baseUnit = f.servingSizeUnit ?? "g";
+        } else {
+          // Per-100 g basis: foodNutrients are per 100 g, so the base must be 100 g.
+          calories = fromFoodNutrients("energy");
+          protein = fromFoodNutrients("protein");
+          carbs = fromFoodNutrients("carbohydrate");
+          fats = fromFoodNutrients("total lipid");
+          baseSize = 100;
+          baseUnit = "g";
+        }
 
         const rawName: string = f.description ?? "";
         const cleanedName = isAllCaps(rawName) ? toTitleCase(rawName) : rawName.trim();
@@ -145,15 +184,16 @@ serve(async (req) => {
           fdcId: f.fdcId,
           name: cleanedName,
           brandOwner: f.brandOwner ?? null,
-          servingSize: f.servingSize ?? 100,
-          servingSizeUnit: f.servingSizeUnit ?? "g",
-          calories: getNutrient("energy"),
-          protein: getNutrient("protein"),
-          carbs: getNutrient("carbohydrate"),
-          fats: getNutrient("total lipid"),
+          servingSize: baseSize,
+          servingSizeUnit: baseUnit,
+          calories,
+          protein,
+          carbs,
+          fats,
+          // Micros stay from foodNutrients (per 100 g); absent on label-only foods.
           nutrients: (f.foodNutrients ?? []).map((n: any) => ({
             name: n.nutrientName ?? "",
-            value: Math.round((n.value ?? 0) * 10) / 10,
+            value: round1(n.value),
             unit: n.unitName ?? "g",
           })).filter((n: any) => n.name && n.value > 0),
         };
