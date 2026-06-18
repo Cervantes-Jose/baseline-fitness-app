@@ -1,13 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
 import HabitsWidget from './HabitsWidget';
 import { goalTrend } from './goalColor';
 import { weeklyTrendDelta, parseEntryDate } from './trendMath';
 import RangePopover from './RangePopover';
+import { loadCompareCatalog } from './compareSources';
 
 // Short "Jun 17" label that treats a 'YYYY-MM-DD' date as local midnight (so it
 // never slips a day in negative-UTC timezones).
@@ -124,49 +122,18 @@ function LineChart({ data, color, height = 80 }) {
   );
 }
 
-// ─── MEASUREMENT CHART SECTION ──────────────────────────────
-function MeasurementSection({ title, measurementName, color, unit: unitProp = '', goal = null }) {
+// ─── TREND CHART SECTION ────────────────────────────────────
+// Generic trend card: title + 7D/14D range, latest value, weekly delta, mini line
+// chart. Driven entirely by a passed-in `entries` array ({ value, date, unit? }), so
+// the same card backs measurement, nutrition, and PR widgets alike.
+function TrendSection({ title, color, unit: unitProp = '', goal = null, entries = [] }) {
   const [range, setRange] = useState('7D');
-  const [entries, setEntries] = useState([]);
 
-  // Fetch the measurement's full history once (range-independent). The trend delta
-  // is computed over all of it — exactly like the in-app detail card — while only
-  // the chart is sliced to the selected 7D/14D window. Keying the fetch on range
-  // would have starved the prior-week comparison and reintroduced the old math.
-  useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const uid = session?.user?.id;
-      if (!uid) return;
-      const { data: mData } = await supabase
-        .from('measurements')
-        .select('id')
-        .eq('user_id', uid)
-        .ilike('name', measurementName)
-        .limit(1);
-      if (!mData || mData.length === 0) return;
-
-      const { data } = await supabase
-        .from('measurement_entries')
-        .select('value, date, created_at, unit')
-        .eq('user_id', uid)
-        .eq('measurement_id', mData[0].id)
-        .order('created_at', { ascending: true });
-
-      if (data) {
-        // Prefer the logged `date` (what the in-app math keys off of); fall back to
-        // created_at for any legacy rows missing it.
-        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.date || e.created_at, unit: e.unit || '' })));
-      }
-    })();
-  }, [measurementName]);
-
-  // Sort ascending by day so both the delta and the chart read chronologically
-  // (mirrors the in-app detail, which sorts allEntries the same way).
+  // Sort ascending by day so both the delta and the chart read chronologically.
   const sorted = [...entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
 
-  // Unit comes from the measurement's own latest entry (each measurement stores its
-  // own unit), falling back to whatever the caller passed.
+  // Unit comes from the latest entry when entries carry their own unit (measurements),
+  // falling back to whatever the caller passed (nutrition/PR series).
   const unit = sorted.length ? (sorted[sorted.length - 1].unit || unitProp) : unitProp;
   const latest = sorted.length > 0 ? sorted[sorted.length - 1].value : null;
 
@@ -207,6 +174,43 @@ function MeasurementSection({ title, measurementName, color, unit: unitProp = ''
   );
 }
 
+// ─── MEASUREMENT CHART SECTION ──────────────────────────────
+// Fetches a measurement's full history once (range-independent), then renders it
+// through TrendSection. The delta uses the full history; the chart slices the window.
+function MeasurementSection({ title, measurementName, color, unit = '', goal = null }) {
+  const [entries, setEntries] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data: mData } = await supabase
+        .from('measurements')
+        .select('id')
+        .eq('user_id', uid)
+        .ilike('name', measurementName)
+        .limit(1);
+      if (!mData || mData.length === 0) return;
+
+      const { data } = await supabase
+        .from('measurement_entries')
+        .select('value, date, created_at, unit')
+        .eq('user_id', uid)
+        .eq('measurement_id', mData[0].id)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        // Prefer the logged `date` (what the in-app math keys off of); fall back to
+        // created_at for any legacy rows missing it.
+        setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.date || e.created_at, unit: e.unit || '' })));
+      }
+    })();
+  }, [measurementName]);
+
+  return <TrendSection title={title} color={color} unit={unit} goal={goal} entries={entries} />;
+}
+
 // ─── DASHBOARD ───────────────────────────────────────────────
 // Widgets shown on a fresh dashboard, in order. Everything else (Carbs, Fats, and
 // the per-measurement trend charts) lives in the "Add Widget" pool until the user
@@ -245,50 +249,45 @@ function loadDashboardLayout() {
   return { order: DEFAULT_ORDER, breaks: [] };
 }
 
-// Group the flat ordered id list into explicit rows. A new row starts when a tile
-// is flagged as a break, when it (or the previous tile) is full-width, or when the
-// current row already holds two half tiles. This keeps the default greedy packing
-// (two halves per row) but lets a break force a half tile onto its own row, so
-// arrangements like one-on-top / two-below hold instead of re-flowing.
-function buildRows(ids, breakSet) {
-  const rows = [];
-  let cur = [];
-  for (let i = 0; i < ids.length; i++) {
-    const id = ids[i];
-    const full = !HALF.has(id);
-    const prevFull = i > 0 && !HALF.has(ids[i - 1]);
-    if (i > 0 && (breakSet.has(id) || full || prevFull || cur.length >= 2)) { rows.push(cur); cur = []; }
-    cur.push(id);
-  }
-  if (cur.length) rows.push(cur);
-  return rows;
+// The blank "add" tile shown at the end of a section in edit mode: blue dashed
+// border, faint grey fill, a blue plus in the middle. `full` makes it a full-width
+// trend-sized card; otherwise it sizes to a half macro tile (filling its flex wrapper).
+function AddCard({ full, onClick }) {
+  return (
+    <button onClick={onClick} aria-label="Add widget"
+      style={{
+        width: '100%', minHeight: full ? 140 : 200, alignSelf: 'stretch',
+        border: '2px dashed var(--accent)', borderRadius: 20,
+        background: 'rgba(148,163,184,0.12)', cursor: 'pointer', boxSizing: 'border-box',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+        <path d="M12 5v14M5 12h14" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
 }
 
-// One draggable/selectable widget in edit mode. A quick tap selects (the sensor's
-// hold-delay means a short press is a click); holding then dragging reorders it.
-function SortableWidget({ id, selected, onSelect, width = '100%', children }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+// Wraps a placed widget in edit mode and overlays a red "−" remove button.
+// `insetRemove` keeps the button inside the tile bounds (used inside the horizontal
+// macro scroller, where a negative offset would be clipped); trends place it just
+// outside the top-right corner.
+function EditTile({ id, removable, onRemove, insetRemove, children }) {
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners}
-      onClick={() => onSelect(selected ? null : id)}
-      style={{
-        width, boxSizing: 'border-box',
-        transform: CSS.Transform.toString(transform), transition,
-        position: 'relative', zIndex: isDragging ? 20 : 1,
-        // pan-y (not none) lets a quick vertical swipe scroll the page, while the
-        // 250ms long-press still starts a drag — otherwise the full-screen widgets
-        // become non-scrollable drag surfaces and you can't scroll the edit screen.
-        cursor: 'grab', touchAction: 'pan-y', userSelect: 'none',
-        opacity: isDragging ? 0.95 : 1,
-      }}>
-      <div style={{
-        borderRadius: 16,
-        background: selected ? 'var(--accent-light)' : 'transparent',
-        boxShadow: selected ? 'inset 0 0 0 2px var(--accent)' : 'none',
-        transition: 'background 0.15s, box-shadow 0.15s',
-      }}>
-        {children}
-      </div>
+    <div style={{ position: 'relative', height: '100%' }}>
+      {children}
+      {removable && (
+        <button onClick={() => onRemove(id)} aria-label="Remove widget"
+          style={{
+            position: 'absolute', top: insetRemove ? 8 : -8, right: insetRemove ? 8 : -8,
+            width: 24, height: 24, borderRadius: '50%', padding: 0,
+            background: '#EF4444', border: '2px solid var(--card)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.2)', zIndex: 6,
+          }}>
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 5h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -301,30 +300,29 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [streak, setStreak] = useState(0);
   const [weekWorkouts, setWeekWorkouts] = useState(0);
 
-  // Custom widget layout — the ordered list of placed widget ids, plus the set of ids
-  // that force a new row before themselves. Persisted together to localStorage.
+  // Custom widget layout — just the ordered list of placed widget ids, persisted to
+  // localStorage. (Drag-reordering and row breaks were removed: macros now scroll
+  // horizontally and trends stack, so the layout is fixed.)
   const [order, setOrder] = useState(() => loadDashboardLayout().order);
-  const [breaks, setBreaks] = useState(() => new Set(loadDashboardLayout().breaks));
-  const [selectedId, setSelectedId] = useState(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerCat, setPickerCat] = useState(null);   // 'food' | 'trend' | null — which add sheet is open
   const [measurements, setMeasurements] = useState([]);
-  const persistLayout = (nextOrder, nextBreaks) => {
-    try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [...nextBreaks] })); } catch {}
+  const [trendCatalog, setTrendCatalog] = useState([]);   // cross-domain trend series (Nutrition + PRs)
+  const macroScrollRef = useRef(null);
+  const persistLayout = (nextOrder) => {
+    try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [] })); } catch {}
   };
-  const saveOrder = (next) => { setOrder(next); persistLayout(next, breaks); };
-  const toggleBreak = (id) => {
-    setBreaks(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      persistLayout(order, next);
-      return next;
-    });
-  };
+  const saveOrder = (next) => { setOrder(next); persistLayout(next); };
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } })
-  );
+  // Daily Habits is a removable widget. Hidden state persists on its own key; we also
+  // need to know whether the user has any habits at all (no habits → nothing to show).
+  const [habitsHidden, setHabitsHidden] = useState(() => {
+    try { return localStorage.getItem('dashboardHabitsHidden') === '1'; } catch { return false; }
+  });
+  const [hasHabits, setHasHabits] = useState(false);
+  const setHabits = (hidden) => {
+    setHabitsHidden(hidden);
+    try { localStorage.setItem('dashboardHabitsHidden', hidden ? '1' : '0'); } catch {}
+  };
 
   const today = new Date().toLocaleDateString();
 
@@ -339,8 +337,23 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       if (!uid) return;
       supabase.from('measurements').select('id, name, goal').eq('user_id', uid).order('created_at', { ascending: true })
         .then(({ data }) => { if (data) setMeasurements(data); });
+      // Whether the user has any habits — gates the Daily Habits widget/placeholder.
+      supabase.from('habits').select('id').eq('user_id', uid).limit(1)
+        .then(({ data }) => setHasHabits(!!(data && data.length)));
     })();
   }, []);
+
+  // Cross-domain trend series (Nutrition daily totals + Personal Records 1RM history),
+  // reused from the Compare catalog so every surface plots the same data.
+  useEffect(() => { loadCompareCatalog().then(setTrendCatalog).catch(() => {}); }, []);
+
+  // Entering edit mode, nudge the macro row slightly left so the trailing "add" card
+  // peeks in from the right — the placed macros stay the visible default.
+  useEffect(() => {
+    if (editMode && macroScrollRef.current) {
+      macroScrollRef.current.scrollTo({ left: 72, behavior: 'smooth' });
+    }
+  }, [editMode]);
 
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -582,95 +595,124 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   }));
   measurementItems.forEach(({ id, node }) => { widgetMap[id] = node; });
 
-  // `placed` = the widgets currently on the dashboard (valid ids only — drops stale
-  // ones, e.g. a measurement that was deleted). `glance` is excluded because it's
-  // pinned and rendered separately. Everything else is available to add.
+  // Nutrition + Personal Records trend widgets, sourced from the shared Compare
+  // catalog. (Its Measurements group is ignored here — those already come through
+  // measurementItems above, with goal coloring and the fixed weight/bodyfat ids.)
+  const nutItems = (trendCatalog.find(g => g.group === 'Nutrition')?.items) || [];
+  const prItems = (trendCatalog.find(g => g.group === 'Personal Records')?.items) || [];
+  [...nutItems, ...prItems].forEach(it => {
+    widgetMap[it.id] = <TrendSection title={it.label} color={it.color} unit={it.unit} entries={it.entries} />;
+  });
+
+  // Every trend the user can add, across domains.
+  const trendItems = [...measurementItems, ...nutItems, ...prItems];
+
+  // `placed` = the widgets currently rendered (valid ids only — drops stale ones, e.g.
+  // a deleted measurement, or trend series still loading). `glance` is pinned and
+  // rendered separately. `order` is the source of truth for placement (add/remove key
+  // off it, not `placed`, so a still-loading trend isn't accidentally dropped).
   const placed = order.filter(id => widgetMap[id] && id !== 'glance');
-  const placedSet = new Set(placed);
+  const orderSet = new Set(order);
+  // Macros scroll horizontally; everything else (trends) stacks full-width.
+  const placedMacros = placed.filter(id => HALF.has(id));
+  const placedTrends = placed.filter(id => !HALF.has(id));
 
-  // Catalog for the Add Widget sheet — grouped into the categories the user picks from.
-  const catalog = [
-    { category: 'Food', items: [
-      { id: 'calories', label: 'Calories' },
-      { id: 'protein', label: 'Protein' },
-      { id: 'carbs', label: 'Carbs' },
-      { id: 'fats', label: 'Fats' },
-    ] },
-    { category: 'Measurements', items: measurementItems.map(({ id, label }) => ({ id, label })) },
+  // Scoped catalogs for the two add sheets — each looks like the old Add Widget sheet,
+  // just pre-filtered to the section whose + card was tapped. Trends span all domains.
+  const FOOD_ITEMS = [
+    { id: 'calories', label: 'Calories' },
+    { id: 'protein', label: 'Protein' },
+    { id: 'carbs', label: 'Carbs' },
+    { id: 'fats', label: 'Fats' },
   ];
+  const trendGroups = [
+    { category: 'Measurements', items: measurementItems.map(({ id, label }) => ({ id, label })) },
+    { category: 'Nutrition', items: nutItems.map(({ id, label }) => ({ id, label })) },
+    { category: 'Personal Records', items: prItems.map(({ id, label }) => ({ id, label })) },
+  ].filter(g => g.items.length > 0);
+  const pickerCatalog = pickerCat === 'food'
+    ? [{ category: 'Food', items: FOOD_ITEMS }]
+    : pickerCat === 'trend'
+      ? trendGroups
+      : [];
 
-  const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    saveOrder(arrayMove(placed, placed.indexOf(active.id), placed.indexOf(over.id)));
-  };
-  const deleteSelected = () => {
-    if (!selectedId) return;
-    const nextOrder = placed.filter(id => id !== selectedId);
-    const nextBreaks = new Set(breaks); nextBreaks.delete(selectedId);
-    setOrder(nextOrder); setBreaks(nextBreaks); persistLayout(nextOrder, nextBreaks);
-    setSelectedId(null);
-  };
+  // Hide a section's + card once everything in it is already placed.
+  const macroAddable = FOOD_ITEMS.some(it => !orderSet.has(it.id));
+  const trendAddable = trendItems.some(it => !orderSet.has(it.id));
+
   const addWidgets = (ids) => {
-    const toAdd = ids.filter(id => !placedSet.has(id));
-    if (toAdd.length) saveOrder([...placed, ...toAdd]);
-    setPickerOpen(false);
+    const toAdd = ids.filter(id => !orderSet.has(id));
+    if (toAdd.length) saveOrder([...order, ...toAdd]);
+    setPickerCat(null);
   };
+  const removeWidget = (id) => saveOrder(order.filter(x => x !== id));
 
   if (editMode) {
     return (
       <div style={{ paddingBottom: 80 }}>
-        {/* Edit bar — right slot shows Delete while a widget is selected, otherwise Add Widget */}
+        {/* Edit bar — title only; adding happens via the inline + cards in each section */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px 4px' }}>
           <button onClick={onExitEdit} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>Done</button>
           <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Edit Dashboard</span>
-          {selectedId ? (
-            <button onClick={deleteSelected}
-              style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>Delete</button>
-          ) : (
-            <button onClick={() => setPickerOpen(true)}
-              style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 0 }}>+ Add Widget</button>
-          )}
+          <span style={{ width: 40 }} />
         </div>
-        {selectedId && HALF.has(selectedId) ? (
-          <div style={{ textAlign: 'center', margin: '0 0 8px' }}>
-            <button onClick={() => toggleBreak(selectedId)}
-              style={{ background: 'var(--accent-light)', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 20 }}>
-              {breaks.has(selectedId) ? '↥ Merge with row above' : '↧ Start new row'}
-            </button>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 8px' }}>Tap + to add a widget · tap − to remove</p>
+
+        {/* Pinned summary — always at the top, not movable */}
+        {widgetMap.glance}
+
+        {/* Daily Habits — removable; when removed it collapses to a blue + card */}
+        {hasHabits && (habitsHidden ? (
+          <div style={{ padding: '12px 16px 0' }}>
+            <AddCard full onClick={() => setHabits(false)} />
           </div>
         ) : (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 8px' }}>Tap a widget to select · hold and drag to move</p>
-        )}
-        {/* Pinned summary — always at the top, not movable */}
-        <div style={{ position: 'relative' }}>
-          {widgetMap.glance}
-          <span style={{ position: 'absolute', top: 6, right: 20, fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', background: 'var(--bg)', padding: '2px 8px', borderRadius: 10 }}>Pinned</span>
+          <div style={{ position: 'relative', marginTop: 4 }}>
+            <HabitsWidget />
+            <button onClick={() => setHabits(true)} aria-label="Remove widget"
+              style={{
+                position: 'absolute', top: -8, right: 8, width: 24, height: 24, borderRadius: '50%', padding: 0,
+                background: '#EF4444', border: '2px solid var(--card)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.2)', zIndex: 6,
+              }}>
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5 5h7" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+        ))}
+
+        {/* Macros — horizontal scroll row with a trailing "add" card */}
+        <div ref={macroScrollRef}
+          style={{ display: 'flex', gap: 12, padding: '12px 16px', overflowX: 'auto', alignItems: 'stretch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {placedMacros.map(id => (
+            <div key={id} style={{ flex: '0 0 calc(50% - 6px)', boxSizing: 'border-box' }}>
+              <EditTile id={id} removable onRemove={removeWidget} insetRemove>
+                {widgetMap[id]}
+              </EditTile>
+            </div>
+          ))}
+          {macroAddable && (
+            <div style={{ flex: '0 0 calc(50% - 6px)', boxSizing: 'border-box', display: 'flex' }}>
+              <AddCard onClick={() => setPickerCat('food')} />
+            </div>
+          )}
         </div>
-        {placed.length === 0 ? (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 20px' }}>No widgets yet — tap “+ Add Widget” to add some.</p>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={placed} strategy={rectSortingStrategy}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 16px' }}>
-                {buildRows(placed, breaks).map((row, ri) => (
-                  <div key={ri} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    {row.map(id => (
-                      <SortableWidget key={id} id={id} selected={selectedId === id} onSelect={setSelectedId}
-                        width={HALF.has(id) ? 'calc(50% - 6px)' : '100%'}>
-                        {widgetMap[id]}
-                      </SortableWidget>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        )}
+
+        {/* Trends — stacked full-width, each removable, with a trailing "add" card */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 16px 8px' }}>
+          {placedTrends.map(id => (
+            <EditTile key={id} id={id} removable onRemove={removeWidget}>
+              {widgetMap[id]}
+            </EditTile>
+          ))}
+          {trendAddable && <AddCard full onClick={() => setPickerCat('trend')} />}
+        </div>
+
         <AddWidgetSheet
-          open={pickerOpen}
-          onClose={() => setPickerOpen(false)}
-          catalog={catalog}
-          placedSet={placedSet}
+          open={!!pickerCat}
+          onClose={() => setPickerCat(null)}
+          catalog={pickerCatalog}
+          placedSet={orderSet}
           renderPreview={(id) => widgetMap[id]}
           isHalf={(id) => HALF.has(id)}
           onAdd={addWidgets}
@@ -678,10 +720,6 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       </div>
     );
   }
-
-  // Half tiles (Calories/Protein/Carbs/Fats) take half a row so two can pair; a row
-  // with one half tile leaves the other half empty, keeping the arrangement static.
-  const itemWidth = (id) => ({ width: HALF.has(id) ? 'calc(50% - 6px)' : '100%' });
 
   return (
     <div style={{ paddingBottom: 8 }}>
@@ -697,22 +735,32 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       {/* Pinned summary */}
       {widgetMap.glance}
 
-      {/* Daily Habits — fixed card directly under the glance bar (not a draggable widget) */}
-      <div style={{ marginTop: 4 }}>
-        <HabitsWidget />
-      </div>
+      {/* Daily Habits — directly under the glance bar; hidden if the user removed it */}
+      {hasHabits && !habitsHidden && (
+        <div style={{ marginTop: 4 }}>
+          <HabitsWidget />
+        </div>
+      )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 16px' }}>
-        {buildRows(placed, breaks).map((row, ri) => (
-          <div key={ri} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            {row.map(id => (
-              <div key={id} style={{ ...itemWidth(id), boxSizing: 'border-box' }}>
-                {widgetMap[id]}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* Macros — horizontal scroll row */}
+      {placedMacros.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, padding: '12px 16px', overflowX: 'auto', alignItems: 'stretch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {placedMacros.map(id => (
+            <div key={id} style={{ flex: '0 0 calc(50% - 6px)', boxSizing: 'border-box' }}>
+              {widgetMap[id]}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Trends — stacked full-width */}
+      {placedTrends.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 16px 8px' }}>
+          {placedTrends.map(id => (
+            <div key={id}>{widgetMap[id]}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

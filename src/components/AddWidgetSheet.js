@@ -8,18 +8,21 @@ export default function AddWidgetSheet({ open, onClose, catalog, placedSet, rend
   const [mounted, setMounted] = useState(open);
   const [shown, setShown] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const [expanded, setExpanded] = useState(() => new Set(catalog[0] ? [catalog[0].category] : []));
+  const firstCat = catalog[0] ? catalog[0].category : null;
+  const [expanded, setExpanded] = useState(() => new Set(firstCat ? [firstCat] : []));
 
   // Mount then animate in on open; on close, slide out and unmount after the transition.
+  // Reset the expanded category on each open so a re-scoped catalog opens expanded.
   useEffect(() => {
     if (open) {
       setMounted(true);
       setSelected(new Set());
+      setExpanded(new Set(firstCat ? [firstCat] : []));
       const id = requestAnimationFrame(() => setShown(true));
       return () => cancelAnimationFrame(id);
     }
     setShown(false);
-  }, [open]);
+  }, [open, firstCat]);
 
   // Lock background scroll while the sheet is open (the inner list still scrolls).
   // Prevents the page behind the overlay from scroll-chaining on mobile.
