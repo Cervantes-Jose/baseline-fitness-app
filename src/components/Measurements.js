@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
 import { weeklyTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
+import { Sparkline } from './Sparkline';
 import TrendCompareChart from './TrendCompareChart';
 import CompareSheet from './CompareSheet';
 import { loadCompareCatalog, findCatalogItem } from './compareSources';
@@ -31,36 +32,6 @@ const fmtMDY = (s) => {
 
 const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dateStrToDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
-
-// Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
-// `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
-function useChartDraw(ref, dep) {
-  const [drawn, setDrawn] = useState(false);
-  useLayoutEffect(() => {
-    setDrawn(false);
-    const el = ref.current;
-    let len = 0;
-    if (el) {
-      try { len = el.getTotalLength(); } catch { len = 0; }
-      if (len) {
-        el.style.transition = 'none';
-        el.style.strokeDasharray = String(len);
-        el.style.strokeDashoffset = String(len);
-        el.getBoundingClientRect(); // force reflow so the starting state paints
-      }
-    }
-    const raf = requestAnimationFrame(() => {
-      if (el && len) {
-        el.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
-        el.style.strokeDashoffset = '0';
-      }
-      setDrawn(true);
-    });
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dep]);
-  return drawn;
-}
 
 // Bottom-sheet calendar, same pattern as FoodLog's date picker.
 function MeasurementCalendar({ selected, onSelect, onClose }) {
@@ -137,7 +108,10 @@ export function getDefaultUnit(name, metricSystem) {
   const lower = (name || '').toLowerCase();
   if (lower === 'body fat') return '%';
   if (lower === 'weight') return metricSystem === 'metric' ? 'kg' : 'lbs';
-  return metricSystem === 'metric' ? 'cm' : 'in';
+  // Only the seeded body-measurement defaults get a length unit. Custom
+  // measurements start blank so the user can type whatever unit they want.
+  if (DEFAULT_MEASUREMENT_NAME_SET.has(lower)) return metricSystem === 'metric' ? 'cm' : 'in';
+  return '';
 }
 
 // One stable color per measurement, picked by its index in the list.
@@ -153,48 +127,6 @@ const fmtListDate = (s) => {
   const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00') : new Date(s);
   return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
-
-// Compact inline sparkline shown inside each measurement card (2+ entries).
-// Measures its own width so dots stay round and the stroke stays 2px at a fixed 36px height.
-function MiniChart({ entries, color }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const sorted = [...entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
-  const values = sorted.map(e => Number(e.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-
-  const H = 36, pad = 4;
-  const cW = Math.max(0, width - pad * 2);
-  const cH = H - pad * 2;
-  const toX = i => pad + (sorted.length === 1 ? cW / 2 : (i / (sorted.length - 1)) * cW);
-  const toY = v => max === min ? pad + cH / 2 : pad + cH - ((v - min) / (max - min)) * cH;
-  const points = sorted.map((e, i) => `${toX(i)},${toY(Number(e.value))}`).join(' ');
-
-  const drawn = useChartDraw(lineRef, `${width}:${points}`);
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '8px' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <polyline ref={lineRef} points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-          {sorted.map((e, i) => <circle key={i} cx={toX(i)} cy={toY(Number(e.value))} r="3" fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.25 + i * 0.05}s` }} />)}
-        </svg>
-      )}
-    </div>
-  );
-}
 
 function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {}, onBack = null }) {
   const [view, setView] = useState('list');
@@ -575,7 +507,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
                       <span style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text-primary)' }}>{m.name}</span>
                       {badge}
                     </div>
-                    {m.entries.length >= 2 && <MiniChart entries={m.entries} color={color} />}
+                    {m.entries.length >= 2 && <Sparkline entries={m.entries} color={color} />}
                   </>
                 ) : (
                   <>
@@ -813,9 +745,8 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input value={newValue} onChange={e => setNewValue(e.target.value)} inputMode="decimal"
                 placeholder="Value" className="input" style={{ flex: 2, minWidth: 0, textAlign: 'center' }} />
-              <div style={{ flex: 1, minWidth: 0, textAlign: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px 4px', fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)', background: 'var(--bg)' }}>
-                {newUnit}
-              </div>
+              <input value={newUnit} onChange={e => setNewUnit(e.target.value)}
+                placeholder="Unit" className="input" style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '12px 4px', fontSize: '14px', fontWeight: '600' }} />
               <button onClick={logEntry} className="btn-primary" style={{ flex: 3, minWidth: 0, padding: '12px 8px', fontSize: '14px', fontWeight: '700', whiteSpace: 'nowrap' }}>
                 + Add Entry
               </button>

@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import useSwipeToDismiss from './useSwipeToDismiss';
+import TrendCompareChart from './TrendCompareChart';
+import CompareSheet from './CompareSheet';
+import { loadCompareCatalog, findCatalogItem } from './compareSources';
 import {
   fmtNum, fmtVolume, fmtLongDate, dayKey,
   periodRange, PERIOD_OPTIONS,
@@ -15,151 +18,51 @@ const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-m
 
 // A small pill that opens a floating option menu styled like the app's FAB
 // speed-dial (white rounded cards that animate up; the selected one is accent).
-function DropdownPill({ value, options, onChange, align = 'right' }) {
+export function DropdownPill({ value, options, onChange, align = 'right' }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
   const current = options.find(o => o.id === value) || options[0];
+
+  // Each .card-flat gets `transform: translateZ(0)` (App.css), which makes every
+  // card its own stacking context — so an absolutely-positioned menu inside one
+  // card can never paint above the next card. Portal the menu to <body> with
+  // fixed coords from the button rect so it always floats on top.
+  const toggle = () => {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 8, left: r.left, right: window.innerWidth - r.right });
+    }
+    setOpen(o => !o);
+  };
+
   return (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)}
+      <button ref={btnRef} onClick={toggle}
         style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '20px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
         {current.label}
         <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
           <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {open && (
+      {open && pos && createPortal(
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
-          <div style={{ position: 'absolute', top: '100%', [align]: 0, marginTop: '8px', zIndex: 201, display: 'flex', flexDirection: 'column', alignItems: align === 'right' ? 'flex-end' : 'flex-start', gap: '8px' }}>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 800 }} />
+          <div style={{ position: 'fixed', top: pos.top, ...(align === 'right' ? { right: pos.right } : { left: pos.left }), zIndex: 801, display: 'flex', flexDirection: 'column', alignItems: align === 'right' ? 'flex-end' : 'flex-start', gap: '8px' }}>
             {options.map((o, i) => {
               const sel = o.id === value;
               return (
                 <button key={o.id} onClick={() => { onChange(o.id); setOpen(false); }}
-                  style={{ whiteSpace: 'nowrap', minWidth: '110px', textAlign: align === 'right' ? 'right' : 'left', background: sel ? 'var(--accent)' : 'var(--card)', color: sel ? '#fff' : 'var(--text-primary)', border: sel ? 'none' : '1px solid var(--border)', borderRadius: '20px', padding: '10px 16px', fontSize: '13px', fontWeight: sel ? 700 : 500, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.14)', animation: `fabItemIn 0.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 0.04}s both` }}>
+                  style={{ whiteSpace: 'nowrap', minWidth: '110px', textAlign: 'center', background: sel ? 'var(--accent)' : 'var(--card)', color: sel ? '#fff' : 'var(--text-primary)', border: sel ? 'none' : '1px solid var(--border)', borderRadius: '20px', padding: '10px 16px', fontSize: '13px', fontWeight: sel ? 700 : 500, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.14)', animation: `fabItemIn 0.2s cubic-bezier(0.2,0.8,0.2,1) ${i * 0.04}s both` }}>
                   {o.label}
                 </button>
               );
             })}
           </div>
           <style>{`@keyframes fabItemIn { from { opacity: 0; transform: translateY(14px) scale(0.85); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
-        </>
+        </>,
+        document.body
       )}
-    </div>
-  );
-}
-
-// ── chart draw-in animation (same pattern used across the app's charts) ──
-function useChartDraw(ref, dep) {
-  const [drawn, setDrawn] = useState(false);
-  useLayoutEffect(() => {
-    setDrawn(false);
-    const el = ref.current;
-    let len = 0;
-    if (el) {
-      try { len = el.getTotalLength(); } catch { len = 0; }
-      if (len) {
-        el.style.transition = 'none';
-        el.style.strokeDasharray = String(len);
-        el.style.strokeDashoffset = String(len);
-        el.getBoundingClientRect();
-      }
-    }
-    const raf = requestAnimationFrame(() => {
-      if (el && len) {
-        el.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
-        el.style.strokeDashoffset = '0';
-      }
-      setDrawn(true);
-    });
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dep]);
-  return drawn;
-}
-
-// Full-width trend chart: gradient fill + line + dots. Tapping a dot shows a
-// popup with the exact value + date for that point. Matches the measurements
-// DetailChart style.
-function TrendChart({ points, color, formatValue }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-  const [active, setActive] = useState(null);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Reset any open popup whenever the underlying series changes (e.g. metric toggle).
-  useEffect(() => { setActive(null); }, [points]);
-
-  const H = 140, padX = 8, padTop = 14, padBottom = 12;
-  const cW = Math.max(0, width - padX * 2);
-  const cH = H - padTop - padBottom;
-  const values = points.map(p => p.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = (max - min) || 1;
-  const pts = points.map((p, i) => {
-    const x = padX + (points.length === 1 ? cW / 2 : (i / (points.length - 1)) * cW);
-    const y = padTop + (1 - (p.value - min) / range) * cH;
-    return [x, y];
-  });
-  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
-  const fillPath = pts.length ? `${linePath} L${pts[pts.length - 1][0]},${padTop + cH} L${pts[0][0]},${padTop + cH} Z` : '';
-  const gradId = `prgrad-${color.replace('#', '')}`;
-  const drawn = useChartDraw(lineRef, `${width}:${linePath}`);
-
-  const labelPts = points.length <= 1
-    ? points
-    : [points[0], points[Math.floor((points.length - 1) / 2)], points[points.length - 1]];
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '14px', position: 'relative' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {points.length > 1 && <path d={fillPath} fill={`url(#${gradId})`} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.7s ease' }} />}
-          {points.length > 1 && <path ref={lineRef} d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
-          {pts.map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y}
-              r={active === i ? 5.5 : 3.5}
-              fill={active === i ? color : color}
-              stroke={active === i ? 'var(--card)' : 'none'} strokeWidth="2"
-              onClick={() => setActive(active === i ? null : i)}
-              style={{ cursor: 'pointer', opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease, r 0.15s ease', transitionDelay: drawn ? '0s' : `${0.3 + i * 0.05}s` }} />
-          ))}
-        </svg>
-      )}
-      {/* Tap popup */}
-      {active != null && pts[active] && (
-        <div style={{
-          position: 'absolute', left: pts[active][0], top: pts[active][1] - 12,
-          transform: 'translate(-50%, -100%)', background: 'var(--text-primary)', color: 'var(--card)',
-          padding: '6px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.25)', pointerEvents: 'none', zIndex: 2,
-        }}>
-          {formatValue(points[active].value)}
-          <div style={{ fontSize: '10px', fontWeight: '500', opacity: 0.8, marginTop: '1px' }}>{fmtLongDate(points[active].date)}</div>
-        </div>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-        {labelPts.map((p, i) => (
-          <span key={i} style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-            {p.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }
@@ -229,6 +132,25 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
   const [showAll, setShowAll] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
 
+  // Trend comparison overlay (cross-domain). The sheet/catalog live for this
+  // detail session only — the whole component unmounts on close, so no manual reset.
+  const [compareId, setCompareId] = useState(null);
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  const [compareCatalog, setCompareCatalog] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  // Lazy-load the cross-domain catalog on first sheet open; this exercise's own
+  // PR series is excluded so you can't compare it with itself.
+  useEffect(() => {
+    if (!compareSheetOpen || compareCatalog) return;
+    let cancelled = false;
+    setCompareLoading(true);
+    loadCompareCatalog({ excludeId: `pr:${exercise.name}` })
+      .then(cat => { if (!cancelled) setCompareCatalog(cat); })
+      .finally(() => { if (!cancelled) setCompareLoading(false); });
+    return () => { cancelled = true; };
+  }, [compareSheetOpen, compareCatalog, exercise.name]);
+
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
     const prev = document.body.style.overflow;
@@ -281,22 +203,29 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
   const countDelta = delta(curCount, prevCount, n => String(n));
 
   // Performance Progress trend points — Volume / Avg Weight per session, or 1RM over time.
-  let chartPoints, formatChartValue, chartEmptyMsg;
+  let chartPoints, chartMeta, chartEmptyMsg;
   if (metric === '1rm') {
     chartPoints = [...prs]
       .sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at))
       .map(p => ({ date: new Date(p.recorded_at), value: Number(p.weight) }));
-    formatChartValue = (v) => `${fmtNum(v)} lbs`;
+    chartMeta = { unit: 'lbs', label: '1RM' };
     chartEmptyMsg = 'Log at least two 1RMs to see your progress.';
   } else if (metric === 'avg') {
     chartPoints = sessionsAsc.map(s => ({ date: s.date, value: Math.round(s.sets.avgWeight * 10) / 10 }));
-    formatChartValue = (v) => `${fmtNum(v)} lbs avg`;
+    chartMeta = { unit: 'lbs', label: 'Avg Weight' };
     chartEmptyMsg = 'Log at least two sessions to see your progress.';
   } else {
     chartPoints = sessionsAsc.map(s => ({ date: s.date, value: s.sets.volume }));
-    formatChartValue = (v) => `${fmtVolume(v)} lbs`;
+    chartMeta = { unit: 'lbs', label: 'Volume' };
     chartEmptyMsg = 'Log at least two sessions to see your progress.';
   }
+
+  // Compare overlay series (full history, like the base; the chart shares one time
+  // axis and normalizes each series independently).
+  const compareItem = compareId ? findCatalogItem(compareCatalog, compareId) : null;
+  const compareData = compareItem ? {
+    entries: compareItem.entries, color: compareItem.color, unit: compareItem.unit, label: compareItem.label,
+  } : null;
 
   const recent = sessionsDesc.slice(0, 4);
 
@@ -329,6 +258,7 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
   );
 
   return createPortal(
+    <>
     <div onClick={requestClose}
       style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.4)', opacity: shown ? 1 : 0, transition: 'opacity 0.28s ease', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div ref={sheetRef} onClick={e => e.stopPropagation()} onPointerDown={onPointerDown} onTransitionEnd={onSheetTransitionEnd}
@@ -414,14 +344,38 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
           <div className="card-flat" style={{ padding: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
               <p style={sectionLabel}>Performance Progress</p>
-              <DropdownPill
-                value={metric}
-                options={[{ id: 'volume', label: 'Volume' }, { id: 'avg', label: 'Avg Weight' }, { id: '1rm', label: '1RM' }]}
-                onChange={setMetric}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button onClick={() => setCompareSheetOpen(true)} style={{
+                  display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 10px', borderRadius: '20px',
+                  border: compareItem ? `1px solid ${compareData.color}` : '1px solid var(--border)',
+                  background: 'var(--card)', color: compareItem ? compareData.color : 'var(--text-secondary)',
+                  fontSize: '12px', fontWeight: '700', cursor: 'pointer', maxWidth: '140px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                }}>
+                  {compareItem ? (
+                    <>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: compareData.color, flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{compareData.label}</span>
+                      <span onClick={(e) => { e.stopPropagation(); setCompareId(null); }} style={{ marginLeft: '2px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}>×</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M20 19H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Compare
+                    </>
+                  )}
+                </button>
+                <DropdownPill
+                  value={metric}
+                  options={[{ id: 'volume', label: 'Volume' }, { id: 'avg', label: 'Avg Weight' }, { id: '1rm', label: '1RM' }]}
+                  onChange={setMetric}
+                />
+              </div>
             </div>
             {chartPoints.length >= 2 ? (
-              <TrendChart points={chartPoints} color={LINE} formatValue={formatChartValue} />
+              <TrendCompareChart
+                base={{ entries: chartPoints, color: LINE, unit: chartMeta.unit, label: chartMeta.label }}
+                compare={compareData}
+              />
             ) : (
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '28px 0 12px' }}>
                 {chartEmptyMsg}
@@ -471,7 +425,21 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
           </div>
         </div>
       )}
-    </div>,
+    </div>
+
+    {/* Compare picker — raised above the detail (700) and View All (760) sheets. */}
+    {compareSheetOpen && (
+      <CompareSheet
+        zIndex={900}
+        catalog={compareCatalog}
+        loading={compareLoading}
+        selectedId={compareId}
+        onSelect={setCompareId}
+        onRemove={() => setCompareId(null)}
+        onClose={() => setCompareSheetOpen(false)}
+      />
+    )}
+    </>,
     document.body
   );
 }

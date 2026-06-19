@@ -1,77 +1,12 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { CATEGORIES } from './ExerciseDatabase';
 import { exerciseCategory } from './routineMeta';
-import { setStats, sessionDate, fmtShortDate, fmtVolume } from './prMath';
-import PersonalRecordDetail from './PersonalRecordDetail';
+import { setStats, sessionDate, fmtShortDate, fmtVolume, dayKey, periodRange, PERIOD_OPTIONS } from './prMath';
+import { Sparkline } from './Sparkline';
+import TrendCompareChart from './TrendCompareChart';
+import PersonalRecordDetail, { DropdownPill } from './PersonalRecordDetail';
 
-// Animates an SVG line drawing itself in (stroke-dashoffset). Same pattern as
-// Measurements' charts; re-runs when `dep` changes.
-function useChartDraw(ref, dep) {
-  const [drawn, setDrawn] = useState(false);
-  useLayoutEffect(() => {
-    setDrawn(false);
-    const el = ref.current;
-    let len = 0;
-    if (el) {
-      try { len = el.getTotalLength(); } catch { len = 0; }
-      if (len) {
-        el.style.transition = 'none';
-        el.style.strokeDasharray = String(len);
-        el.style.strokeDashoffset = String(len);
-        el.getBoundingClientRect();
-      }
-    }
-    const raf = requestAnimationFrame(() => {
-      if (el && len) {
-        el.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
-        el.style.strokeDashoffset = '0';
-      }
-      setDrawn(true);
-    });
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dep]);
-  return drawn;
-}
-
-// Compact inline sparkline of volume-per-session shown on each PR list card.
-function Sparkline({ values, color = '#3B82F6' }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const H = 36, pad = 4;
-  const cW = Math.max(0, width - pad * 2);
-  const cH = H - pad * 2;
-  const toX = i => pad + (values.length === 1 ? cW / 2 : (i / (values.length - 1)) * cW);
-  const toY = v => max === min ? pad + cH / 2 : pad + cH - ((v - min) / (max - min)) * cH;
-  const points = values.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
-
-  const drawn = useChartDraw(lineRef, `${width}:${points}`);
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '8px' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <polyline ref={lineRef} points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-          {values.map((v, i) => <circle key={i} cx={toX(i)} cy={toY(v)} r="3" fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.25 + i * 0.05}s` }} />)}
-        </svg>
-      )}
-    </div>
-  );
-}
 
 // Builds the per-exercise history map from raw session + session_exercise rows.
 // Returns: { [name]: { name, category, sessions: [...asc], totalVolume, lastDate } }
@@ -115,6 +50,7 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
   const [history, setHistory] = useState({});      // name -> exercise history
   const [prs, setPrs] = useState([]);              // exercise_prs rows
   const [activeName, setActiveName] = useState(null);
+  const [volPeriod, setVolPeriod] = useState('all'); // Total Volume trend window
 
   const load = async () => {
     setLoading(true);
@@ -172,20 +108,48 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
 
   const activeExercise = activeName ? history[activeName] : null;
 
+  // Aggregate total training volume per workout day (all exercises combined),
+  // shown as a trend chart at the top — parallel to the calorie trend in Nutrition.
+  const volumeByDay = {};
+  exercises.forEach(ex => ex.sessions.forEach(s => {
+    const k = dayKey(s.date);
+    if (!k) return;
+    (volumeByDay[k] || (volumeByDay[k] = { date: s.date, value: 0 })).value += s.sets.volume;
+  }));
+  const volumePoints = Object.values(volumeByDay).sort((a, b) => a.date - b.date);
+  // Narrow the trend to the selected window (This Week / This Month / All Time).
+  const { start: volStart } = periodRange(volPeriod, new Date());
+  const periodPoints = volumePoints.filter(p => p.date >= volStart);
+
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {volumePoints.length >= 2 && (
+        <div className="card-flat" style={{ padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '4px' }}>
+            <p style={{ ...sectionLabel, margin: 0 }}>Total Volume</p>
+            <DropdownPill value={volPeriod} options={PERIOD_OPTIONS} onChange={setVolPeriod} />
+          </div>
+          {periodPoints.length >= 2 ? (
+            <TrendCompareChart base={{ entries: periodPoints, color: '#3B82F6', unit: 'lbs', label: 'Total Volume' }} />
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '24px 0 8px' }}>
+              Not enough workouts in this period.
+            </p>
+          )}
+        </div>
+      )}
       {byCategory.map(({ cat, items }) => (
         <div key={cat}>
           <p style={sectionLabel}>{cat}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {items.map(ex => {
-              const values = ex.sessions.map(s => s.sets.volume);
+              const sparkEntries = ex.sessions.map(s => ({ date: s.date, value: s.sets.volume }));
               return (
                 <div key={ex.name} className="card-flat" onClick={() => setActiveName(ex.name)} style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{ex.name}</span>
-                      {values.length >= 2 && <Sparkline values={values} color="#3B82F6" />}
+                      {sparkEntries.length >= 2 && <Sparkline entries={sparkEntries} color="#3B82F6" />}
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
                         Last recorded {fmtShortDate(ex.lastDate)}
                       </div>

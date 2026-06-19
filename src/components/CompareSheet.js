@@ -12,7 +12,9 @@ import React, { useState, useEffect } from 'react';
 //   onSelect   — (id) => void
 //   onRemove   — () => void   (clear the active comparison)
 //   onClose    — () => void
-export default function CompareSheet({ catalog, loading, selectedId, onSelect, onRemove, onClose }) {
+//   zIndex     — base stacking level (backdrop = zIndex, sheet = zIndex + 1).
+//                Defaults to 600; raise it when opening above a modal/portal.
+export default function CompareSheet({ catalog, loading, selectedId, onSelect, onRemove, onClose, zIndex = 600 }) {
   const [shown, setShown] = useState(false);
 
   // Slide up on mount; lock the page behind the sheet.
@@ -30,7 +32,7 @@ export default function CompareSheet({ catalog, loading, selectedId, onSelect, o
   return (
     <>
       <div onClick={close} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600,
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex,
         opacity: shown ? 1 : 0, transition: 'opacity 0.28s ease',
       }} />
       <div style={{
@@ -38,7 +40,7 @@ export default function CompareSheet({ catalog, loading, selectedId, onSelect, o
         transform: `translateX(-50%) translateY(${shown ? '0' : '100%'})`,
         transition: 'transform 0.3s cubic-bezier(0.2,0.8,0.2,1)',
         background: 'var(--card)', borderRadius: '24px 24px 0 0',
-        padding: '12px 20px 36px', zIndex: 601, boxShadow: '0 -4px 24px rgba(0,0,0,0.16)',
+        padding: '12px 20px 36px', zIndex: zIndex + 1, boxShadow: '0 -4px 24px rgba(0,0,0,0.16)',
         maxHeight: '78vh', display: 'flex', flexDirection: 'column',
       }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 16px', flexShrink: 0 }} />

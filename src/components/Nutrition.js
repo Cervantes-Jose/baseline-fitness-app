@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import { goalTrend } from './goalColor';
 import { weeklyTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
+import { Sparkline } from './Sparkline';
+import TrendCompareChart from './TrendCompareChart';
+import CompareSheet from './CompareSheet';
+import { loadCompareCatalog, findCatalogItem } from './compareSources';
 
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
@@ -43,6 +47,10 @@ const MACRONUTRIENTS = [
   { name: 'Carbs', key: 'carbs', unit: 'g', color: '#EAB308' },
 ];
 
+// Calories get their own trend card above the macros. Like macros, they read the
+// food_entries.calories column directly (per-row adjusted totals).
+const CALORIES = { name: 'Calories', key: 'calories', unit: 'cal', color: '#F97316' };
+
 const fmtNum = (v) => { const n = Number(v); return n % 1 === 0 ? String(n) : n.toFixed(1); };
 
 // food_entries.date is a locale string (e.g. "6/4/2026"); handle ISO too just in case.
@@ -70,144 +78,23 @@ const nutrientAmount = (food, nameLower) =>
     .filter(n => String(n.name || '').toLowerCase().includes(nameLower))
     .reduce((s, n) => s + (Number(n.value) || 0), 0);
 
-// Animates an SVG line drawing itself in (stroke-dashoffset), then fades in the dots/fill.
-// `ref` points at the line element; re-runs whenever `dep` (the path string) changes.
-function useChartDraw(ref, dep) {
-  const [drawn, setDrawn] = useState(false);
-  useLayoutEffect(() => {
-    setDrawn(false);
-    const el = ref.current;
-    let len = 0;
-    if (el) {
-      try { len = el.getTotalLength(); } catch { len = 0; }
-      if (len) {
-        el.style.transition = 'none';
-        el.style.strokeDasharray = String(len);
-        el.style.strokeDashoffset = String(len);
-        el.getBoundingClientRect();
-      }
-    }
-    const raf = requestAnimationFrame(() => {
-      if (el && len) {
-        el.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
-        el.style.strokeDashoffset = '0';
-      }
-      setDrawn(true);
-    });
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dep]);
-  return drawn;
-}
-
-// Compact inline sparkline shown inside each nutrient card (2+ entries).
-function MiniChart({ entries, color }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const sorted = [...entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
-  const values = sorted.map(e => Number(e.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-
-  const H = 36, pad = 4;
-  const cW = Math.max(0, width - pad * 2);
-  const cH = H - pad * 2;
-  const toX = i => pad + (sorted.length === 1 ? cW / 2 : (i / (sorted.length - 1)) * cW);
-  const toY = v => max === min ? pad + cH / 2 : pad + cH - ((v - min) / (max - min)) * cH;
-  const points = sorted.map((e, i) => `${toX(i)},${toY(Number(e.value))}`).join(' ');
-
-  const drawn = useChartDraw(lineRef, `${width}:${points}`);
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '8px' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <polyline ref={lineRef} points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-          {sorted.map((e, i) => <circle key={i} cx={toX(i)} cy={toY(Number(e.value))} r="3" fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.25 + i * 0.05}s` }} />)}
-        </svg>
-      )}
-    </div>
-  );
-}
-
-// Full-width detail trend chart: gradient fill + line + dots.
-function DetailChart({ entries, color }) {
-  const wrapRef = useRef(null);
-  const lineRef = useRef(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const H = 120, padX = 6, padTop = 12, padBottom = 10;
-  const cW = Math.max(0, width - padX * 2);
-  const cH = H - padTop - padBottom;
-  const values = entries.map(e => Number(e.value));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = (max - min) || 1;
-  const pts = entries.map((e, i) => {
-    const x = padX + (entries.length === 1 ? cW / 2 : (i / (entries.length - 1)) * cW);
-    const y = padTop + (1 - (Number(e.value) - min) / range) * cH;
-    return [x, y];
-  });
-  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
-  const fillPath = pts.length ? `${linePath} L${pts[pts.length - 1][0]},${padTop + cH} L${pts[0][0]},${padTop + cH} Z` : '';
-  const gradId = `ngrad-${color.replace('#', '')}`;
-  const labelEntries = entries.length <= 1
-    ? entries
-    : [entries[0], entries[Math.floor((entries.length - 1) / 2)], entries[entries.length - 1]];
-
-  const drawn = useChartDraw(lineRef, `${width}:${linePath}`);
-
-  return (
-    <div ref={wrapRef} style={{ width: '100%', marginTop: '14px' }}>
-      {width > 0 && (
-        <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {entries.length > 1 && <path d={fillPath} fill={`url(#${gradId})`} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.7s ease' }} />}
-          {entries.length > 1 && <path ref={lineRef} d={linePath} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
-          {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3.5" fill={color} style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.3 + i * 0.05}s` }} />)}
-        </svg>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-        {labelEntries.map((e, i) => (
-          <span key={i} style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{fmtListDate(e.date)}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Inline sparklines + full-width detail charts are shared components now
+// (Sparkline / TrendCompareChart) — see those files.
 
 function Nutrition({ selectedDate }) {
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [series, setSeries] = useState({});      // { nutrientName: [{ date, value }] } ascending by date
   const [rows, setRows] = useState([]);          // raw windowed food_entries rows ({ date, hour, food, name })
-  const [selectedNutrient, setSelectedNutrient] = useState(null); // { name, unit, color }
+  const [selectedNutrient, setSelectedNutrient] = useState(null); // { name, unit, color, macroKey }
   const [range, setRange] = useState('7D');
+
+  // Trend comparison: a cross-domain series (measurement / nutrition / PR) overlaid
+  // on the detail chart. Cleared whenever you leave detail so it never "sticks".
+  const [compareId, setCompareId] = useState(null);
+  const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  const [compareCatalog, setCompareCatalog] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Food-log mini view (bottom sheet) for a tapped history date.
   const [miniDate, setMiniDate] = useState(null);
@@ -229,6 +116,24 @@ function Nutrition({ selectedDate }) {
     }
   }, [miniDate]);
 
+  // Leaving the detail screen drops any active comparison (and its loaded catalog).
+  useEffect(() => {
+    if (view !== 'detail') { setCompareId(null); setCompareSheetOpen(false); setCompareCatalog(null); }
+  }, [view]);
+
+  // Lazy-load the cross-domain catalog on first sheet open per detail session; the
+  // nutrient being viewed is excluded so you can't compare a series with itself.
+  useEffect(() => {
+    if (!compareSheetOpen || compareCatalog || !selectedNutrient) return;
+    let cancelled = false;
+    setCompareLoading(true);
+    const excludeId = selectedNutrient.macroKey ? `nut:${selectedNutrient.macroKey}` : null;
+    loadCompareCatalog({ excludeId })
+      .then(cat => { if (!cancelled) setCompareCatalog(cat); })
+      .finally(() => { if (!cancelled) setCompareLoading(false); });
+    return () => { cancelled = true; };
+  }, [compareSheetOpen, compareCatalog, selectedNutrient]);
+
   const load = async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
@@ -240,7 +145,7 @@ function Nutrition({ selectedDate }) {
 
     const { data, error } = await supabase
       .from('food_entries')
-      .select('date, hour, food, name, protein, carbs, fats')
+      .select('date, hour, food, name, calories, protein, carbs, fats')
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
 
@@ -253,10 +158,12 @@ function Nutrition({ selectedDate }) {
 
     // Aggregate daily totals per nutrient: { name: { dateStr: total } }
     const totals = {};
+    totals[CALORIES.name] = {};
     MACRONUTRIENTS.forEach(m => { totals[m.name] = {}; });
     MICRONUTRIENTS.forEach(m => { totals[m.name] = {}; });
     for (const r of within) {
-      // Macros: straight off the row columns (every food row contributes).
+      // Calories + macros: straight off the row columns (every food row contributes).
+      totals[CALORIES.name][r.date] = (totals[CALORIES.name][r.date] || 0) + (Number(r[CALORIES.key]) || 0);
       for (const macro of MACRONUTRIENTS) {
         totals[macro.name][r.date] = (totals[macro.name][r.date] || 0) + (Number(r[macro.key]) || 0);
       }
@@ -274,7 +181,7 @@ function Nutrition({ selectedDate }) {
     }
 
     const built = {};
-    [...MACRONUTRIENTS, ...MICRONUTRIENTS].forEach(m => {
+    [CALORIES, ...MACRONUTRIENTS, ...MICRONUTRIENTS].forEach(m => {
       built[m.name] = Object.entries(totals[m.name])
         .map(([date, total]) => ({ date, value: Math.round(total * 10) / 10 }))
         .sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
@@ -289,6 +196,7 @@ function Nutrition({ selectedDate }) {
   const openItem = ({ name, unit, color, macroKey = null }) => {
     setSelectedNutrient({ name, unit, color, macroKey });
     setRange('7D');
+    setCompareId(null);
     setView('detail');
   };
 
@@ -312,7 +220,7 @@ function Nutrition({ selectedDate }) {
     const hours = Object.keys(byHour).map(Number).sort((a, b) => a - b);
     return (
       <>
-        <div onClick={closeMini} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600 }} />
+        <div onClick={closeMini} style={{ position: 'fixed', inset: 0, background: 'transparent', zIndex: 600 }} />
         <div ref={mini.sheetRef} onPointerDown={mini.onPointerDown} style={{
           position: 'fixed', bottom: 0, left: '50%', transform: `translateX(-50%) translateY(${miniOpen ? mini.dragY : window.innerHeight}px)`,
           transition: mini.dragging ? 'none' : 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -369,6 +277,19 @@ function Nutrition({ selectedDate }) {
     const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
     const history = descEntries.slice(0, 14);
 
+    // Comparison overlay: any series from the cross-domain catalog, sliced to the
+    // same window and normalized independently in the chart (units differ — we
+    // compare shape, not magnitude).
+    const compareItem = compareId ? findCatalogItem(compareCatalog, compareId) : null;
+    const compareData = compareItem ? {
+      entries: [...compareItem.entries]
+        .sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date))
+        .filter(e => parseEntryDate(e.date) >= sinceMs),
+      color: compareItem.color,
+      unit: compareItem.unit,
+      label: compareItem.label,
+    } : null;
+
     // Weekly trend delta — shared with Measurements and the dashboard trend widgets
     // (see trendMath.js). anchorMs is the Food Log date (defaults to today), the same
     // "as of" anchor the other surfaces use.
@@ -387,7 +308,28 @@ function Nutrition({ selectedDate }) {
         <div className="card-flat">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={sectionLabel}>Trend</p>
-            <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button onClick={() => setCompareSheetOpen(true)} style={{
+                display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '20px',
+                border: compareItem ? `1px solid ${compareData.color}` : '1px solid var(--border)',
+                background: 'var(--bg)', color: compareItem ? compareData.color : 'var(--text-secondary)',
+                fontSize: '12px', fontWeight: '700', cursor: 'pointer', maxWidth: '150px',
+              }}>
+                {compareItem ? (
+                  <>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: compareData.color, flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{compareData.label}</span>
+                    <span onClick={(e) => { e.stopPropagation(); setCompareId(null); }} style={{ marginLeft: '2px', fontSize: '14px', lineHeight: 1, flexShrink: 0 }}>×</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 19V9M10 19V5M16 19v-7M20 19H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    Compare
+                  </>
+                )}
+              </button>
+              <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
+            </div>
           </div>
 
           {allEntries.length === 0 ? (
@@ -410,7 +352,10 @@ function Nutrition({ selectedDate }) {
                 );
               })()}
               {rangeEntries.length > 0
-                ? <DetailChart entries={rangeEntries} color={color} />
+                ? <TrendCompareChart
+                    base={{ entries: rangeEntries, color, unit, label: name }}
+                    compare={compareData}
+                  />
                 : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>No entries in the last {days} days</p>
               }
             </>
@@ -439,6 +384,18 @@ function Nutrition({ selectedDate }) {
         )}
 
         {miniSheet}
+
+        {/* Compare picker */}
+        {compareSheetOpen && (
+          <CompareSheet
+            catalog={compareCatalog}
+            loading={compareLoading}
+            selectedId={compareId}
+            onSelect={setCompareId}
+            onRemove={() => setCompareId(null)}
+            onClose={() => setCompareSheetOpen(false)}
+          />
+        )}
       </div>
     );
   }
@@ -460,7 +417,7 @@ function Nutrition({ selectedDate }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-primary)' }}>{item.name}</span>
                 </div>
-                {data.length >= 2 && <MiniChart entries={data} color={color} />}
+                {data.length >= 2 && <Sparkline entries={data} color={color} />}
               </>
             ) : (
               <>
@@ -488,7 +445,11 @@ function Nutrition({ selectedDate }) {
 
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '8px 0 0' }}>Macronutrients</p>
+      <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '8px 0 0' }}>Calories</p>
+      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 4px' }}>Daily calorie totals from your logged foods, last 14 days.</p>
+      {renderCard(CALORIES, CALORIES.color)}
+
+      <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: '16px 0 0' }}>Macronutrients</p>
       <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 4px' }}>Daily totals from your logged foods, last 14 days.</p>
       {MACRONUTRIENTS.map(macro => renderCard(macro, macro.color))}
 

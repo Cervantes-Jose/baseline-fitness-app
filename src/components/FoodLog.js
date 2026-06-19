@@ -459,6 +459,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Flashlight/torch — only some devices expose it (Android Chrome yes, iOS Safari no).
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [manualBarcode, setManualBarcode] = useState('');   // typed-in barcode fallback
   const codeReaderRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -1280,6 +1281,16 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setTorchOn(false);
     setTorchSupported(false);
     setShowScanner(false);
+  };
+
+  // Manual entry fallback — same lookup path as a camera scan: stop the camera,
+  // then look the typed barcode up.
+  const submitManualBarcode = () => {
+    const code = manualBarcode.trim();
+    if (!code) return;
+    stopScanner();
+    setManualBarcode('');
+    handleBarcodeResult(code);
   };
 
   const handleBarcodeResult = async (barcode) => {
@@ -2156,6 +2167,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               Error: {scannerError}
             </p>
           ) : null}
+          {/* Manual barcode entry — pinned to the very bottom so it stays put while the camera scans. */}
+          <form onSubmit={(e) => { e.preventDefault(); submitManualBarcode(); }}
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 3, display: 'flex', gap: 8, padding: '14px 16px calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(to top, rgba(0,0,0,0.65), transparent)' }}>
+            <input value={manualBarcode} onChange={e => setManualBarcode(e.target.value)} inputMode="numeric"
+              placeholder="Enter barcode number"
+              style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 10, border: 'none', fontSize: 15, background: 'rgba(255,255,255,0.95)', color: '#111' }} />
+            <button type="submit" disabled={!manualBarcode.trim()}
+              style={{ flexShrink: 0, padding: '12px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 700, fontSize: 15, cursor: manualBarcode.trim() ? 'pointer' : 'default', opacity: manualBarcode.trim() ? 1 : 0.5 }}>
+              Go
+            </button>
+          </form>
           <style>{`
             @keyframes scanLine {
               0% { top: 0; }
