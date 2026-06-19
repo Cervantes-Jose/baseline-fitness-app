@@ -413,6 +413,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const [date, setDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
+  // Sticky date header: starts enlarged, shrinks to compact once the page scrolls.
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   // Days (YYYY-MM-DD) that have at least one food entry — drives the filled
   // circles in the calendar. Refreshed each time the calendar opens. food_entries.date
   // is stored as a locale date string, so convert each to a ymd key.
@@ -521,6 +523,26 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFoods(); }, [date]);
+
+  // Shrink the sticky date header once the page scrolls down, expand it back near
+  // the top. Uses HYSTERESIS (shrink at >56, expand at <8) rather than one
+  // threshold: the resize changes the header's height, and the browser's scroll
+  // anchoring then nudges scrollY by ~that amount — with a single threshold that
+  // nudge re-crosses it and the header oscillates ("have to scroll twice"). The
+  // wide dead-zone (8–56) is bigger than the height delta, so it can't re-trigger
+  // itself. rAF-throttled so we read scroll at most once per frame.
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+      setHeaderScrolled(prev => (prev ? y >= 8 : y > 56));
+    };
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Refresh the set of logged days whenever the calendar opens, so the filled
   // circles reflect any foods just added/removed.
@@ -1635,42 +1657,52 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   return (
     <div style={{ margin: '-20px', position: 'relative' }}>
 
-      {/* Calendar button — pinned to the top-right of the content (scrolls away
-          with the page, rather than floating fixed over the whole screen). */}
-      <button onClick={() => setShowCalendar(true)} style={{
-        position: 'absolute', top: 0, right: 0, zIndex: 150,
-        padding: '26px 20px 8px',
-        background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--accent)', display: 'flex', alignItems: 'center',
-      }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2"/>
-          <path d="M16 2v4M8 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          <path d="M3 10h18" stroke="currentColor" strokeWidth="2"/>
-        </svg>
-      </button>
-
-      {/* ─── DATE NAV ───────────────────────────────────────── */}
-      {/* Extra horizontal padding pulls the ‹ › arrows inward so the right arrow
-          clears the fixed calendar icon at the top-right. */}
+      {/* ─── STICKY DATE HEADER ─────────────────────────────────
+          The date + ‹ › arrows (and the calendar icon) stay frozen at the top
+          while the page scrolls, so the date control is always reachable. They
+          start a touch larger and shrink to compact once you scroll down. */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '28px 56px 8px',
+        position: 'sticky', top: 0, zIndex: 150, background: 'var(--bg)',
+        boxShadow: headerScrolled ? '0 2px 12px rgba(0,0,0,0.06)' : 'none',
+        transition: 'box-shadow 0.2s ease',
       }}>
-        <button onClick={() => changeDate(-1)} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,
-        }}>‹</button>
-        {/* Tapping the date jumps back to today when viewing any other day. */}
-        <button onClick={() => { if (!isToday) setDate(new Date()); }} disabled={isToday} style={{
-          background: 'none', border: 'none', padding: '2px 8px',
-          fontWeight: 600, fontSize: 15, color: 'var(--accent)',
-          cursor: isToday ? 'default' : 'pointer',
-        }}>{navDateText}</button>
-        <button onClick={() => changeDate(1)} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--text-secondary)', fontSize: 22, padding: '2px 8px', lineHeight: 1,
-        }}>›</button>
+        {/* Calendar button — frozen top-right, vertically centered, never resized. */}
+        <button onClick={() => setShowCalendar(true)} style={{
+          position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 2,
+          display: 'flex', alignItems: 'center', padding: '0 20px',
+          background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)',
+        }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="4" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2"/>
+            <path d="M16 2v4M8 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M3 10h18" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+        </button>
+
+        {/* Date nav — extra horizontal padding pulls the ‹ › arrows inward so the
+            right arrow clears the calendar icon. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: headerScrolled ? '14px 56px 10px' : '24px 56px 12px',
+          transition: 'padding 0.22s ease',
+        }}>
+          <button onClick={() => changeDate(-1)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary)', fontSize: headerScrolled ? 22 : 28, padding: '2px 8px', lineHeight: 1,
+            transition: 'font-size 0.22s ease',
+          }}>‹</button>
+          {/* Tapping the date jumps back to today when viewing any other day. */}
+          <button onClick={() => { if (!isToday) setDate(new Date()); }} disabled={isToday} style={{
+            background: 'none', border: 'none', padding: '2px 8px',
+            fontWeight: 600, fontSize: headerScrolled ? 15 : 19, color: 'var(--accent)',
+            cursor: isToday ? 'default' : 'pointer', transition: 'font-size 0.22s ease',
+          }}>{navDateText}</button>
+          <button onClick={() => changeDate(1)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-secondary)', fontSize: headerScrolled ? 22 : 28, padding: '2px 8px', lineHeight: 1,
+            transition: 'font-size 0.22s ease',
+          }}>›</button>
+        </div>
       </div>
 
       {/* ─── MACRO CIRCLES ──────────────────────────────────── */}
