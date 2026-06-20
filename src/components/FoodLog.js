@@ -464,6 +464,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [manualBarcode, setManualBarcode] = useState('');   // typed-in barcode fallback
   const codeReaderRef = useRef(null);
   const videoRef = useRef(null);
+  // True when the scanner was launched straight from the + menu (rather than from
+  // inside the Add Food sheet), so cancelling it closes the sheet back out too.
+  const scanStandaloneRef = useRef(false);
 
   // Foods confirmed for logging (via the left checkbox or the detail screen).
   // Keyed by food name → { food, serving, unit, adjustedMacros }.
@@ -1239,6 +1242,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   // ─── Barcode scanner ───────────────────────────────────────
+  // Launch the scanner straight from the food-tab + menu. The Add Food sheet is
+  // mounted underneath (hidden behind the full-screen camera) so a successful scan
+  // has somewhere to render its product detail; cancelling closes the sheet again.
+  const openScanner = () => {
+    scanStandaloneRef.current = true;
+    openAddFood(new Date().getHours());
+    startScanner();
+  };
+
   const startScanner = async () => {
     setScannerError('');
     setShowScanner(true);
@@ -1305,6 +1317,18 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setShowScanner(false);
   };
 
+  // Close the scanner from the × button. If it was opened straight from the + menu,
+  // also dismiss the Add Food sheet we mounted underneath it; otherwise just release
+  // the camera and fall back to the sheet the user was already in.
+  const closeScanner = () => {
+    if (scanStandaloneRef.current) {
+      scanStandaloneRef.current = false;
+      closeAddFood();   // closeAddFood() releases the camera via stopScanner()
+    } else {
+      stopScanner();
+    }
+  };
+
   // Manual entry fallback — same lookup path as a camera scan: stop the camera,
   // then look the typed barcode up.
   const submitManualBarcode = () => {
@@ -1316,6 +1340,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   };
 
   const handleBarcodeResult = async (barcode) => {
+    // A result means the product detail will take over — the standalone-cancel
+    // behavior no longer applies, so the next × just closes the detail/sheet.
+    scanStandaloneRef.current = false;
     setScanning(true);
     try {
       const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(barcode)}.json`);
@@ -2177,7 +2204,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       {/* Barcode camera scanner — full-screen, above the Add Food sheet */}
       {showScanner && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'black', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <button onClick={stopScanner} aria-label="Close scanner" style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 28, cursor: 'pointer', zIndex: 2 }}>×</button>
+          <button onClick={closeScanner} aria-label="Close scanner" style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 28, cursor: 'pointer', zIndex: 2 }}>×</button>
           {torchSupported && (
             <button onClick={toggleTorch} aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
               style={{ position: 'absolute', top: 20, left: 20, zIndex: 2, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: torchOn ? '#FACC15' : 'rgba(255,255,255,0.18)' }}>
@@ -2271,6 +2298,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           raised={workoutBarVisible}
           label="Add"
           actions={[
+            { label: 'Scan', onClick: openScanner },
             { label: 'Add Food', onClick: () => openAddFood(new Date().getHours()) },
             { label: 'Add Custom Food', onClick: () => openCustomFoodDetail(null) },
             { label: 'Add Meal', onClick: () => openMealBuilder(null) },

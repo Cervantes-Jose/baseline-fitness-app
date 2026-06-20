@@ -17,6 +17,9 @@ import { MACRO_COLOR } from './macroColors';
 // Canonical measurement palette — must match CHART_COLORS in Measurements.js so a
 // measurement keeps the same color in the picker as on its own detail screen.
 const MEAS_COLORS = ['#3B82F6', '#22C55E', '#EAB308', '#A855F7', '#F97316', '#EF4444', '#06B6D4', '#EC4899'];
+// PR trend lines pull from a curated palette indexed by position — same convention
+// as MEAS_COLORS above, so each exercise gets a distinct color that stays stable
+// across reloads (rather than re-rolling on every refresh).
 const PR_COLORS = ['#8B5CF6', '#0EA5E9', '#F43F5E', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#14B8A6'];
 const CALORIE_COLOR = '#F97316';
 

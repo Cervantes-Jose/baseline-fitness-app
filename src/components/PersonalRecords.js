@@ -7,6 +7,12 @@ import { Sparkline } from './Sparkline';
 import TrendCompareChart from './TrendCompareChart';
 import PersonalRecordDetail, { DropdownPill } from './PersonalRecordDetail';
 
+// Per-exercise trend lines pull from a curated palette indexed by position, so each
+// exercise gets a distinct color that stays stable across reloads (same convention as
+// the measurement/dashboard PR trend palette). Starts on purple so it doesn't clash
+// with the blue Total Volume aggregate chart above the list.
+const PR_COLORS = ['#8B5CF6', '#0EA5E9', '#F43F5E', '#10B981', '#F59E0B', '#6366F1', '#EC4899', '#14B8A6'];
+
 
 // Builds the per-exercise history map from raw session + session_exercise rows.
 // Returns: { [name]: { name, category, sessions: [...asc], totalVolume, lastDate } }
@@ -104,6 +110,10 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
   const other = exercises.filter(e => !CATEGORIES.includes(e.category)).sort((a, b) => a.name.localeCompare(b.name));
   if (other.length) byCategory.push({ cat: 'Other', items: other });
 
+  // Assign each exercise a distinct trend color by its flat position in render order.
+  const colorByName = {};
+  byCategory.flatMap(g => g.items).forEach((ex, i) => { colorByName[ex.name] = PR_COLORS[i % PR_COLORS.length]; });
+
   const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: '0 0 8px' };
 
   const activeExercise = activeName ? history[activeName] : null;
@@ -149,7 +159,7 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-primary)' }}>{ex.name}</span>
-                      {sparkEntries.length >= 2 && <Sparkline entries={sparkEntries} color="#3B82F6" />}
+                      {sparkEntries.length >= 2 && <Sparkline entries={sparkEntries} color={colorByName[ex.name]} />}
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
                         Last recorded {fmtShortDate(ex.lastDate)}
                       </div>

@@ -17,14 +17,14 @@ const ICON_PATHS = {
       <line x1="6" y1="12" x2="18" y2="12" />
     </>
   ),
-  // Dumbbell — center bar with inner + outer plates
+  // Dumbbell — center bar with bigger inner plates + smaller outer plates
   dumbbell: (
     <>
       <line x1="9" y1="12" x2="15" y2="12" />
-      <line x1="5" y1="8" x2="5" y2="16" />
-      <line x1="7" y1="9" x2="7" y2="15" />
-      <line x1="19" y1="8" x2="19" y2="16" />
-      <line x1="17" y1="9" x2="17" y2="15" />
+      <line x1="5" y1="9" x2="5" y2="15" />
+      <line x1="7" y1="8" x2="7" y2="16" />
+      <line x1="19" y1="9" x2="19" y2="15" />
+      <line x1="17" y1="8" x2="17" y2="16" />
     </>
   ),
   // Person — head + shoulders

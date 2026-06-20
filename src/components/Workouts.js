@@ -1450,6 +1450,12 @@ const updateSet = (exId, setIdx, field, value) => {
         {/* Exercise cards */}
         <div ref={logging.scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {activeRoutine.exercises.map(ex => renderLoggingCard(ex))}
+          {/* Add Exercise — identical to the config-view button; opens the shared picker,
+              which inserts into the routine and seeds sessionLog so the new card is loggable. */}
+          <button onClick={openExercisePicker}
+            style={{ width: '100%', background: 'transparent', border: '1px solid var(--accent)', borderRadius: '12px', color: 'var(--accent)', cursor: 'pointer', fontSize: '14px', fontWeight: '600', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            + Add Exercise
+          </button>
         </div>
 
         {/* Pause / Finish buttons */}
@@ -1464,9 +1470,9 @@ const updateSet = (exId, setIdx, field, value) => {
         </div>
 
         {showShortWorkoutModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+          <div style={{ position: 'fixed', inset: 0, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: '20px' }}
             onClick={() => setShowShortWorkoutModal(false)}>
-            <div style={{ background: 'var(--card)', borderRadius: '16px', padding: '24px', width: '300px' }}
+            <div style={{ background: 'var(--card)', border: '1.5px solid var(--accent)', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '340px', boxShadow: '0 12px 40px rgba(0,0,0,0.22)', animation: 'restTileIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
               onClick={e => e.stopPropagation()}>
               <p style={{ fontWeight: '700', marginBottom: '8px', fontSize: '17px', color: 'var(--text-primary)' }}>That was a quick one!</p>
               <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
@@ -1480,7 +1486,7 @@ const updateSet = (exId, setIdx, field, value) => {
                     setView('routines');
                     setActiveRoutine(null);
                   }}
-                  className="btn-secondary" style={{ flex: 1 }}>Discard</button>
+                  style={{ flex: 1, padding: '14px', borderRadius: '14px', background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}>Discard</button>
                 <button
                   onClick={() => { setShowShortWorkoutModal(false); confirmFinishWorkout(); }}
                   className="btn-primary" style={{ flex: 1 }}>Save</button>

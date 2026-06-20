@@ -6,6 +6,7 @@ import { goalTrend } from './goalColor';
 import { weeklyTrendDelta, parseEntryDate } from './trendMath';
 import RangePopover from './RangePopover';
 import { loadCompareCatalog } from './compareSources';
+import { currentStreak } from './habitMath';
 
 // Short "Jun 17" label that treats a 'YYYY-MM-DD' date as local midnight (so it
 // never slips a day in negative-UTC timezones).
@@ -299,6 +300,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [fats, setFats] = useState(0);
   const [streak, setStreak] = useState(0);
   const [weekWorkouts, setWeekWorkouts] = useState(0);
+  const [habitStreak, setHabitStreak] = useState(0);   // highest current streak across all habits
 
   // Custom widget layout — just the ordered list of placed widget ids, persisted to
   // localStorage. (Drag-reordering and row breaks were removed: macros now scroll
@@ -337,9 +339,23 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       if (!uid) return;
       supabase.from('measurements').select('id, name, goal').eq('user_id', uid).order('created_at', { ascending: true })
         .then(({ data }) => { if (data) setMeasurements(data); });
-      // Whether the user has any habits — gates the Daily Habits widget/placeholder.
-      supabase.from('habits').select('id').eq('user_id', uid).limit(1)
-        .then(({ data }) => setHasHabits(!!(data && data.length)));
+      // Habits drive two things: whether to show the Daily Habits widget, and the
+      // highest current streak across all habits (shown in the glance bar). Fetch all
+      // habits + logs once, group logged dates per habit, and take the best streak.
+      const [{ data: hs }, { data: logs }] = await Promise.all([
+        supabase.from('habits').select('*').eq('user_id', uid),
+        supabase.from('habit_logs').select('habit_id, date').eq('user_id', uid),
+      ]);
+      setHasHabits(!!(hs && hs.length));
+      if (hs && hs.length) {
+        const byHabit = {};
+        for (const l of logs || []) (byHabit[l.habit_id] || (byHabit[l.habit_id] = new Set())).add(l.date);
+        let best = 0;
+        for (const h of hs) { const s = currentStreak(h, byHabit[h.id] || new Set()); if (s > best) best = s; }
+        setHabitStreak(best);
+      } else {
+        setHabitStreak(0);
+      }
     })();
   }, []);
 
@@ -440,33 +456,35 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
 
   const chips = [
     {
+      // Unique two-tone flame — outer orange body with a lighter inner flame.
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="#F97316"><path d="M12 2C8.5 6 6 9 6 13a6 6 0 0012 0c0-4-2.5-7-6-11z"/></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C9 6 7.5 8.5 7.5 11.5c0 1 .3 1.9.8 2.6-1.1-.3-2-1.1-2.5-2.2C4.6 13.4 4 15.1 4 16.5a8 8 0 0 0 16 0c0-3.2-1.8-5.7-3.6-8C14.8 6.7 13.6 4.6 12 2z" fill="#F97316"/>
+          <path d="M12 21a3.3 3.3 0 0 0 3.3-3.3c0-1.6-1-2.7-1.9-3.8-.4 1.1-1.1 1.5-1.7 1.7.2-1.5-.5-2.5-1.1-3.2-.6.9-1.5 1.9-1.5 4A3.3 3.3 0 0 0 12 21z" fill="#FDBA74"/>
+        </svg>
       ),
       value: streak,
       label: 'Day streak',
     },
     {
+      // Dumbbell — matches the bottom-tab workout icon (bigger inner plates).
       icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="11" width="18" height="3" rx="1.5" fill="var(--accent)"/>
-          <rect x="7" y="7" width="3" height="11" rx="1.5" fill="var(--accent)"/>
-          <rect x="14" y="7" width="3" height="11" rx="1.5" fill="var(--accent)"/>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="9" y1="12" x2="15" y2="12" />
+          <line x1="5" y1="9" x2="5" y2="15" />
+          <line x1="7" y1="8" x2="7" y2="16" />
+          <line x1="19" y1="9" x2="19" y2="15" />
+          <line x1="17" y1="8" x2="17" y2="16" />
         </svg>
       ),
       value: weekWorkouts,
       label: 'This week',
     },
     {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="9" stroke="#22C55E" strokeWidth="2"/>
-          <circle cx="12" cy="12" r="4" stroke="#22C55E" strokeWidth="2"/>
-          <circle cx="12" cy="12" r="1" fill="#22C55E"/>
-        </svg>
-      ),
-      value: calorieGoal,
-      label: 'Cal goal',
+      // Highest current habit streak — just the number + label, no icon.
+      icon: null,
+      value: habitStreak,
+      label: 'Habit Streak',
     },
   ];
 
