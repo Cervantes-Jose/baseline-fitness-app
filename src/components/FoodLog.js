@@ -132,7 +132,7 @@ function MacroCircle({ value, goal, color, trackColor, label, isCalories }) {
 
 // ─── SERVING / MACRO HELPERS ─────────────────────────────────
 // ─── FOOD DETAIL VIEW ────────────────────────────────────────
-function FoodDetailView({ scrollRef, food, serving, unit, servings, onServing, onUnit, onServings, onBack, hideBack, onAdd, edit, editing, onStartEdit, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
+function FoodDetailView({ scrollRef, food, serving, unit, servings, onServing, onUnit, onServings, onBack, hideBack, onAdd, edit, editing, onStartEdit, onDelete, onEditField, onEditMicro, favorited, onToggleFavorite, hour, onHourChange, entryMode, entryDirty, addLabel }) {
   const [showAllMicros, setShowAllMicros] = useState(false);
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [hourMenuOpen, setHourMenuOpen] = useState(false);   // hour-picker dropdown in the detail view
@@ -389,6 +389,15 @@ function FoodDetailView({ scrollRef, food, serving, unit, servings, onServing, o
             ))}
           </div>
         )}
+
+        {/* Delete — only while editing a saved custom food; sits at the bottom of the
+            nutrient content, above the sticky Save bar. */}
+        {editable && onDelete && (
+          <button onClick={onDelete}
+            style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', fontSize: '15px', fontWeight: '600', cursor: 'pointer', marginBottom: '12px' }}>
+            Delete Custom Food
+          </button>
+        )}
       </div>
 
       {/* Sticky action — when editing a logged entry, stay blank until something changes. */}
@@ -500,9 +509,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // rather than from inside the Add Food sheet. On Back we close the whole sheet so the
   // user returns to that main screen instead of landing on the Add Food list.
   const [detailFromMain, setDetailFromMain] = useState(false);
-  // Main Custom Foods tab: quick rename/delete mode + in-progress name edits keyed by id.
-  const [customEditMode, setCustomEditMode] = useState(false);
-  const [nameDrafts, setNameDrafts] = useState({});
 
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -562,11 +568,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); loadLastPortions(); }, []);
-
-  // Leave the Custom Foods quick-edit mode when navigating away from that tab.
-  useEffect(() => {
-    if (activeFilter !== 'Custom Foods' && customEditMode) { setCustomEditMode(false); setNameDrafts({}); }
-  }, [activeFilter, customEditMode]);
 
   // Long-press multi-select only applies to the main log timeline. Switching filter tabs
   // (Favorites/Custom Foods/Meals/Nutrition) moves off that view, so cancel any in-progress
@@ -949,6 +950,24 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setDetailFood(null);
   };
 
+  // Delete the custom food currently open in the editor, then close back out the
+  // same way saving does. Only meaningful for an already-saved food (has an id).
+  const deleteCustomDetail = async () => {
+    const e = customEdit;
+    if (!e || !e.id) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    setCustomFoods(prev => prev.filter(f => f.id !== e.id));
+    setCheckedFoods(prev => { const n = { ...prev }; delete n[e.name]; return n; });
+    if (isFavorite(e.name)) removeFavorite(e.name);
+    await supabase.from('custom_foods').delete().eq('id', e.id).eq('user_id', uid);
+    setCustomEdit(null);
+    setCustomEditing(false);
+    setDetailFood(null);
+    if (customFromMain) closeAddFood();
+  };
+
   // Read mode: stage an already-saved custom food into the log. Scale by the serving size
   // (relative to the food's defined serving) and the number of servings — matches the
   // detail-view tiles and buildLoggedFields.
@@ -969,41 +988,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(null);
-  };
-
-  const deleteCustomFood = async (food) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) return;
-    setCustomFoods(prev => prev.filter(f => f.id !== food.id));
-    setCheckedFoods(prev => { const n = { ...prev }; delete n[food.name]; return n; });
-    if (isFavorite(food.name)) removeFavorite(food.name);
-    await supabase.from('custom_foods').delete().eq('id', food.id).eq('user_id', uid);
-  };
-
-  // Quick-rename from the Custom Foods edit mode. No-op when the name is unchanged.
-  // Keeps the favorite (which is keyed by name) in sync if this food is favorited.
-  const commitRename = async (food, raw) => {
-    const newName = (raw ?? '').trim() || 'Custom Food';
-    if (newName === food.name) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) return;
-    setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, name: newName } : f)));
-    const { error } = await supabase.from('custom_foods').update({ name: newName }).eq('id', food.id).eq('user_id', uid);
-    if (error) { return; }
-    if (isFavorite(food.name)) {
-      const snap = { ...food, name: newName };
-      setFavorites(prev => prev.map(fv => (fv.name === food.name ? { ...fv, name: newName, food: snap } : fv)));
-      supabase.from('favorite_foods').update({ name: newName, food: snap }).eq('name', food.name).eq('user_id', uid);
-    }
-  };
-
-  // Leave edit mode, flushing any pending name edits first.
-  const exitCustomEditMode = async () => {
-    await Promise.all(customFoods.map(f => commitRename(f, nameDrafts[f.id] ?? f.name)));
-    setNameDrafts({});
-    setCustomEditMode(false);
   };
 
   const searchFoods = async (query) => {
@@ -1631,8 +1615,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   );
 
   // Meal row, log style (Favorites + Meals pill in the Add Food sheet): per-serving
-  // macros under the name, "per serving" on the right. Tapping logs it at one serving.
-  const renderMealLogRow = (meal) => {
+  // macros under the name. Tapping logs it at one serving. In the Favorites tab
+  // (`favorite`) it carries a ★ Favorite badge and drops the "per serving" label,
+  // matching the food favorite rows; elsewhere it keeps "per serving" on the right.
+  const renderMealLogRow = (meal, { favorite = false } = {}) => {
     const s = Number(meal.servings) > 0 ? Number(meal.servings) : 1;
     const per = (v) => Math.round((Number(v) || 0) / s);
     return (
@@ -1644,12 +1630,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{meal.name}</span>
             <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Meal</span>
+            {favorite && <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>★ Favorite</span>}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
             {per(meal.calories)} cal · {per(meal.protein)}g P · {per(meal.carbs)}g C · {per(meal.fats)}g F
           </div>
         </div>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>per serving</span>
+        {!favorite && <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>per serving</span>}
       </div>
     );
   };
@@ -1795,7 +1782,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   const fm = filterByName(meals), ff = filterByName(favorites);
                   return fm.length === 0 && ff.length === 0
                     ? emptyState('No favorites match your search.')
-                    : <>{fm.map(renderMealLogRow)}{ff.map(renderFavoriteRow)}</>;
+                    : <>{fm.map(m => renderMealLogRow(m, { favorite: true }))}{ff.map(renderFavoriteRow)}</>;
                 })()}
               </>}
         </div>
@@ -1817,14 +1804,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ) : activeFilter === 'Custom Foods' ? (
         /* ─── CUSTOM FOODS LIST ──────────────────────────────── */
         <div style={{ padding: '8px 20px 40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
-            {customFoods.length > 0 && (
-              <button onClick={() => (customEditMode ? exitCustomEditMode() : setCustomEditMode(true))}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: '4px 0', flexShrink: 0 }}>
-                {customEditMode ? 'Done' : 'Edit'}
-              </button>
-            )}
-          </div>
           {customFoods.length === 0 ? (
             emptyState('No custom foods yet. Tap “+ Add Custom Food” to create one.')
           ) : (() => {
@@ -1834,19 +1813,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               {fc.length === 0
                 ? emptyState('No custom foods match your search.')
                 : fc.map(food => (
-            customEditMode ? (
-              /* Edit mode: inline rename + quick delete. */
-              <div key={'mcustom-' + food.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                <input
-                  value={nameDrafts[food.id] ?? food.name}
-                  onChange={(e) => setNameDrafts(prev => ({ ...prev, [food.id]: e.target.value }))}
-                  onBlur={() => commitRename(food, nameDrafts[food.id] ?? food.name)}
-                  aria-label="Custom food name"
-                  style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', outline: 'none', padding: '2px 0' }} />
-                <button onClick={() => deleteCustomFood(food)} aria-label="Delete custom food"
-                  style={{ background: 'none', border: 'none', color: '#ff4444', fontSize: 13, fontWeight: 600, padding: '4px 6px', cursor: 'pointer', flexShrink: 0 }}>Delete</button>
-              </div>
-            ) : (
               <div key={'mcustom-' + food.id} onClick={() => openCustomFoodDetail(food, false)} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer',
@@ -1865,7 +1831,6 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-            )
           ))}
             </>;
           })()}
@@ -2037,6 +2002,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               edit={customEdit}
               editing={customEditing}
               onStartEdit={() => setCustomEditing(true)}
+              onDelete={customEdit?.id ? deleteCustomDetail : undefined}
               onEditField={editCustomField}
               onEditMicro={editCustomMicro}
               favorited={isFavorite(detailFood.name)}
@@ -2156,7 +2122,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               (favorites.length === 0 && (addFoodMealMode || meals.length === 0))
                 ? emptyState('No favorites yet. Open a food and choose “Add to Favorites”.')
                 : <>
-                    {!addFoodMealMode && meals.map(renderMealLogRow)}
+                    {!addFoodMealMode && meals.map(m => renderMealLogRow(m, { favorite: true }))}
                     {favorites.map(renderFavoriteRow)}
                   </>
             ) : addFoodTab === 'custom' ? (
@@ -2169,7 +2135,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                 ? emptyState('A meal can’t be added inside another meal.')
                 : meals.length === 0
                   ? emptyState('No meals yet. Open the Meals tab to build one.')
-                  : meals.map(renderMealLogRow)
+                  : meals.map(m => renderMealLogRow(m))
             )}
           </div>
 

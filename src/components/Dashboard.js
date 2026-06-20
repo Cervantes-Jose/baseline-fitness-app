@@ -301,6 +301,9 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [streak, setStreak] = useState(0);
   const [weekWorkouts, setWeekWorkouts] = useState(0);
   const [habitStreak, setHabitStreak] = useState(0);   // highest current streak across all habits
+  // Sticky greeting header: starts enlarged, shrinks to compact once the page
+  // scrolls (mirrors the Food Log date header).
+  const [headerScrolled, setHeaderScrolled] = useState(false);
 
   // Custom widget layout — just the ordered list of placed widget ids, persisted to
   // localStorage. (Drag-reordering and row breaks were removed: macros now scroll
@@ -362,6 +365,24 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   // Cross-domain trend series (Nutrition daily totals + Personal Records 1RM history),
   // reused from the Compare catalog so every surface plots the same data.
   useEffect(() => { loadCompareCatalog().then(setTrendCatalog).catch(() => {}); }, []);
+
+  // Shrink the sticky greeting once the page scrolls down, expand it back near the
+  // top. Uses HYSTERESIS (shrink at >64, expand at <8) so the layout shift from the
+  // resize — which scroll anchoring then nudges scrollY by — can't re-cross the
+  // threshold and make the header oscillate. The dead-zone (8–64) is wider than the
+  // collapsing greeting's height delta. rAF-throttled to one read per frame.
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const y = window.scrollY;
+      setHeaderScrolled(prev => (prev ? y >= 8 : y > 64));
+    };
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Entering edit mode, nudge the macro row slightly left so the trailing "add" card
   // peeks in from the right — the placed macros stay the visible default.
@@ -741,12 +762,26 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
 
   return (
     <div style={{ paddingBottom: 8 }}>
-      {/* Header / greeting */}
-      <div style={{ padding: '32px 20px 8px' }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+      {/* Header / greeting — stays frozen at the top and shrinks once scrolled,
+          like the Food Log date header. The subtitle collapses away when compact. */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 150, background: 'var(--bg)',
+        boxShadow: headerScrolled ? '0 2px 12px rgba(0,0,0,0.06)' : 'none',
+        padding: headerScrolled ? '14px 20px 10px' : '32px 20px 8px',
+        transition: 'padding 0.22s ease, box-shadow 0.2s ease',
+      }}>
+        <div style={{
+          fontSize: headerScrolled ? 19 : 26, fontWeight: 800, color: 'var(--text-primary)',
+          letterSpacing: '-0.5px', lineHeight: 1.15, transition: 'font-size 0.22s ease',
+        }}>
           Good {timeOfDay}, <span style={{ color: 'var(--accent)' }}>{displayName}</span>
         </div>
-        <div style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4, fontWeight: 400 }}>
+        <div style={{
+          fontSize: 14, color: 'var(--text-muted)', fontWeight: 400, overflow: 'hidden',
+          maxHeight: headerScrolled ? 0 : 24, opacity: headerScrolled ? 0 : 1,
+          marginTop: headerScrolled ? 0 : 4,
+          transition: 'max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease',
+        }}>
           Let's crush your goals today.
         </div>
       </div>
