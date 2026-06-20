@@ -22,6 +22,46 @@ export function setStats(setsRaw) {
   return { weights, repsArr, totalReps, totalSets, volume, avgWeight };
 }
 
+// Heaviest *performed* weight (a set with both weight and reps) logged for an
+// exercise name across past sessions. `history` is the Workouts history array:
+// [{ exercises: [{ name, sets: [{weight, reps}] }] }]. Returns 0 if never done.
+export function maxWeightInHistory(history, name) {
+  let max = 0;
+  for (const s of history || []) {
+    for (const ex of s.exercises || []) {
+      if (ex.name !== name) continue;
+      for (const set of parseSets(ex.sets)) {
+        const w = Number(set.weight) || 0;
+        const r = Number(set.reps) || 0;
+        if (r > 0 && w > max) max = w;
+      }
+    }
+  }
+  return max;
+}
+
+// New weight PRs from a just-finished session: exercises whose top performed set
+// beat their previous all-time best weight. `sessionLog` is keyed by exercise id
+// ({ [exId]: [{weight, reps}] }); `history` must be the PRE-save history so the
+// current session isn't counted as its own previous best. First-time exercises
+// (no prior best) are skipped, so every result reads as "prev → next".
+// Returns [{ name, prev, next }].
+export function computeWorkoutPRs(exercises, sessionLog, history) {
+  const prs = [];
+  for (const ex of exercises || []) {
+    let thisMax = 0;
+    for (const set of parseSets(sessionLog[ex.id])) {
+      const w = Number(set.weight) || 0;
+      const r = Number(set.reps) || 0;
+      if (r > 0 && w > thisMax) thisMax = w;
+    }
+    if (thisMax <= 0) continue;
+    const prevMax = maxWeightInHistory(history, ex.name);
+    if (prevMax > 0 && thisMax > prevMax) prs.push({ name: ex.name, prev: prevMax, next: thisMax });
+  }
+  return prs;
+}
+
 // Number with at most one decimal, trailing ".0" stripped.
 export const fmtNum = (v) => {
   const n = Number(v) || 0;

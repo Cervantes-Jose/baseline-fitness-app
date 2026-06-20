@@ -20,6 +20,9 @@ import { CSS } from '@dnd-kit/utilities';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import MonthOverviewCalendar from './MonthOverviewCalendar';
 import { ymd, parseYmd } from './habitMath';
+import WorkoutSummary from './WorkoutSummary';
+import { computeWorkoutPRs } from './prMath';
+import { celebrateHaptic } from './haptics';
 
 // Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
 // once; if a name appears in multiple categories it's attributed to the first
@@ -615,6 +618,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   const [calendarView, setCalendarView] = useState(false);
   const [calendarDayModal, setCalendarDayModal] = useState(null);
   const [showShortWorkoutModal, setShowShortWorkoutModal] = useState(false);
+  // Post-workout celebration screen data, or null when hidden. Built in
+  // confirmFinishWorkout once the session is saved; dismissed by its Finish button.
+  const [workoutSummary, setWorkoutSummary] = useState(null);
   const [routineEditMode, setRoutineEditMode] = useState(false);
   // Routines ticked in edit mode (the tile stays the same; a bottom action bar acts on these).
   const [selectedRoutines, setSelectedRoutines] = useState(new Set());
@@ -1226,13 +1232,28 @@ const updateSet = (exId, setIdx, field, value) => {
       duration: workoutSeconds,
       user_id: uid,
     };
-    const exerciseInserts = activeRoutine.exercises.map(ex => ({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      exercise_name: ex.name,
-      sets: currentLog[ex.id] || [],
-      user_id: uid,
-    }));
+    // A set counts as completed only when the user checked it off. History, PRs,
+    // and the summary all reflect completed sets only — typing a weight/reps
+    // without ticking the set does NOT log it.
+    const completedLog = {};
+    activeRoutine.exercises.forEach(ex => {
+      const logged = currentLog[ex.id] || [];
+      const checks = checkedSets[ex.id] || [];
+      completedLog[ex.id] = logged.filter((_, idx) => !!checks[idx]);
+    });
+
+    // Only record exercises that had at least one completed set. A session where
+    // nothing was completed saves no exercise rows (it shows as empty in history)
+    // instead of logging the whole planned workout.
+    const exerciseInserts = activeRoutine.exercises
+      .filter(ex => completedLog[ex.id].length > 0)
+      .map(ex => ({
+        id: crypto.randomUUID(),
+        session_id: sessionId,
+        exercise_name: ex.name,
+        sets: completedLog[ex.id],
+        user_id: uid,
+      }));
 
     // Try the normal online save. If it fails because we're offline, queue the
     // bundle and fall through to the exact same success path — the user can't
@@ -1265,8 +1286,28 @@ const updateSet = (exId, setIdx, field, value) => {
       ));
     } catch {}
 
+    // Build the post-workout summary BEFORE refreshing history below — `history`
+    // here is the pre-save state, so the weight-PR comparison doesn't count this
+    // session as its own previous best. completedCount mirrors the logging modal's
+    // "exercises" stat (an exercise counts as done once any set is checked).
+    const summaryExercises = activeRoutine.exercises.map(ex => ({
+      name: ex.name,
+      completed: completedLog[ex.id].length > 0,
+      sets: completedLog[ex.id],
+    }));
+    const summary = {
+      routineName: activeRoutine.name,
+      completedCount: summaryExercises.filter(e => e.completed).length,
+      totalCount: activeRoutine.exercises.length,
+      exercises: summaryExercises,
+      prs: computeWorkoutPRs(activeRoutine.exercises, completedLog, history),
+      unit: metricSystem === 'metric' ? 'kg' : 'lbs',
+    };
+
     await loadHistory();   // online: refetch; offline: merges the just-queued workout
     await loadRoutines();
+    setWorkoutSummary(summary);   // celebration screen; its Finish button clears it
+    celebrateHaptic();           // three medium buzzes
     setActiveWorkout(null);
     setView('routines');
     setActiveRoutine(null);
@@ -1766,6 +1807,9 @@ const updateSet = (exId, setIdx, field, value) => {
       )}
       {loggingModal}
       {exercisePickerSheet}
+      {workoutSummary && (
+        <WorkoutSummary summary={workoutSummary} metricSystem={metricSystem} onFinish={() => setWorkoutSummary(null)} />
+      )}
     </div>
   );
 
