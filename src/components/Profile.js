@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
+import FeedbackModal from './FeedbackModal';
 
 // ─── ICONS ──────────────────────────────────────────────────
 // All row icons inherit color from their IconBox (accent), 18px, stroke style.
@@ -120,6 +121,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, onOpenHabits = () => {}, onOpenMeasurements = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const toastTimer = useRef(null);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
@@ -194,7 +196,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
         <Row icon={ICONS.question} label="Help Center" onClick={comingSoon} />
         <Row icon={ICONS.shield} label="Privacy Policy" onClick={onOpenPrivacy} />
         <Row icon={ICONS.document} label="Terms of Service" onClick={onOpenTerms} />
-        <Row icon={ICONS.chat} label="Feedback" onClick={comingSoon} isLast />
+        <Row icon={ICONS.chat} label="Feedback" onClick={() => setFeedbackOpen(true)} isLast />
       </Section>
 
       {/* Sign Out — App.js redirects to AuthScreen via the onAuthStateChange listener */}
@@ -210,6 +212,8 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
       </button>
 
       <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} theme={theme} setTheme={setTheme} />
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} user={user} />
 
       {/* Coming-soon toast */}
       {toast && (
