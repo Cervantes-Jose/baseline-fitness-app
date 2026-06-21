@@ -209,7 +209,10 @@ export default function AuthScreen({ onAuth = () => {} }) {
         <h1 style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-1px', margin: 0, lineHeight: 1.1 }}>
           {view === 'login' && <span style={{ display: 'block' }}>Welcome to</span>}
           {view === 'signup' && <span>Join </span>}
-          <span style={{ display: view === 'signup' ? 'inline' : 'block', color: 'var(--accent)' }}>Baseline Fitness</span>
+          <span style={{ display: view === 'signup' ? 'inline' : 'block' }}>
+            <span style={{ color: '#101624' }}>Baseline </span>
+            <span style={{ color: 'var(--accent)' }}>Fitness</span>
+          </span>
         </h1>
         <p style={{ fontSize: 16, color: 'var(--text-muted)', marginTop: 12 }}>
           {view === 'login'
