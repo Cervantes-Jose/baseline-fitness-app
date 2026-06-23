@@ -92,10 +92,40 @@ serve(async (req) => {
 
     const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=40&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS),Branded";
 
-    const response = await fetch(usdaUrl);
+    // USDA throttles bursts and returns transient 5xx/429s, which previously surfaced to
+    // the client as a generic "Search unavailable". Retry a couple of times with a short
+    // backoff (most failures are transient) before giving up. A 10s per-attempt timeout
+    // stops a hung USDA call from holding the function open.
+    const fetchUsda = async (): Promise<Response> => {
+      let last: Response | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+        try {
+          const r = await fetch(usdaUrl, { signal: AbortSignal.timeout(10000) });
+          if (r.ok) return r;
+          last = r;
+          // 4xx other than 429 won't fix themselves — stop retrying.
+          if (r.status !== 429 && r.status < 500) return r;
+        } catch (_e) {
+          last = null;   // network/timeout — fall through to retry
+        }
+      }
+      if (last) return last;
+      throw new Error("USDA API unreachable");
+    };
+
+    const response = await fetchUsda();
     const responseText = await response.text();
 
     if (!response.ok) {
+      // Surface USDA throttling as a 429 so the client shows the friendly "slow down"
+      // message and its own rate-limit UI, instead of a generic failure.
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "USDA rate limit", scope: "upstream" }),
+          { status: 429, headers: { ...jsonHeaders, "Retry-After": "5" } }
+        );
+      }
       throw new Error("USDA API error: " + response.status + " - " + responseText);
     }
 

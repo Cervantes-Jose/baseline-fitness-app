@@ -596,10 +596,11 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       return;
     }
     clearTimeout(searchDebounceRef.current);
-    // 600ms (not less): USDA calls take ~700ms, so a shorter delay lets the next
-    // keystroke abort an in-flight request (logged as a 500) and burns an extra
-    // rate-limit count per pause. Longer debounce = fewer aborts + less count burn.
-    searchDebounceRef.current = setTimeout(() => searchFoods(query), 600);
+    // 800ms: USDA calls take ~700–1900ms, so a shorter delay lets the next keystroke fire
+    // a second (non-cancellable, server-side) USDA call before the first returns — bursts
+    // of overlapping calls are what trigger USDA's throttling and the resulting errors.
+    // A longer debounce means one settled query per pause = fewer calls + less throttling.
+    searchDebounceRef.current = setTimeout(() => searchFoods(query), 800);
     return () => clearTimeout(searchDebounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, showAddFoodScreen]);
@@ -633,7 +634,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     const { data } = await supabase
       .from('food_entries')
-      .select('name, calories, protein, carbs, fats')
+      .select('name, calories, protein, carbs, fats, food')
       .eq('user_id', uid)
       .gte('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
@@ -644,7 +645,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       for (const entry of data) {
         if (!seen.has(entry.name) && recent.length < 15) {
           seen.add(entry.name);
-          recent.push({ name: entry.name, calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fats: entry.fats });
+          // Rebuild from the stored snapshot, which carries the correct per-gram basis
+          // (servingSize = total grams, macros = total for that). Re-scaling it by the
+          // last portion reproduces the logged total instead of double-counting the
+          // serving. Legacy rows with no snapshot fall back to the raw totals as a
+          // 100 g base (best-effort — those can't be re-scaled accurately).
+          const snap = entry.food;
+          recent.push(snap
+            ? { ...snap, name: entry.name }
+            : { name: entry.name, calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fats: entry.fats });
         }
       }
     }
@@ -876,13 +885,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     });
     // A custom food's serving SIZE is part of its definition (saved_serving/saved_unit),
     // so always show that — never a previously logged serving, which would mask edits to
-    // the size and make saves look like they didn't take. Only the number-of-servings
-    // count is remembered from the last log.
-    const last = existing ? lastPortions[food?.name] : null;
+    // the size and make saves look like they didn't take. Servings always opens at 1 so the
+    // detail shows the food's per-serving values (matching the list row), rather than
+    // re-applying the last-logged count, which made an unchanged food look doubled.
     const { serving, unit } = defaultServingOf(food || {});
     setDetailServing(String(serving));
     setDetailUnit(unit);
-    setDetailServings(String(last?.servings || 1));
+    setDetailServings('1');
     setCustomEditing(!existing || startEditing);   // new foods start editable
     setDetailFood(existing ? food : { name: 'Custom Food', isCustom: true });
   };
@@ -1340,21 +1349,31 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
       const p = data.product;
       const nutriments = p.nutriments || {};
+      // Lock every nutrient to ONE basis so the macros and the servingSize they're stored
+      // against always agree. Mixing per-serving macros onto a per-serving gram base only
+      // works if the per-serving fields exist for every nutrient — otherwise per-100g
+      // values get pinned to a serving-sized base and inflate. Use the serving basis only
+      // when serving_quantity AND the serving energy are both present; else fall back to
+      // the per-100g basis, which Open Food Facts populates far more consistently.
+      const servingGrams = Number(p.serving_quantity) || 0;
+      const useServing = servingGrams > 0 && nutriments['energy-kcal_serving'] != null;
+      const suffix = useServing ? '_serving' : '_100g';
+      const n = (key) => Number(nutriments[key + suffix]) || 0;
       const food = {
         name: p.product_name || p.product_name_en || 'Unknown Product',
         brandOwner: p.brands || null,
-        servingSize: p.serving_quantity || 100,
-        servingSizeUnit: p.serving_quantity_unit || 'g',
-        calories: nutriments['energy-kcal_serving'] || nutriments['energy-kcal_100g'] || 0,
-        protein: nutriments['proteins_serving'] || nutriments['proteins_100g'] || 0,
-        carbs: nutriments['carbohydrates_serving'] || nutriments['carbohydrates_100g'] || 0,
-        fats: nutriments['fat_serving'] || nutriments['fat_100g'] || 0,
+        servingSize: useServing ? servingGrams : 100,
+        servingSizeUnit: useServing ? (p.serving_quantity_unit || 'g') : 'g',
+        calories: n('energy-kcal'),
+        protein: n('proteins'),
+        carbs: n('carbohydrates'),
+        fats: n('fat'),
         nutrients: [
-          { name: 'Fiber', value: nutriments['fiber_serving'] || nutriments['fiber_100g'] || 0, unit: 'g' },
-          { name: 'Sugar', value: nutriments['sugars_serving'] || nutriments['sugars_100g'] || 0, unit: 'g' },
-          { name: 'Sodium', value: nutriments['sodium_serving'] || nutriments['sodium_100g'] || 0, unit: 'mg' },
-          { name: 'Cholesterol', value: nutriments['cholesterol_serving'] || nutriments['cholesterol_100g'] || 0, unit: 'mg' },
-        ].filter(n => n.value > 0),
+          { name: 'Fiber', value: n('fiber'), unit: 'g' },
+          { name: 'Sugar', value: n('sugars'), unit: 'g' },
+          { name: 'Sodium', value: n('sodium'), unit: 'mg' },
+          { name: 'Cholesterol', value: n('cholesterol'), unit: 'mg' },
+        ].filter(x => x.value > 0),
         fromBarcode: true,
       };
 
@@ -1366,6 +1385,24 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     }
   };
 
+  // Macros for a chosen portion. Custom foods define their macros for a saved serving, so
+  // they scale via customServingScale (relative to that serving) — the same basis the
+  // detail view, addCustomToLog, and buildMealComponent use. Everything else scales by
+  // grams. Using computeMacros for both only agrees when a custom food's saved serving
+  // equals 100 g, so this branch is required to keep the quick-add checkbox consistent.
+  const adjustedMacrosFor = (food, serving, unit, servings) => {
+    if (food?.isCustom) {
+      const sc = customServingScale(food, serving, unit) * (Number(servings) || 0);
+      return {
+        calories: Math.round((Number(food.calories) || 0) * sc),
+        protein: Math.round((Number(food.protein) || 0) * sc),
+        carbs: Math.round((Number(food.carbs) || 0) * sc),
+        fats: Math.round((Number(food.fats) || 0) * sc),
+      };
+    }
+    return computeMacros(food, serving, unit, servings);
+  };
+
   // Instant check from a recent/custom row — adds the food at its saved serving.
   const toggleChecked = (food) => {
     setCheckedFoods(prev => {
@@ -1374,7 +1411,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       const last = lastPortions[food.name];
       const { serving, unit } = last || defaultServingOf(food);
       const servings = last?.servings || 1;
-      next[food.name] = { food, serving, unit, servings, adjustedMacros: computeMacros(food, serving, unit, servings) };
+      next[food.name] = { food, serving, unit, servings, adjustedMacros: adjustedMacrosFor(food, serving, unit, servings) };
       return next;
     });
   };
@@ -1484,7 +1521,9 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const isSearchActive = searchQuery.trim().length > 0;
   // Custom foods are pinned at the top, so exclude their names from the recent/search list below to avoid duplicates.
   const customNames = new Set(customFoods.map(f => f.name));
-  const displayedFoods = (isSearchActive && !searchError ? (searchResults || []) : recentFoodList).filter(f => !customNames.has(f.name));
+  // When searching, show only live results (never fall back to unrelated recents — that
+  // made a failed search look half-working); recents are for the non-search Recent tab.
+  const displayedFoods = (isSearchActive ? (searchResults || []) : recentFoodList).filter(f => !customNames.has(f.name));
   const displayedCustomFoods = isSearchActive
     ? customFoods.filter(f => f.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : customFoods;
@@ -1531,8 +1570,12 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
 
   const renderFoodRow = (food, showCheckbox) => {
     const checked = !!checkedFoods[food.name];
-    const ds = defaultServingOf(food);
-    const dm = computeMacros(food, ds.serving, ds.unit);
+    // Preview the macros for the portion that tapping this row will open with — the last
+    // portion used for this food, else its base serving — so the row and the detail screen
+    // always show the same numbers (mirrors openDetail's seeding).
+    const last = lastPortions[food.name];
+    const ds = last || defaultServingOf(food);
+    const dm = adjustedMacrosFor(food, ds.serving, ds.unit, last?.servings || 1);
     return (
       <div key={food.name + (food.brandOwner || '')} onClick={() => openDetail(food)} style={{
         display: 'flex', alignItems: 'center', gap: '12px',
@@ -2098,18 +2141,25 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
               /* Search overrides the pills: custom matches first, then live results. */
               <>
                 {displayedCustomFoods.map(renderCustomRow)}
-                {searchError && (
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
-                    {searchError} — showing recent foods
-                  </p>
+                {searchError ? (
+                  /* Failed after the server's retries — clean message + Retry, no recents. */
+                  <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '14px' }}>{searchError}</p>
+                    <button onClick={() => searchFoods(searchQuery.trim())} className="btn-secondary" style={{ padding: '9px 22px' }}>
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {searchResults && searchResults.length > 0 && (
+                      <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>Results</p>
+                    )}
+                    {!searchLoading && searchResults && searchResults.length === 0 && (
+                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No results found</p>
+                    )}
+                    {displayedFoods.map(food => renderFoodRow(food, false))}
+                  </>
                 )}
-                {(searchError || (searchResults && searchResults.length > 0)) && (
-                  <p className="section-title" style={{ marginBottom: '4px', fontWeight: 800, color: 'var(--text-secondary)' }}>{searchError ? 'Recent' : 'Results'}</p>
-                )}
-                {!searchLoading && !searchError && searchResults && searchResults.length === 0 && (
-                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0' }}>No results found</p>
-                )}
-                {displayedFoods.map(food => renderFoodRow(food, !!searchError))}
               </>
             ) : addFoodTab === 'recent' ? (
               <>

@@ -72,8 +72,10 @@ function WorkoutSummary({ summary, metricSystem = 'imperial', onFinish = () => {
           <p style={{ margin: '5px 0 0', fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600 }}>Great Work</p>
         </div>
 
-        {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Scrollable body — minHeight:0 lets this flex child shrink below its content
+            height so overflow-y:auto actually scrolls (without it the expanded exercise
+            list grows the body and the card just clips it). */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* Card 1: routine name + completed/total, expandable */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
             <div onClick={() => setExpanded(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px', cursor: 'pointer' }}>
