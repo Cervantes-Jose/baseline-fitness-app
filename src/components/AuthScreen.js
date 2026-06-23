@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import LegalSheet from './LegalSheet';
+import DateOfBirthInput from './DateOfBirthInput';
 
 // Eye / eye-off icon for the password reveal toggle.
 function EyeIcon({ off }) {
@@ -272,14 +273,12 @@ export default function AuthScreen({ onAuth = () => {} }) {
         {view === 'signup' && (
           <div style={fieldGroup}>
             <label className="section-title" style={fieldLabel}>Date of Birth</label>
-            <input
-              className="input"
-              type="date"
-              max={new Date().toISOString().slice(0, 10)}
+            <DateOfBirthInput
               value={dob}
-              onChange={(e) => setDob(e.target.value)}
+              onChange={setDob}
               disabled={loading}
-              style={{ ...bigInput, textAlign: 'left' }}
+              max={new Date().toISOString().slice(0, 10)}
+              style={bigInput}
             />
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
               You must be at least 13 years old.

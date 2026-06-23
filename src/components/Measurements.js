@@ -97,7 +97,7 @@ function MeasurementCalendar({ selected, onSelect, onClose }) {
 
 export const DEFAULT_MEASUREMENT_NAMES = [
   'Weight', 'Body Fat', 'Neck', 'Chest', 'Left Bicep', 'Right Bicep',
-  'Stomach', 'Hips', 'Left Thigh', 'Right Thigh',
+  'Waist', 'Hips', 'Left Thigh', 'Right Thigh',
 ];
 
 // Lowercased set of the hardcoded names so a measurement is recognized as a
