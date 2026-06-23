@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { MACROS } from './macroColors';
-
-const DEFAULTS = { calorie_goal: 2000, protein_goal: 180, carbs_goal: 200, fats_goal: 60 };
+import { useNutritionGoals, GOAL_DEFAULTS } from './useNutritionGoals';
 
 // How far the macros' implied calories may drift from the calorie goal before we flag
-// the math as "not adding up" (calories-anchored model). Scales with the goal — 5% or
-// 100 kcal, whichever is larger — so a normal split isn't flagged but a gross mismatch
-// (e.g. 500g protein on a 100 kcal goal) is.
-const calToleranceFor = (goal) => Math.max(100, Math.round(goal * 0.05));
+// the math as "not adding up" (calories-anchored model). Scales with the goal — 3% or
+// 50 kcal, whichever is larger. The 50 floor stays comfortably above integer-gram
+// rounding noise (a macro split can always land within ~9 kcal of any target), so a
+// normal split isn't flagged but a real mismatch (e.g. macros summing to 2100 on a
+// 2000 kcal goal) is.
+const calToleranceFor = (goal) => Math.max(50, Math.round(goal * 0.03));
 
 // ─── NUTRITION GOALS TAB ─────────────────────────────────────
 // View mode: calorie goal + macro tiles showing today's consumed/total (Dashboard
@@ -16,12 +17,13 @@ const calToleranceFor = (goal) => Math.max(100, Math.round(goal * 0.05));
 // focus-to-expand macro editor where the active macro's grams + % enlarge and the
 // other two shrink. Grams ⇄ % stay in sync; math turns red when it doesn't balance.
 export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
-  const [draft, setDraft] = useState(DEFAULTS);
+  // The hook owns the canonical user_goals row (load + persist); `draft` is the local
+  // editable working copy, seeded from the loaded goals once they arrive.
+  const { goals, loading, saveGoals: persistGoals } = useNutritionGoals();
+  const [draft, setDraft] = useState(GOAL_DEFAULTS);
   const [consumed, setConsumed] = useState({ protein: 0, carbs: 0, fats: 0 });
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [rowId, setRowId] = useState(null);
 
   const [calInputMode, setCalInputMode] = useState(false);
   const [calInputValue, setCalInputValue] = useState('');
@@ -32,28 +34,11 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
     proteinG: '0', proteinP: '0', carbsG: '0', carbsP: '0', fatsG: '0', fatsP: '0',
   });
 
-  useEffect(() => { loadGoals(); loadConsumed(); }, []);
+  useEffect(() => { loadConsumed(); }, []);
 
-  const loadGoals = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) { setLoading(false); return; }
-    const { data, error } = await supabase
-      .from('user_goals').select('*').eq('user_id', uid)
-      .order('created_at', { ascending: false }).limit(1);
-    if (error) { setLoading(false); return; }
-    if (data && data.length > 0) {
-      const row = data[0];
-      setDraft({
-        calorie_goal: row.calorie_goal ?? DEFAULTS.calorie_goal,
-        protein_goal: row.protein_goal ?? DEFAULTS.protein_goal,
-        carbs_goal:   row.carbs_goal   ?? DEFAULTS.carbs_goal,
-        fats_goal:    row.fats_goal    ?? DEFAULTS.fats_goal,
-      });
-      setRowId(row.id);
-    }
-    setLoading(false);
-  };
+  // Seed the editable draft from the loaded goals once they're in (only while not
+  // editing, so a load that resolves mid-edit can't clobber in-progress changes).
+  useEffect(() => { if (!loading && !editMode) setDraft(goals); }, [loading, goals]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Today's logged macros, so the view-mode tiles can show consumed / total.
   const loadConsumed = async () => {
@@ -96,18 +81,7 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
       calorie_goal: next.calorie_goal, protein_goal: next.protein_goal,
       carbs_goal: next.carbs_goal, fats_goal: next.fats_goal,
     };
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) { setSaving(false); return; }
-    let error;
-    if (rowId) {
-      ({ error } = await supabase.from('user_goals').update(payload).eq('id', rowId).eq('user_id', uid));
-    } else {
-      const { data, error: insErr } = await supabase
-        .from('user_goals').insert([{ ...payload, user_id: uid }]).select().single();
-      error = insErr;
-      if (data) setRowId(data.id);
-    }
+    const { error } = await persistGoals(payload);
     if (error) { setSaving(false); return; }
     setDraft(next);
     onGoalsUpdate(next);

@@ -17,6 +17,7 @@ import AuthScreen from './components/AuthScreen';
 import TabIcon from './components/TabIcons';
 import { supabase } from './supabaseClient';
 import { flushWorkoutQueue } from './components/offlineQueue';
+import { useNutritionGoals } from './components/useNutritionGoals';
 
 // ─── TAB CONFIGS ────────────────────────────────────────────
 const MAIN_TABS = [
@@ -69,10 +70,11 @@ const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
-const [calorieGoal, setCalorieGoal] = useState(2000);
-const [proteinGoal, setProteinGoal] = useState(180);
-const [carbsGoal, setCarbsGoal] = useState(200);
-const [fatsGoal, setFatsGoal] = useState(60);
+// Saved nutrition goals (loaded from user_goals, reloaded on sign-in/out). The Goals
+// screen's Save pushes its values straight back via onGoalsUpdate → setGoals, so the
+// Dashboard/Food Log update without a round-trip.
+const { goals, setGoals } = useNutritionGoals(user?.id);
+const { calorie_goal: calorieGoal, protein_goal: proteinGoal, carbs_goal: carbsGoal, fats_goal: fatsGoal } = goals;
 const [activeWorkout, setActiveWorkout] = useState(() => {
   try { return JSON.parse(localStorage.getItem('activeWorkout')); } catch { return null; }
 });
@@ -282,7 +284,7 @@ const changeDate = (dir) => {
       case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
       case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} workoutBarVisible={!!activeWorkout && !workoutExpanded} /></div>;
-      case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(goals) => { setCalorieGoal(goals.calorie_goal); setProteinGoal(goals.protein_goal); setCarbsGoal(goals.carbs_goal); setFatsGoal(goals.fats_goal); }} />;
+      case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(g) => setGoals(prev => ({ ...prev, ...g }))} />;
       case 'profile-habits': return <DailyHabits onBack={() => setActiveTab('profile')} showToast={showToast} />;
       case 'profile-measurements': return <Measurements metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
       case 'workout-start':
