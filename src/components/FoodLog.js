@@ -430,6 +430,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [loggedDates, setLoggedDates] = useState(() => new Set());
   const [activeFilter, setActiveFilter] = useState('Add Food');
   const [foods, setFoods] = useState({});
+  const [yesterdayFoods, setYesterdayFoods] = useState({});
   const [loading, setLoading] = useState(true);
 
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
@@ -531,7 +532,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   }, [selectMode, onSelectModeChange]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFoods(); }, [date]);
+  useEffect(() => { loadFoods(); loadYesterdayFoods(); }, [date]);
 
   // Shrink the sticky date header once the page scrolls down, expand it back near
   // the top. Uses HYSTERESIS (shrink at >56, expand at <8) rather than one
@@ -624,6 +625,28 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     });
     setFoods(grouped);
     setLoading(false);
+  };
+
+  const loadYesterdayFoods = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const yest = new Date(date);
+    yest.setDate(yest.getDate() - 1);
+    const yesterdayStr = yest.toLocaleDateString();
+    const { data } = await supabase
+      .from('food_entries')
+      .select('*')
+      .eq('user_id', uid)
+      .eq('date', yesterdayStr)
+      .order('created_at', { ascending: true });
+    if (!data) return;
+    const grouped = {};
+    data.forEach(entry => {
+      if (!grouped[entry.hour]) grouped[entry.hour] = [];
+      grouped[entry.hour].push(entry);
+    });
+    setYesterdayFoods(grouped);
   };
 
   const loadRecentFoods = async () => {
@@ -1116,6 +1139,24 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (error) { return; }
     loadFoods();
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
+  };
+
+  const copyHourFromYesterday = async (hour) => {
+    const entries = yesterdayFoods[hour] || [];
+    if (entries.length === 0) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const inserts = entries.map(e => ({
+      name: e.name, calories: e.calories, protein: e.protein, carbs: e.carbs, fats: e.fats,
+      hour, date: dateStr, serving: e.serving ?? null, unit: e.unit ?? null,
+      servings: e.servings ?? null, food: e.food ?? null, user_id: uid,
+    }));
+    const { error } = await supabase.from('food_entries').insert(inserts);
+    if (error) return;
+    loadFoods();
+    const count = inserts.length;
+    showToast(`Copied ${count} food${count !== 1 ? 's' : ''} from yesterday`, null, null);
   };
 
   // Move the selected foods (long-press bar) to the tapped hour on the shown date.
@@ -1932,6 +1973,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                         color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0,
                       }}>+ Add Food</button>
                     </div>
+                    {isToday && hourFoods.length === 0 && (yesterdayFoods[h.value] || []).length > 0 && !copyMode && !moveMode && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); copyHourFromYesterday(h.value); }}
+                        style={{
+                          display: 'block', width: '100%', marginTop: 8,
+                          padding: '8px 12px', background: 'transparent',
+                          border: '1.5px solid var(--accent)', borderRadius: 8,
+                          color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                          cursor: 'pointer', opacity: 0.5, textAlign: 'center',
+                        }}
+                      >
+                        Copy from Yesterday ({(yesterdayFoods[h.value] || []).length} item{(yesterdayFoods[h.value] || []).length !== 1 ? 's' : ''})
+                      </button>
+                    )}
                     {hourFoods.length > 0 && (
                       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {(() => {
