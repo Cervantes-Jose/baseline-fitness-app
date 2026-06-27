@@ -128,13 +128,20 @@ export default function AuthScreen({ onAuth = () => {} }) {
     });
     if (error) { setLoading(false); setError(error.message); return; }
     // When email confirmation is off there's a session immediately, so write
-    // DOB straight to the profiles row. When it's on, this no-ops (no session)
-    // and the metadata copy above is synced into profiles on first load.
+    // DOB straight to the profiles row and log the user in. When it's on, there's
+    // no session yet — show a "verify your email" message and send them to the
+    // sign-in view instead (the metadata DOB is synced into profiles on first load).
     if (data?.user?.id && data?.session) {
       await supabase.from('profiles').upsert({ user_id: data.user.id, dob }, { onConflict: 'user_id' });
+      setLoading(false);
+      onAuth(data.user);
+      return;
     }
     setLoading(false);
-    onAuth(data.user);
+    setView('login');
+    setPassword('');
+    setConfirmPassword('');
+    setSuccess(`We've sent a verification link to ${email}. Please confirm your email, then sign in.`);
   };
 
   const handleReset = async () => {

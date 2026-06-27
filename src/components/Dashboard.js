@@ -313,8 +313,19 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [measurements, setMeasurements] = useState([]);
   const [trendCatalog, setTrendCatalog] = useState([]);   // cross-domain trend series (Nutrition + PRs)
   const macroScrollRef = useRef(null);
+
   const persistLayout = (nextOrder) => {
+    // Write to localStorage immediately for instant feedback on next load.
     try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [] })); } catch {}
+    // Also write to Supabase so it survives browser storage eviction (iOS clears
+    // localStorage after ~7 days of inactivity).
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const uid = session?.user?.id;
+      if (!uid) return;
+      supabase.from('profiles')
+        .upsert({ user_id: uid, dashboard_layout: { order: nextOrder } }, { onConflict: 'user_id' })
+        .then(() => {});
+    });
   };
   const saveOrder = (next) => { setOrder(next); persistLayout(next); };
 
@@ -333,6 +344,26 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, [today]);
+
+  // Restore layout from Supabase if localStorage was cleared (e.g. iOS 7-day eviction).
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase.from('profiles').select('dashboard_layout').eq('user_id', uid).single();
+      if (!data?.dashboard_layout?.order) return;
+      // Only apply the server copy if localStorage is missing or empty — if localStorage
+      // has a value it was written more recently (same session) and should win.
+      const local = (() => { try { return localStorage.getItem('dashboardLayout'); } catch { return null; } })();
+      if (!local) {
+        const serverOrder = data.dashboard_layout.order;
+        setOrder(serverOrder);
+        try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: serverOrder, breaks: [] })); } catch {}
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // All measurements the user tracks — each becomes an available trend widget.
   useEffect(() => {

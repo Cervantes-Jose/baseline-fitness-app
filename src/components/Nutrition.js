@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import useSwipeToDismiss from './useSwipeToDismiss';
-import { goalTrend } from './goalColor';
 import { weeklyTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
 import { Sparkline } from './Sparkline';
@@ -340,17 +339,14 @@ function Nutrition({ selectedDate }) {
                 {fmtNum(latestEntry.value)}<span style={{ fontSize: '0.7em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>{fmtLongDate(latestEntry.date)}</div>
-              {showDelta && (() => {
-                const trend = goalTrend(diff, Number(latestEntry.value), null);
-                return (
-                  <div style={{ marginTop: '10px' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: trend.soft, color: trend.color, fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
-                      {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}<span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
-                    </span>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
-                  </div>
-                );
-              })()}
+              {showDelta && (
+                <div style={{ marginTop: '10px' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'var(--accent-light)', color: 'var(--accent)', fontSize: '13px', fontWeight: '700', padding: '4px 10px', borderRadius: '20px' }}>
+                    {diff > 0 ? '↑' : diff < 0 ? '↓' : ''} {fmtNum(Math.abs(diff))}<span style={{ fontSize: '0.85em', fontWeight: '600', marginLeft: '2px' }}>{unit}</span>
+                  </span>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>{compareLabel}</div>
+                </div>
+              )}
               {rangeEntries.length > 0
                 ? <TrendCompareChart
                     base={{ entries: rangeEntries, color, unit, label: name }}

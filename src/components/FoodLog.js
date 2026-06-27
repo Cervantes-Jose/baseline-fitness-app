@@ -1781,7 +1781,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             right arrow clears the calendar icon. */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: headerScrolled ? '14px 56px 10px' : '24px 56px 12px',
+          padding: headerScrolled ? '10px 56px 6px' : '24px 56px 12px',
           transition: 'padding 0.22s ease',
         }}>
           <button onClick={() => changeDate(-1)} style={{
@@ -1800,6 +1800,38 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
             color: 'var(--text-secondary)', fontSize: headerScrolled ? 22 : 28, padding: '2px 8px', lineHeight: 1,
             transition: 'font-size 0.22s ease',
           }}>›</button>
+        </div>
+
+        {/* Compact macro strip — fades in once the user scrolls past the macro circles widget */}
+        <div style={{
+          overflow: 'hidden',
+          maxHeight: headerScrolled ? '36px' : '0px',
+          opacity: headerScrolled ? 1 : 0,
+          transition: 'max-height 0.22s ease, opacity 0.22s ease',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0',
+            padding: '0 16px 10px',
+          }}>
+            {[
+              { value: totals.calories, label: 'Cal', color: '#3B82F6' },
+              { value: totals.protein,  label: 'P',   color: '#22C55E' },
+              { value: totals.fats,     label: 'F',   color: '#3B82F6' },
+              { value: totals.carbs,    label: 'C',   color: '#EAB308' },
+            ].map((m, i) => (
+              <React.Fragment key={m.label}>
+                {i > 0 && <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 10px' }} />}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                    {Math.round(m.value)}
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: m.color }}>
+                    {m.label}
+                  </span>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
 
