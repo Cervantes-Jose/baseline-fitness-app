@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { MACROS } from './macroColors';
 import { useNutritionGoals, GOAL_DEFAULTS } from './useNutritionGoals';
+import { Skeleton } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 // How far the macros' implied calories may drift from the calorie goal before we flag
 // the math as "not adding up" (calories-anchored model). Scales with the goal — 3% or
@@ -133,7 +135,26 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
   const calDiff = impliedCal - draft.calorie_goal;
   const mathOff = editMode && Math.abs(calDiff) > calToleranceFor(draft.calorie_goal);
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Loading…</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <>
+      <div>
+        <Skeleton width={120} height={15} style={{ margin: '0 4px 8px' }} />
+        <div className="card"><Skeleton width={150} height={46} radius={8} style={{ margin: '8px auto' }} /></div>
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Skeleton width={140} height={15} style={{ margin: '0 4px 8px' }} />
+        <div className="card">
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ padding: '14px 0' }}>
+              <Skeleton width="35%" height={14} />
+              <Skeleton width="55%" height={11} style={{ marginTop: 8 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
 
   // Matches the rest-timer steppers in the routine editor: clear inside, accent border.
   const calStep = {

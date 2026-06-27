@@ -12,6 +12,8 @@ import {
   customServingScale, defaultServingOf, parseMicros, buildLoggedFields, CUSTOM_MICRO_FIELDS,
   buildMealComponent, sumMealComponents, mealAsFood,
 } from './foodMath';
+import { SkeletonTimelineRow } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 const FOOD_SEARCH_URL = 'https://xbvncbvoyatxbdhkkifq.supabase.co/functions/v1/food-search';
 
@@ -432,6 +434,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const [foods, setFoods] = useState({});
   const [yesterdayFoods, setYesterdayFoods] = useState({});
   const [loading, setLoading] = useState(true);
+  const showSkeleton = useDelayedFlag(loading);
 
   const [showAddFoodScreen, setShowAddFoodScreen] = useState(false);
   const [addFoodOpen, setAddFoodOpen] = useState(false);   // drives the slide-up transform
@@ -1954,7 +1957,13 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ) : activeFilter === 'Nutrition' ? (
         <Nutrition selectedDate={date} />
       ) : loading ? (
-        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Loading...</p>
+        !showSkeleton ? null : (
+          <div style={{ position: 'relative', paddingBottom: 40 }}>
+            {/* Vertical connecting line — matches the real timeline (left:28px) */}
+            <div style={{ position: 'absolute', left: 28, top: 0, bottom: 0, width: 1, background: 'var(--border)', zIndex: 0 }} />
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonTimelineRow key={i} />)}
+          </div>
+        )
       ) : (
         <div style={{ position: 'relative', paddingBottom: 40 }}>
           {/* Vertical connecting line through dot centers */}

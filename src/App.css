@@ -434,6 +434,12 @@ border-bottom: none;
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Skeleton loading placeholders — gentle opacity pulse. Fill uses --border so
+   blocks read as placeholders on a --card/--bg surface in both themes. The
+   reduced-motion rule below neutralizes the animation automatically. */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.skeleton { animation: pulse 1.4s ease-in-out infinite; }
+
 /* Respect users who prefer reduced motion (accessibility) */
 @media (prefers-reduced-motion: reduce) {
   * {

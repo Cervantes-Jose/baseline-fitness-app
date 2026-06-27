@@ -11,6 +11,8 @@ import MonthOverviewCalendar from './MonthOverviewCalendar';
 import { ymd } from './habitMath';
 import useSwipeToDismiss from './useSwipeToDismiss';
 import Fab from './Fab';
+import { SkeletonListRow } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 const BLUE = '#3B82F6';
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -401,7 +403,12 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     setNewValue('');
   };
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {Array.from({ length: 6 }).map((_, i) => <SkeletonListRow key={i} />)}
+    </div>
+  );
 
   // Defaults render in their canonical order regardless of created_at (a bulk
   // seed insert doesn't reliably preserve array order); custom measurements

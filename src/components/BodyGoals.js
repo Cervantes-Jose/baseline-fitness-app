@@ -4,6 +4,8 @@ import { supabase } from '../supabaseClient';
 import { DEFAULT_MEASUREMENT_NAMES, getDefaultUnit } from './Measurements';
 import { GOOD, BAD } from './goalColor';
 import useSwipeToDismiss from './useSwipeToDismiss';
+import { Skeleton } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 // A measurement's `goal` (numeric, nullable) lives on the `measurements` row — it's
 // user-owned target data, covered by the table's owner RLS policy. Weight/Body Fat are
@@ -109,7 +111,20 @@ useEffect(() => { load(); }, []);
     await load();
   };
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Loading…</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <>
+      <Skeleton width={170} height={15} style={{ margin: '4px 4px 8px' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} className="card-flat">
+            <Skeleton width="40%" height={15} />
+            <Skeleton height={10} radius={8} style={{ marginTop: 12 }} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
 
   // Any measurement can have a goal, even one with no entries yet (its card just shows
   // "—" for current until data is logged).

@@ -6,6 +6,8 @@ import { setStats, sessionDate, fmtShortDate, fmtVolume, dayKey, periodRange, PE
 import { Sparkline } from './Sparkline';
 import TrendCompareChart from './TrendCompareChart';
 import PersonalRecordDetail, { DropdownPill } from './PersonalRecordDetail';
+import { Skeleton, SkeletonListRow, SkeletonSectionLabel } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 // Per-exercise trend lines pull from a curated palette indexed by position, so each
 // exercise gets a distinct color that stays stable across reloads (same convention as
@@ -88,7 +90,23 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
   // Optimistically append a freshly-logged 1RM so the detail sheet updates without a reload.
   const addPr = (row) => setPrs(prev => [...prev, row]);
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading…</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div className="card-flat">
+        <Skeleton width="40%" height={11} />
+        <Skeleton height={120} radius={8} style={{ marginTop: 12 }} />
+      </div>
+      {[0, 1].map(g => (
+        <div key={g}>
+          <SkeletonSectionLabel />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[0, 1].map(i => <SkeletonListRow key={i} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const exercises = Object.values(history);
 

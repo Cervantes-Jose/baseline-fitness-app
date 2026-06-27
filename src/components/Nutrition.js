@@ -7,6 +7,8 @@ import { Sparkline } from './Sparkline';
 import TrendCompareChart from './TrendCompareChart';
 import CompareSheet from './CompareSheet';
 import { loadCompareCatalog, findCatalogItem } from './compareSources';
+import { SkeletonListRow } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 // Standard micronutrients we surface trends for. We match these against the
 // nutrient names stored on each logged food's snapshot (food_entries.food.nutrients,
@@ -205,7 +207,12 @@ function Nutrition({ selectedDate }) {
 
   const sectionLabel = { fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 };
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {Array.from({ length: 6 }).map((_, i) => <SkeletonListRow key={i} />)}
+    </div>
+  );
 
   // ─── FOOD LOG MINI VIEW (bottom sheet) ──────────────────────
   const miniSheet = miniDate && selectedNutrient && (() => {

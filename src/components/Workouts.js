@@ -23,6 +23,8 @@ import { ymd, parseYmd } from './habitMath';
 import WorkoutSummary from './WorkoutSummary';
 import { computeWorkoutPRs } from './prMath';
 import { celebrateHaptic } from './haptics';
+import { Skeleton, SkeletonRoutineTile } from './Skeleton';
+import useDelayedFlag from './useDelayedFlag';
 
 // Map each exercise name to the category it came from. Built from EXERCISE_DATABASE
 // once; if a name appears in multiple categories it's attributed to the first
@@ -1390,7 +1392,13 @@ const updateSet = (exId, setIdx, field, value) => {
   };
 
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  const showSkeleton = useDelayedFlag(loading);
+  if (loading) return !showSkeleton ? null : (
+    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <Skeleton width={110} height={15} style={{ margin: '8px 0 0' }} />
+      {Array.from({ length: 4 }).map((_, i) => <SkeletonRoutineTile key={i} />)}
+    </div>
+  );
 
   // A single logging card.
   const renderLoggingCard = (ex) => (
