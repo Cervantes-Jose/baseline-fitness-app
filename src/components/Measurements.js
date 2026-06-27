@@ -497,6 +497,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         const badge = !isDefault && (
           <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
         );
+        const sparkEntries = m.entries.filter(e => parseEntryDate(e.date) >= Date.now() - 14 * 86400000);
         return (
           <div key={m.id} className="card-flat">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -507,7 +508,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
                       <span style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text-primary)' }}>{m.name}</span>
                       {badge}
                     </div>
-                    {m.entries.length >= 2 && <Sparkline entries={m.entries} color={color} />}
+                    {sparkEntries.length >= 2 && <Sparkline entries={sparkEntries} color={color} />}
                   </>
                 ) : (
                   <>
@@ -566,12 +567,35 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const entryDays = new Set(Object.keys(entriesByDay));
     const goal = activeMeasurement.goal == null || activeMeasurement.goal === '' ? null : Number(activeMeasurement.goal);
 
-    const days = range === '7D' ? 7 : 14;
+    const days = range === '7D' ? 7 : range === '14D' ? 14 : null;
     const since = new Date();
     since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - days);
-    const sinceMs = since.getTime();
-    const rangeEntries = allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
+    since.setDate(since.getDate() - (days || 0));
+    const sinceMs = days != null ? since.getTime() : 0;
+    const rangeEntries = (() => {
+      if (range !== 'All') return allEntries.filter(e => parseEntryDate(e.date) >= sinceMs);
+      // For All Time, bucket entries to keep the chart clean:
+      // > 6 months of data → group by month; > 4 weeks → group by week; else raw.
+      if (allEntries.length < 2) return allEntries;
+      const spanDays = (parseEntryDate(allEntries[allEntries.length - 1].date) - parseEntryDate(allEntries[0].date)) / 86400000;
+      if (spanDays <= 28) return allEntries;
+      const bucket = spanDays > 180 ? 'month' : 'week';
+      const groups = {};
+      allEntries.forEach(e => {
+        const d = new Date(parseEntryDate(e.date));
+        const key = bucket === 'month'
+          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+          : (() => {
+              const day = new Date(d); day.setDate(d.getDate() - d.getDay());
+              return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+            })();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(Number(e.value));
+      });
+      return Object.entries(groups)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, vals]) => ({ date, value: (vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2), unit: allEntries[0]?.unit }));
+    })();
 
     // Comparison overlay: any series from the cross-domain catalog (measurement /
     // nutrition / PR), sliced to the same window and normalized independently in
@@ -580,7 +604,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const compareData = compareItem ? {
       entries: [...compareItem.entries]
         .sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date))
-        .filter(e => parseEntryDate(e.date) >= sinceMs),
+        .filter(e => range === 'All' || parseEntryDate(e.date) >= sinceMs),
       color: compareItem.color,
       unit: compareItem.unit,
       label: compareItem.label,
@@ -588,7 +612,12 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
 
     // Weekly trend delta — shared with Nutrition and the dashboard trend widgets
     // (see trendMath.js) so all three always show the identical number.
-    const { diff, showDelta, compareLabel } = weeklyTrendDelta(allEntries);
+    const weeklyDelta = weeklyTrendDelta(allEntries);
+    const firstEntry = allEntries[0] || null;
+    const allTimeDelta = range === 'All' && latestEntry && firstEntry && latestEntry.id !== firstEntry.id
+      ? { diff: Number(latestEntry.value) - Number(firstEntry.value), showDelta: true, compareLabel: 'vs first entry' }
+      : null;
+    const { diff, showDelta, compareLabel } = allTimeDelta || weeklyDelta;
     const last7 = descEntries.slice(0, 7);
 
     const renderEntryRow = (entry, i, arr, accent) => {
@@ -678,7 +707,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
                   </>
                 )}
               </button>
-              <RangePopover value={range} options={['7D', '14D']} onChange={setRange} />
+              <RangePopover value={range} options={['7D', '14D', 'All']} onChange={setRange} />
             </div>
           </div>
 
@@ -724,7 +753,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
                     base={{ entries: rangeEntries, color, unit: latestEntry.unit, label: activeMeasurement.name || 'This' }}
                     compare={compareData}
                   />
-                : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>No entries in the last {days} days</p>
+                : <p style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px 0 4px' }}>{range === 'All' ? 'No entries yet' : `No entries in the last ${days} days`}</p>
               }
             </>
           )}

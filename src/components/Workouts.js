@@ -595,6 +595,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoCreateSignal]);
   const sessionLogRef = useRef(sessionLog);
+  const activeRoutineRef = useRef(activeRoutine);
   // Guards finishWorkout against double-submit (rapid taps / doubled events) which would
   // otherwise insert the same session twice. Synchronous ref so it blocks within one tick.
   const finishingRef = useRef(false);
@@ -662,6 +663,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   useEffect(() => {
     sessionLogRef.current = sessionLog;
   }, [sessionLog]);
+
+  useEffect(() => {
+    activeRoutineRef.current = activeRoutine;
+  }, [activeRoutine]);
 
   useEffect(() => {
     restTimersRef.current = restTimers;
@@ -1217,6 +1222,7 @@ const updateSet = (exId, setIdx, field, value) => {
     if (finishingRef.current) return;   // already saving — ignore the duplicate trigger
     finishingRef.current = true;
     const currentLog = sessionLogRef.current;
+    const currentRoutine = activeRoutineRef.current;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) { finishingRef.current = false; return; }
@@ -1226,8 +1232,8 @@ const updateSet = (exId, setIdx, field, value) => {
     const sessionId = crypto.randomUUID();
     const sessionRow = {
       id: sessionId,
-      routine_id: activeRoutine.id,
-      routine_name: activeRoutine.name,
+      routine_id: currentRoutine.id,
+      routine_name: currentRoutine.name,
       date: new Date().toLocaleDateString(),
       duration: workoutSeconds,
       user_id: uid,
@@ -1236,7 +1242,7 @@ const updateSet = (exId, setIdx, field, value) => {
     // and the summary all reflect completed sets only — typing a weight/reps
     // without ticking the set does NOT log it.
     const completedLog = {};
-    activeRoutine.exercises.forEach(ex => {
+    currentRoutine.exercises.forEach(ex => {
       const logged = currentLog[ex.id] || [];
       const checks = checkedSets[ex.id] || [];
       completedLog[ex.id] = logged.filter((_, idx) => !!checks[idx]);
@@ -1245,7 +1251,7 @@ const updateSet = (exId, setIdx, field, value) => {
     // Only record exercises that had at least one completed set. A session where
     // nothing was completed saves no exercise rows (it shows as empty in history)
     // instead of logging the whole planned workout.
-    const exerciseInserts = activeRoutine.exercises
+    const exerciseInserts = currentRoutine.exercises
       .filter(ex => completedLog[ex.id].length > 0)
       .map(ex => ({
         id: crypto.randomUUID(),
@@ -1281,7 +1287,7 @@ const updateSet = (exId, setIdx, field, value) => {
     // the next workout). Best-effort — skipped if offline; loadRoutines below
     // refreshes the in-memory copies either way.
     try {
-      await Promise.all(activeRoutine.exercises.map(ex =>
+      await Promise.all(currentRoutine.exercises.map(ex =>
         supabase.from('exercises').update({ planned_sets: currentLog[ex.id] || [] }).eq('id', ex.id).eq('user_id', uid)
       ));
     } catch {}
@@ -1290,17 +1296,17 @@ const updateSet = (exId, setIdx, field, value) => {
     // here is the pre-save state, so the weight-PR comparison doesn't count this
     // session as its own previous best. completedCount mirrors the logging modal's
     // "exercises" stat (an exercise counts as done once any set is checked).
-    const summaryExercises = activeRoutine.exercises.map(ex => ({
+    const summaryExercises = currentRoutine.exercises.map(ex => ({
       name: ex.name,
       completed: completedLog[ex.id].length > 0,
       sets: completedLog[ex.id],
     }));
     const summary = {
-      routineName: activeRoutine.name,
+      routineName: currentRoutine.name,
       completedCount: summaryExercises.filter(e => e.completed).length,
-      totalCount: activeRoutine.exercises.length,
+      totalCount: currentRoutine.exercises.length,
       exercises: summaryExercises,
-      prs: computeWorkoutPRs(activeRoutine.exercises, completedLog, history),
+      prs: computeWorkoutPRs(currentRoutine.exercises, completedLog, history),
       unit: metricSystem === 'metric' ? 'kg' : 'lbs',
     };
 

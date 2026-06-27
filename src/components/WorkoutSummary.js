@@ -48,7 +48,7 @@ function WorkoutSummary({ summary, metricSystem = 'imperial', onFinish = () => {
       <div style={{
         width: '100%', maxWidth: '380px', maxHeight: '86vh',
         background: 'var(--card)', borderRadius: '20px', border: '1px solid var(--border)',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden', position: 'relative',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative',
         display: 'flex', flexDirection: 'column',
         transform: shown ? 'none' : 'translateY(16px) scale(0.96)',
         transition: 'transform 0.34s cubic-bezier(0.32,0.72,0,1), opacity 0.28s ease',
