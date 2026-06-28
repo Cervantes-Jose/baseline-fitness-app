@@ -118,7 +118,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, onOpenHabits = () => {}, onOpenMeasurements = () => {}, user, theme, setTheme, metricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenDataExport = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, onOpenHabits = () => {}, onOpenMeasurements = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -172,7 +172,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
       <Section title="Account">
         <Row icon={ICONS.person} label="Account Information" onClick={onOpenAccount} />
         <Row icon={ICONS.crown} label="Subscription" onClick={onOpenSubscription} />
-        <Row icon={ICONS.download} label="Data & Export" onClick={comingSoon} isLast />
+        <Row icon={ICONS.download} label="Data & Export" onClick={onOpenDataExport} isLast />
       </Section>
 
       {/* PREFERENCES */}

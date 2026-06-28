@@ -178,6 +178,7 @@ All Edge Functions must follow this pattern:
 **Current rate limits:**
 - `food-search`: 20/minute, 500/day
 - `send-feedback`: 5/hour
+- `export-data`: 2/day
 
 **`consume_rate_limit` RPC signature:**
 ```

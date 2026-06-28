@@ -11,6 +11,12 @@ verify_jwt = true
 import_map = "./functions/delete-account/deno.json"
 entrypoint = "./functions/delete-account/index.ts"
 
+[functions.export-data]
+enabled = true
+verify_jwt = true
+import_map = "./functions/export-data/deno.json"
+entrypoint = "./functions/export-data/index.ts"
+
 [functions.food-search]
 enabled = true
 verify_jwt = true

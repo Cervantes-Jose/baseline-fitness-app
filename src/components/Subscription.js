@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
+import SettingsPageHeader from './SettingsPageHeader';
 
 // Subscription is DISPLAY-ONLY for now. None of these actions are wired to a
 // payment provider or to any subscription state. Per the project security rules,
 // when this becomes functional the plan/entitlement status must live server-side
-// and never be client-writable — the hardcoded "Free Plan" here is just UI.
+// and never be client-writable — the `isPremium` flag below is just UI.
 
 const Chevron = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
@@ -11,27 +12,35 @@ const Chevron = () => (
   </svg>
 );
 
-// Filled accent check used in the perks list.
-const CheckFilled = () => (
-  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
-    <circle cx="10" cy="10" r="9" fill="var(--accent)" />
-    <path d="M6 10l2.6 2.6L14 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+// White check used in the gradient plan card's feature list.
+const Check = () => (
+  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+    <path d="M4 10l3.4 3.4L16 5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
-const PREMIUM_PERKS = [
-  'Advanced analytics',
-  'Custom workout plans',
-  'Progress photos',
-  'Priority support',
-  'And more…',
-];
+// Plan presentation. Each plan shows three headline features in the gradient card.
+const PLANS = {
+  free: {
+    name: 'Free Plan',
+    price: '$0',
+    features: ['Up to 3 routines', 'Food tracking', 'Measurement tracking'],
+  },
+  premium: {
+    name: 'Premium Plan',
+    price: '$7.99',
+    features: ['Barcode scanner', 'Custom measurements', 'Unlimited routines'],
+  },
+};
 
 const MANAGE_ROWS = ['Manage Subscription', 'Restore Purchases', 'Payment History'];
 
-export default function Subscription() {
+export default function Subscription({ onBack = () => {} }) {
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
+  // Placeholder entitlement — swap for server-side subscription status when wired up.
+  const isPremium = false;
+  const plan = isPremium ? PLANS.premium : PLANS.free;
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -42,29 +51,42 @@ export default function Subscription() {
   };
 
   return (
-    <div style={{ paddingTop: 4, paddingBottom: 100 }}>
-      {/* Current plan */}
-      <div className="card-flat" style={{ margin: '0 16px 16px', padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M3 7l4.5 4L12 5l4.5 6L21 7v11H3z" strokeLinejoin="round" strokeLinecap="round" /></svg>
-        </div>
-        <span style={{ flex: 1, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Free Plan</span>
-        <span style={{ fontSize: 12, fontWeight: 700, background: 'var(--accent-light)', color: 'var(--accent)', padding: '4px 12px', borderRadius: 20 }}>Current Plan</span>
-      </div>
+    <div style={{ paddingBottom: 100 }}>
+      <SettingsPageHeader title="Subscription" onBack={onBack} />
 
-      {/* Upgrade */}
-      <div className="card-flat" style={{ margin: '0 16px 16px', padding: 20 }}>
-        <p style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px' }}>Upgrade to Premium</p>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 18px' }}>Unlock all features and tools.</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 13, marginBottom: 22 }}>
-          {PREMIUM_PERKS.map(perk => (
-            <div key={perk} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <CheckFilled />
-              <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{perk}</span>
+      {/* Combined current-plan card: three-blue gradient (top-left → bottom-right),
+          a grey "Current Plan" pill, the plan name + monthly price, and the three
+          headline features for whichever plan the user is on. */}
+      <div style={{
+        margin: '4px 16px 16px', padding: 22, borderRadius: 16, color: '#fff',
+        background: 'linear-gradient(145deg, var(--blue-400) 0%, var(--blue-500) 48%, var(--blue-600) 100%)',
+        boxShadow: '0 8px 24px rgba(5,79,247,0.28)',
+      }}>
+        <span style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, background: '#E8EAED', color: '#4B5563', padding: '4px 12px', borderRadius: 20, marginBottom: 16 }}>
+          Current Plan
+        </span>
+        <p style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>{plan.name}</p>
+        <p style={{ fontSize: 16, margin: '4px 0 18px', color: 'rgba(255,255,255,0.85)' }}>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{plan.price}</span> / month
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+          {plan.features.map(f => (
+            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Check />
+              <span style={{ fontSize: 15, fontWeight: 500 }}>{f}</span>
             </div>
           ))}
         </div>
-        <button onClick={comingSoon} className="btn-primary">Subscribe to Premium</button>
+
+        {/* White subscribe tile, nested inside the gradient card — blue text;
+            becomes a non-actionable "Premium Member" label once on Premium. */}
+        <button
+          onClick={isPremium ? undefined : comingSoon}
+          disabled={isPremium}
+          style={{ display: 'block', width: '100%', marginTop: 20, padding: '15px 0', background: '#fff', border: 'none', borderRadius: 12, color: 'var(--accent)', fontSize: 16, fontWeight: 700, textAlign: 'center', cursor: isPremium ? 'default' : 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+        >
+          {isPremium ? 'Premium Member' : 'Subscribe to Premium'}
+        </button>
       </div>
 
       {/* Manage */}

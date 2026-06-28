@@ -9,6 +9,7 @@ import DailyHabits from './components/DailyHabits';
 import Measurements from './components/Measurements';
 import Profile from './components/Profile';
 import AccountInformation from './components/AccountInformation';
+import DataExport from './components/DataExport';
 import Subscription from './components/Subscription';
 import Units from './components/Units';
 import PrivacyPolicy from './components/PrivacyPolicy';
@@ -38,6 +39,7 @@ function getHeaderTitle(activeTab) {
     'profile-goals': 'Goals',
     'profile-account': 'Account Information',
     'profile-subscription': 'Subscription',
+    'profile-data': 'Data & Export',
     'profile-units': 'Units',
     'profile-privacy': 'Privacy Policy',
     'profile-terms': 'Terms of Service',
@@ -311,9 +313,10 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenMeasurements={() => setActiveTab('profile-measurements')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
-      case 'profile-account': return <AccountInformation user={user} metricSystem={metricSystem} />;
-      case 'profile-subscription': return <Subscription />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenMeasurements={() => setActiveTab('profile-measurements')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenDataExport={() => setActiveTab('profile-data')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
+      case 'profile-account': return <AccountInformation user={user} metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
+      case 'profile-subscription': return <Subscription onBack={() => setActiveTab('profile')} />;
+      case 'profile-data': return <DataExport user={user} onBack={() => setActiveTab('profile')} />;
       case 'profile-units': return <Units metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
       case 'profile-privacy': return <PrivacyPolicy />;
       case 'profile-terms': return <TermsOfService />;
@@ -341,7 +344,7 @@ const changeDate = (dir) => {
       {/* Header — only Profile sub-screens keep a header (bare blue back chevron
           stacked above the title). The dashboard renders its own greeting, and the
           top-level sections (Food Log, Workouts, Profile) have no title header. */}
-      {activeTab.startsWith('profile-') && activeTab !== 'profile-habits' && activeTab !== 'profile-measurements' && (
+      {activeTab.startsWith('profile-') && activeTab !== 'profile-habits' && activeTab !== 'profile-measurements' && activeTab !== 'profile-account' && activeTab !== 'profile-subscription' && activeTab !== 'profile-data' && (
         <div className="header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
           <button onClick={() => setActiveTab('profile')} aria-label="Back" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -432,7 +435,7 @@ const changeDate = (dir) => {
       <div className="tab-bar">
         {currentTabs.map(tab => (
           <button key={tab.id}
-            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-habits' || activeTab === 'profile-measurements' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-units' || activeTab === 'profile-privacy' || activeTab === 'profile-terms' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
+            className={`tab-item ${activeTab === tab.id || (tab.id === 'profile' && (activeTab === 'profile' || activeTab === 'profile-goals' || activeTab === 'profile-habits' || activeTab === 'profile-measurements' || activeTab === 'profile-account' || activeTab === 'profile-subscription' || activeTab === 'profile-data' || activeTab === 'profile-units' || activeTab === 'profile-privacy' || activeTab === 'profile-terms' || activeTab === 'dashboard-edit')) ? 'active' : ''}`}
             onClick={() => handleTabClick(tab.id)}>
             <span className="tab-icon"><TabIcon name={tab.icon} /></span>
             <span className="tab-label">{tab.label}</span>

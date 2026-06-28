@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
-import DeleteAccountModal from './DeleteAccountModal';
+import SettingsPageHeader from './SettingsPageHeader';
+import ChangePassword from './ChangePassword';
+import ChangeEmail from './ChangeEmail';
 
 // Account fields are per-user: Name lives in Supabase auth user_metadata
 // (`first_name`), Email is the read-only auth login email, and Gender/DOB/Height
@@ -16,16 +18,19 @@ const Chevron = () => (
   </svg>
 );
 
-// label + current value + chevron (taps to edit). Value greys out as a placeholder
-// when unset.
+// Stacked field: the label reads as a sub-header with the current value beneath it
+// (e.g. "Name" / "Jose"). Chevron on the right when editable; the value greys out
+// as a placeholder when unset.
 function ValueRow({ label, value, placeholder, onClick, isLast, readOnly }) {
   const empty = value == null || value === '';
   return (
-    <div onClick={readOnly ? undefined : onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: isLast ? 'none' : '1px solid var(--border)', cursor: readOnly ? 'default' : 'pointer' }}>
-      <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{label}</span>
-      <span style={{ fontSize: 15, color: empty ? 'var(--text-muted)' : 'var(--text-secondary)', maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {empty ? (placeholder || 'Not set') : value}
-      </span>
+    <div onClick={readOnly ? undefined : onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: isLast ? 'none' : '1px solid var(--border)', cursor: readOnly ? 'default' : 'pointer' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+        <span style={{ fontSize: 16, fontWeight: 500, color: empty ? 'var(--text-muted)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {empty ? (placeholder || 'Not set') : value}
+        </span>
+      </div>
       {!readOnly && <Chevron />}
     </div>
   );
@@ -110,14 +115,15 @@ function EditSheet({ field, onClose, onSave }) {
 }
 
 // ─── ACCOUNT INFORMATION ────────────────────────────────────
-export default function AccountInformation({ user = null, metricSystem = 'imperial' }) {
+export default function AccountInformation({ user = null, metricSystem = 'imperial', onBack = () => {} }) {
   // gender/dob/height come from this user's `profiles` row; name + email come from auth.
   const [profile, setProfile] = useState({ gender: '', dob: '', height: '' });
   const [editing, setEditing] = useState(null);
+  // Sub-page routing within Account: 'account' (the main view) | 'password' | 'email'.
+  const [view, setView] = useState('account');
   // View mode by default: rows are locked (no chevrons, not tappable). The Edit
   // Profile button flips this on so fields become editable.
   const [editMode, setEditMode] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -203,8 +209,15 @@ export default function AccountInformation({ user = null, metricSystem = 'imperi
     ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     : '';
 
+  if (view === 'password') return <ChangePassword user={user} onBack={() => setView('account')} />;
+  if (view === 'email') return <ChangeEmail user={user} onBack={() => setView('account')} />;
+
   return (
-    <div style={{ paddingTop: 4, paddingBottom: 100 }}>
+    <div style={{ paddingBottom: 100 }}>
+      {/* Own header (title beside the back chevron) — App.js skips its stacked
+          header for this page so this one owns navigation, including the sub-pages. */}
+      <SettingsPageHeader title="Account Information" onBack={onBack} />
+
       {/* Centered, enlarged avatar with a camera badge for changing the photo.
           Photo upload is deferred (needs storage), so the badge toasts for now. */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 24px' }}>
@@ -224,6 +237,8 @@ export default function AccountInformation({ user = null, metricSystem = 'imperi
         </div>
       </div>
 
+      <p className="section-title" style={{ padding: '0 20px 8px', margin: 0 }}>Personal Information</p>
+
       {/* All fields live on a single tile (mockup order). Email + Joined stay
           read-only in every mode; the rest unlock when Edit Profile is on. */}
       <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', overflow: 'hidden' }}>
@@ -239,31 +254,17 @@ export default function AccountInformation({ user = null, metricSystem = 'imperi
         <ValueRow label="Joined" value={joinedDisplay} placeholder="—" readOnly isLast />
       </div>
 
-      {/* Edit Profile toggles the rows between locked (view) and editable. */}
-      <div style={{ padding: '8px 16px 0' }}>
+      {/* Edit Profile toggles the rows between locked (view) and editable.
+          Change Password / Change Email open their own sub-pages. */}
+      <div style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button onClick={() => setEditMode(e => !e)} className="btn-primary">
           {editMode ? 'Done' : 'Edit Profile'}
         </button>
-      </div>
-
-      {/* Danger zone — permanent account deletion (handled server-side) */}
-      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: 'normal', color: '#EF4444', padding: '28px 20px 8px', margin: 0 }}>
-        Danger Zone
-      </p>
-      <div className="card-flat" style={{ margin: '0 16px', padding: '0 20px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)' }}>
-        <button
-          onClick={() => setDeleteOpen(true)}
-          style={{
-            display: 'block', width: '100%', padding: '15px 0', background: 'transparent',
-            border: 'none', color: '#EF4444', fontSize: 15, fontWeight: 700, textAlign: 'center', cursor: 'pointer',
-          }}
-        >
-          Delete Account
-        </button>
+        <button onClick={() => setView('password')} className="btn-secondary">Change Password</button>
+        <button onClick={() => setView('email')} className="btn-secondary">Change Email</button>
       </div>
 
       <EditSheet field={editing} onClose={() => setEditing(null)} onSave={saveField} />
-      <DeleteAccountModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)', background: 'var(--text-primary)', color: 'var(--card)', padding: '10px 18px', borderRadius: 20, fontSize: 14, fontWeight: 600, zIndex: 800, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>

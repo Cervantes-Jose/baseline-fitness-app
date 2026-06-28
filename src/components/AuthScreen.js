@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import LegalSheet from './LegalSheet';
 import DateOfBirthInput from './DateOfBirthInput';
+import { validatePassword, PASSWORD_RULE_TEXT } from './passwordPolicy';
 
 // Eye / eye-off icon for the password reveal toggle.
 function EyeIcon({ off }) {
@@ -110,7 +111,8 @@ export default function AuthScreen({ onAuth = () => {} }) {
     const ageNum = ageFromDob(dob);
     if (ageNum == null) { setError('Please enter a valid date of birth'); return; }
     if (ageNum < 13) { setError('You must be at least 13 years old to use Baseline Fitness'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    const signupPwError = validatePassword(password);
+    if (signupPwError) { setError(signupPwError); return; }
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
@@ -160,7 +162,8 @@ export default function AuthScreen({ onAuth = () => {} }) {
   // Set a new password using the recovery session established by the email link.
   const handleUpdatePassword = async () => {
     setError('');
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    const resetPwError = validatePassword(password);
+    if (resetPwError) { setError(resetPwError); return; }
     if (password !== confirmPassword) { setError("Passwords don't match"); return; }
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
@@ -356,7 +359,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
               </p>
             ) : (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                At least 6 characters
+                {PASSWORD_RULE_TEXT}
               </p>
             )}
           </div>
