@@ -244,7 +244,14 @@ Deno.serve(async (req) => {
   }
 
   // ── Email it to the JWT-derived address via Resend.
-  const label = type === "all" ? "all of your data" : type;
+  const EXPORT_LABELS: Record<ExportType, string> = {
+    all: "All Data",
+    workouts: "Workouts",
+    nutrition: "Nutrition",
+    measurements: "Measurements",
+    prs: "PRs",
+  };
+  const label = EXPORT_LABELS[type];
   const resendResp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -255,10 +262,8 @@ Deno.serve(async (req) => {
       from: EXPORT_FROM,
       to: [user.email],
       subject: "Your Baseline Fitness data export",
-      html:
-        `<p>Your export of <strong>${label}</strong> is attached as CSV.</p>` +
-        `<p>If you didn't request this, you can ignore this email.</p>`,
-      text: `Your export of ${label} is attached as CSV.\n\nIf you didn't request this, you can ignore this email.`,
+      html: `<p>Here's your ${label} export from Baseline Fitness. Your data is attached as a CSV file.</p>`,
+      text: `Here's your ${label} export from Baseline Fitness. Your data is attached as a CSV file.`,
       attachments,
     }),
   });
