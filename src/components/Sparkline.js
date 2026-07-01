@@ -53,8 +53,13 @@ export function Sparkline({ entries, color = '#3B82F6', height = 36 }) {
     return () => ro.disconnect();
   }, []);
 
-  const sorted = [...entries].sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
-  const values = sorted.map(e => Number(e.value));
+  // Drop any non-numeric values (e.g. a stray-space typo like "45. 5") before
+  // scaling — a single NaN would otherwise poison min/max and blank the whole line.
+  const sorted = [...entries]
+    .map(e => ({ ...e, num: Number(e.value) }))
+    .filter(e => !isNaN(e.num))
+    .sort((a, b) => parseEntryDate(a.date) - parseEntryDate(b.date));
+  const values = sorted.map(e => e.num);
   const min = Math.min(...values);
   const max = Math.max(...values);
 
@@ -63,17 +68,17 @@ export function Sparkline({ entries, color = '#3B82F6', height = 36 }) {
   const cH = H - pad * 2;
   const toX = i => pad + (sorted.length === 1 ? cW / 2 : (i / (sorted.length - 1)) * cW);
   const toY = v => max === min ? pad + cH / 2 : pad + cH - ((v - min) / (max - min)) * cH;
-  const points = sorted.map((e, i) => `${toX(i)},${toY(Number(e.value))}`).join(' ');
+  const points = sorted.map((e, i) => `${toX(i)},${toY(e.num)}`).join(' ');
 
   const drawn = useChartDraw(lineRef, `${width}:${points}`);
 
   return (
     <div ref={wrapRef} style={{ width: '100%', marginTop: '8px' }}>
-      {width > 0 && (
+      {width > 0 && sorted.length > 0 && (
         <svg width={width} height={H} style={{ display: 'block', overflow: 'visible' }}>
           <polyline ref={lineRef} points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           {sorted.map((e, i) => (
-            <circle key={i} cx={toX(i)} cy={toY(Number(e.value))} r="3" fill={color}
+            <circle key={i} cx={toX(i)} cy={toY(e.num)} r="3" fill={color}
               style={{ opacity: drawn ? 1 : 0, transition: 'opacity 0.4s ease', transitionDelay: `${0.25 + i * 0.05}s` }} />
           ))}
         </svg>

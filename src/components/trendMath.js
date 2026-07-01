@@ -57,3 +57,20 @@ export function weeklyTrendDelta(entries, anchorMs) {
   }
   return out;
 }
+
+// Simple entry-over-entry delta for measurements tracked on a "weekly" cadence:
+// the latest entry vs the one logged immediately before it, regardless of the
+// calendar gap. No rolling window — each log is a datapoint and we just compare
+// consecutive logs (e.g. this week's waist reading vs last week's).
+// entries: ascending-sorted array of { value, date }.
+// Returns { diff, showDelta, compareLabel }.
+export function entryTrendDelta(entries) {
+  const out = { diff: 0, showDelta: false, compareLabel: '' };
+  if (!entries || entries.length < 2) return out;
+  const latest = entries[entries.length - 1];
+  const prev = entries[entries.length - 2];
+  out.diff = Number(latest.value) - Number(prev.value);
+  out.showDelta = true;
+  out.compareLabel = 'vs previous';
+  return out;
+}

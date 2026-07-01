@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { goalTrend } from './goalColor';
-import { weeklyTrendDelta } from './trendMath';
+import { weeklyTrendDelta, entryTrendDelta } from './trendMath';
 import RangePopover from './RangePopover';
 import { Sparkline } from './Sparkline';
 import TrendCompareChart from './TrendCompareChart';
@@ -114,6 +114,17 @@ export function getDefaultUnit(name, metricSystem) {
   // measurements start blank so the user can type whatever unit they want.
   if (DEFAULT_MEASUREMENT_NAME_SET.has(lower)) return metricSystem === 'metric' ? 'cm' : 'in';
   return '';
+}
+
+// Trend cadence for a measurement. Weight & Body Fat (and custom measurements set
+// to 'daily') use the rolling 7-day trend; the other seeded body defaults (and
+// custom measurements set to 'weekly') compare entry-over-entry. Shared by the
+// detail page and the dashboard trend widgets so both show the same delta.
+export function getMeasurementFrequency({ name, frequency } = {}) {
+  const lower = (name || '').toLowerCase();
+  if (lower === 'weight' || lower === 'body fat') return 'daily';
+  if (DEFAULT_MEASUREMENT_NAME_SET.has(lower)) return 'weekly';
+  return frequency === 'weekly' ? 'weekly' : 'daily';
 }
 
 // One stable color per measurement, picked by its index in the list.
@@ -306,6 +317,18 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id).eq('user_id', uid);
   };
 
+  // Daily/Weekly trend cadence, custom measurements only (defaults derive theirs
+  // by name). 'daily' → rolling 7-day trend; 'weekly' → entry-over-entry delta.
+  const setMeasurementFrequency = async (freq) => {
+    if (!activeMeasurement) return;
+    setActiveMeasurement(prev => prev && { ...prev, frequency: freq });
+    setMeasurements(prev => prev.map(m => (activeMeasurement && m.id === activeMeasurement.id ? { ...m, frequency: freq } : m)));
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    await supabase.from('measurements').update({ frequency: freq }).eq('id', activeMeasurement.id).eq('user_id', uid);
+  };
+
   const openMeasurement = (m) => {
     setActiveMeasurement(m);
     const lastUnit = m.entries.length ? m.entries[m.entries.length - 1].unit : '';
@@ -361,13 +384,14 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   };
 
   const saveEditEntry = async (entry) => {
-    if (!editValue.trim()) return;
+    const cleaned = editValue.replace(/\s+/g, '');
+    if (!cleaned || isNaN(Number(cleaned))) return;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { error } = await supabase.from('measurement_entries').update({ value: editValue }).eq('id', entry.id).eq('user_id', uid);
+    const { error } = await supabase.from('measurement_entries').update({ value: cleaned }).eq('id', entry.id).eq('user_id', uid);
     if (error) { return; }
-    const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: editValue } : e);
+    const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: cleaned } : e);
     setActiveMeasurement(prev => ({ ...prev, entries: updater(prev.entries) }));
     setMeasurements(prev => prev.map(m =>
       m.id === activeMeasurement.id ? { ...m, entries: updater(m.entries) } : m
@@ -377,7 +401,10 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
   };
 
   const logEntry = async () => {
-    if (!newValue.trim()) return;
+    // Strip whitespace and require a real number so a typo like "45. 5" (which
+    // parses to NaN and blanks the trend line) can never be saved.
+    const cleaned = newValue.replace(/\s+/g, '');
+    if (!cleaned || isNaN(Number(cleaned))) return;
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
@@ -385,7 +412,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       .from('measurement_entries')
       .insert([{
         measurement_id: activeMeasurement.id,
-        value: newValue,
+        value: cleaned,
         unit: newUnit,
         date: newDate,
         user_id: uid
@@ -504,7 +531,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
         const badge = !isDefault && (
           <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 6px', borderRadius: '8px' }}>Custom</span>
         );
-        const sparkEntries = m.entries.filter(e => parseEntryDate(e.date) >= Date.now() - 14 * 86400000);
+        const sparkEntries = m.entries.filter(e => parseEntryDate(e.date) >= Date.now() - 14 * 86400000 && !isNaN(Number(e.value)));
         return (
           <div key={m.id} className="card-flat">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -574,6 +601,13 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const entryDays = new Set(Object.keys(entriesByDay));
     const goal = activeMeasurement.goal == null || activeMeasurement.goal === '' ? null : Number(activeMeasurement.goal);
 
+    // Trend cadence. Defaults are fixed: Weight & Body Fat stay on the rolling
+    // 7-day trend; the other seeded body measurements compare entry-over-entry.
+    // Custom measurements follow their own stored `frequency` (Daily default).
+    const nameLower = (activeMeasurement.name || '').toLowerCase();
+    const isDefaultMeasurement = defaultIds.has(activeMeasurement.id) || DEFAULT_MEASUREMENT_NAME_SET.has(nameLower);
+    const frequency = getMeasurementFrequency(activeMeasurement);
+
     const days = range === '7D' ? 7 : range === '14D' ? 14 : null;
     const since = new Date();
     since.setHours(0, 0, 0, 0);
@@ -617,14 +651,16 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       label: compareItem.label,
     } : null;
 
-    // Weekly trend delta — shared with Nutrition and the dashboard trend widgets
-    // (see trendMath.js) so all three always show the identical number.
-    const weeklyDelta = weeklyTrendDelta(allEntries);
+    // Trend delta by cadence: 'daily' uses the rolling 7-day trend shared with
+    // Nutrition and the dashboard widgets (trendMath.js); 'weekly' compares the
+    // latest entry to the previous one. The All-Time range overrides both to show
+    // the change since the first entry.
+    const cadenceDelta = frequency === 'weekly' ? entryTrendDelta(allEntries) : weeklyTrendDelta(allEntries);
     const firstEntry = allEntries[0] || null;
     const allTimeDelta = range === 'All' && latestEntry && firstEntry && latestEntry.id !== firstEntry.id
       ? { diff: Number(latestEntry.value) - Number(firstEntry.value), showDelta: true, compareLabel: 'vs first entry' }
       : null;
-    const { diff, showDelta, compareLabel } = allTimeDelta || weeklyDelta;
+    const { diff, showDelta, compareLabel } = allTimeDelta || cadenceDelta;
     const last7 = descEntries.slice(0, 7);
 
     const renderEntryRow = (entry, i, arr, accent) => {
@@ -673,7 +709,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           Back
         </button>
-        {(defaultIds.has(activeMeasurement.id) || DEFAULT_MEASUREMENT_NAME_SET.has((activeMeasurement.name || '').toLowerCase())) ? (
+        {isDefaultMeasurement ? (
           // Default (hardcoded) measurements can't be renamed — show a static title.
           <h2 style={{ width: '100%', margin: 0, fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)', padding: '2px 0' }}>
             {activeMeasurement.name}
@@ -765,6 +801,35 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
             </>
           )}
         </div>
+
+        {/* LOGGING FREQUENCY — custom measurements only. Card with a dynamic
+            description of the selected cadence, then plain outlined pills matching
+            the app's habit frequency picker. Daily = rolling 7-day trend; Weekly =
+            compare against the previous entry. */}
+        {!isDefaultMeasurement && (
+          <div className="card-flat">
+            <p style={sectionLabel}>Logging Frequency</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.3 }}>
+              {frequency === 'weekly'
+                ? 'Trend compares each entry to the one before'
+                : 'Trend uses a rolling 7-day average'}
+            </p>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              {['daily', 'weekly'].map(opt => {
+                const active = frequency === opt;
+                return (
+                  <button key={opt} onClick={() => setMeasurementFrequency(opt)} style={{
+                    flex: 1, padding: '10px 0', borderRadius: '12px', cursor: 'pointer',
+                    fontSize: '14px', fontWeight: active ? 700 : 500, textTransform: 'capitalize',
+                    border: '1px solid var(--accent)', background: 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--text-primary)',
+                    transition: 'color 0.15s',
+                  }}>{opt}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* LOG NEW ENTRY */}
         <div className="card-flat">

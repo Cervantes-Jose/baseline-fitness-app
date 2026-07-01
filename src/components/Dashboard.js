@@ -3,7 +3,8 @@ import { supabase } from '../supabaseClient';
 import AddWidgetSheet from './AddWidgetSheet';
 import HabitsWidget from './HabitsWidget';
 import { goalTrend } from './goalColor';
-import { weeklyTrendDelta, parseEntryDate } from './trendMath';
+import { weeklyTrendDelta, entryTrendDelta, parseEntryDate } from './trendMath';
+import { getMeasurementFrequency } from './Measurements';
 import RangePopover from './RangePopover';
 import { loadCompareCatalog } from './compareSources';
 import { currentStreak } from './habitMath';
@@ -127,7 +128,7 @@ function LineChart({ data, color, height = 80 }) {
 // Generic trend card: title + 7D/14D range, latest value, weekly delta, mini line
 // chart. Driven entirely by a passed-in `entries` array ({ value, date, unit? }), so
 // the same card backs measurement, nutrition, and PR widgets alike.
-function TrendSection({ title, color, unit: unitProp = '', goal = null, entries = [] }) {
+function TrendSection({ title, color, unit: unitProp = '', goal = null, entries = [], frequency = 'daily' }) {
   const [range, setRange] = useState('7D');
 
   // Sort ascending by day so both the delta and the chart read chronologically.
@@ -143,8 +144,10 @@ function TrendSection({ title, color, unit: unitProp = '', goal = null, entries 
   const sinceMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - days * 86400000; })();
   const rangeEntries = sorted.filter(e => parseEntryDate(e.date) >= sinceMs);
 
-  // Shared weekly trend delta (see trendMath.js) — identical to Measurements/Nutrition.
-  const { diff, showDelta, compareLabel } = weeklyTrendDelta(sorted);
+  // Trend delta by cadence, matching the measurement detail page: 'weekly' compares
+  // the latest entry to the previous one; 'daily' uses the rolling 7-day delta
+  // shared with Nutrition (see trendMath.js).
+  const { diff, showDelta, compareLabel } = frequency === 'weekly' ? entryTrendDelta(sorted) : weeklyTrendDelta(sorted);
   // Direction of the arrow is just the sign of the change; the color is whether that
   // change moves toward the goal (green) or away (red) — neutral when no goal is set.
   const trend = goalTrend(diff, latest, goal);
@@ -178,7 +181,7 @@ function TrendSection({ title, color, unit: unitProp = '', goal = null, entries 
 // ─── MEASUREMENT CHART SECTION ──────────────────────────────
 // Fetches a measurement's full history once (range-independent), then renders it
 // through TrendSection. The delta uses the full history; the chart slices the window.
-function MeasurementSection({ title, measurementName, color, unit = '', goal = null }) {
+function MeasurementSection({ title, measurementName, color, unit = '', goal = null, frequency = 'daily' }) {
   const [entries, setEntries] = useState([]);
 
   useEffect(() => {
@@ -209,7 +212,7 @@ function MeasurementSection({ title, measurementName, color, unit = '', goal = n
     })();
   }, [measurementName]);
 
-  return <TrendSection title={title} color={color} unit={unit} goal={goal} entries={entries} />;
+  return <TrendSection title={title} color={color} unit={unit} goal={goal} entries={entries} frequency={frequency} />;
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────
@@ -371,7 +374,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      supabase.from('measurements').select('id, name, goal').eq('user_id', uid).order('created_at', { ascending: true })
+      supabase.from('measurements').select('id, name, goal, frequency').eq('user_id', uid).order('created_at', { ascending: true })
         .then(({ data }) => { if (data) setMeasurements(data); });
       // Habits drive two things: whether to show the Daily Habits widget, and the
       // highest current streak across all habits (shown in the glance bar). Fetch all
@@ -661,7 +664,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const measurementItems = measurements.map((m, i) => ({
     id: widgetIdForMeasurement(m.name, m.id),
     label: m.name,
-    node: <MeasurementSection title={m.name} measurementName={m.name} color={MEAS_COLORS[i % MEAS_COLORS.length]} goal={m.goal} />,
+    node: <MeasurementSection title={m.name} measurementName={m.name} color={MEAS_COLORS[i % MEAS_COLORS.length]} goal={m.goal} frequency={getMeasurementFrequency(m)} />,
   }));
   measurementItems.forEach(({ id, node }) => { widgetMap[id] = node; });
 
