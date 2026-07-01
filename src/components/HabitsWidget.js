@@ -47,7 +47,9 @@ export default function HabitsWidget() {
     if (wasDone) {
       await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', todayStr);
     } else {
-      const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: todayStr });
+      // Snapshot the habit's current target so history keeps showing the value as
+      // it was, even if the target is edited later — same as HabitDetail's toggle.
+      const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: todayStr, target: habit.target || null });
       if (error) load(); // e.g. unique-violation race — re-sync
     }
   };

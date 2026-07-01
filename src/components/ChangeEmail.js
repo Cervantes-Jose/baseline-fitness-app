@@ -9,8 +9,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // In-app email change. Requires the current password (re-authenticated) before
 // requesting the change. Supabase doesn't switch the email immediately — it emails
-// a confirmation link to the new address; the account email updates only once that
-// link is clicked, so we tell the user to check their inbox.
+// a confirmation link to the new address (and, when Secure Email Change is on, also
+// the old address); the account email updates only once that link is clicked, so we
+// tell the user to check their inbox.
 export default function ChangeEmail({ user, onBack }) {
   const [current, setCurrent] = useState('');
   const [email, setEmail] = useState('');
@@ -65,7 +66,9 @@ export default function ChangeEmail({ user, onBack }) {
         </div>
         <div style={fieldGroup}>
           <label style={fieldLabel}>Current Password</label>
-          <input className="input" type="password" autoComplete="current-password" placeholder="Enter current password"
+          {/* autoComplete="new-password" (not "current-password") stops the browser
+              and password managers from prefilling the saved password on open. */}
+          <input className="input" type="password" autoComplete="new-password" placeholder="Enter current password"
             value={current} onChange={e => setCurrent(e.target.value)} disabled={loading} />
         </div>
         <div style={fieldGroup}>

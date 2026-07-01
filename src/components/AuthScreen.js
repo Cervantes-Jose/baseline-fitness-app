@@ -128,7 +128,24 @@ export default function AuthScreen({ onAuth = () => {} }) {
         },
       },
     });
-    if (error) { setLoading(false); setError(error.message); return; }
+    if (error) {
+      setLoading(false);
+      // Supabase returns "User already registered" here when email confirmation is
+      // OFF and the email exists — surface a friendly, consistent message.
+      setError(/already registered|already exists|already in use/i.test(error.message)
+        ? 'An account already exists with that email. Please sign in.'
+        : error.message);
+      return;
+    }
+    // Anti-enumeration: when email confirmation is ON and the email is already
+    // registered, Supabase returns a session-less user with an EMPTY identities
+    // array (instead of an error). Detect that and treat it as "already exists"
+    // rather than falsely claiming a verification link was sent.
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setLoading(false);
+      setError('An account already exists with that email. Please sign in.');
+      return;
+    }
     // When email confirmation is off there's a session immediately, so write
     // DOB straight to the profiles row and log the user in. When it's on, there's
     // no session yet — show a "verify your email" message and send them to the
@@ -143,7 +160,7 @@ export default function AuthScreen({ onAuth = () => {} }) {
     setView('login');
     setPassword('');
     setConfirmPassword('');
-    setSuccess(`We've sent a verification link to ${email}. Please confirm your email, then sign in.`);
+    setSuccess(`We've sent a verification link to ${email}.`);
   };
 
   const handleReset = async () => {
@@ -270,7 +287,9 @@ export default function AuthScreen({ onAuth = () => {} }) {
               type="email"
               inputMode="email"
               autoCapitalize="none"
-              autoComplete="email"
+              // Signup should start blank — don't let Chrome prefill a saved email.
+              // Login keeps "email" so returning users still get the autofill.
+              autoComplete={view === 'signup' ? 'off' : 'email'}
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
