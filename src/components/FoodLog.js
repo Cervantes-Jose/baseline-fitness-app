@@ -2082,37 +2082,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     padding: '14px 16px',
                     cursor: (copyMode || moveMode) ? 'pointer' : 'default',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      {/* Circular add button — mirrors the bottom-right FAB, but hollow:
-                          white inside with a blue ring + blue plus. */}
-                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} aria-label="Add food" style={{
-                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0, padding: 0, cursor: 'pointer',
-                        background: 'var(--card)', border: '1.5px solid var(--accent)', color: 'var(--accent)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    </div>
-                    {/* Macro summary — shown in every expanded hour (zeros when empty), always with a divider under it. */}
-                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {(() => {
-                          const ht = hourFoods.reduce((a, f) => ({
-                            calories: a.calories + Number(f.calories || 0),
-                            protein: a.protein + Number(f.protein || 0),
-                            carbs: a.carbs + Number(f.carbs || 0),
-                            fats: a.fats + Number(f.fats || 0),
-                          }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
-                          return (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, fontWeight: 700, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
-                              <span style={{ color: '#3B82F6' }}>Calories: {ht.calories}</span>
-                              <span style={{ color: '#22C55E' }}>P: {ht.protein}g</span>
-                              <span style={{ color: '#3B82F6' }}>F: {ht.fats}g</span>
-                              <span style={{ color: '#EAB308' }}>C: {ht.carbs}g</span>
-                            </div>
-                          );
-                        })()}
+                    {hourFoods.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {hourFoods.map(f => {
                           const isSel = selectedEntries.some(e => e.id === f.id);
                           // Portion added, e.g. "50g" or "50g ×3" (omit for older rows missing it).
@@ -2151,23 +2122,59 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                             </div>
                           );
                         })}
-                        {/* Copy from Yesterday — under the divider, only when the hour is empty
-                            and yesterday had items (so it never sits directly under the + button). */}
-                        {isToday && hourFoods.length === 0 && (yesterdayFoods[h.value] || []).length > 0 && !copyMode && !moveMode && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); copyHourFromYesterday(h.value); }}
-                            style={{
-                              display: 'block', width: '100%',
-                              padding: '8px 12px', background: 'transparent',
-                              border: '1.5px solid var(--accent)', borderRadius: 8,
-                              color: 'var(--accent)', fontSize: 12, fontWeight: 600,
-                              cursor: 'pointer', opacity: 0.5, textAlign: 'center',
-                            }}
-                          >
-                            Copy from Yesterday ({(yesterdayFoods[h.value] || []).length} item{(yesterdayFoods[h.value] || []).length !== 1 ? 's' : ''})
+                        {/* Foods present → just the round add button (right) to add more. */}
+                        <div style={{ display: 'flex' }}>
+                          <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} aria-label="Add food" style={{
+                            width: 28, height: 28, borderRadius: '50%', flexShrink: 0, marginLeft: 'auto', padding: 0, cursor: 'pointer',
+                            background: 'var(--card)', border: '1.5px solid var(--accent)', color: 'var(--accent)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                            </svg>
                           </button>
-                        )}
+                        </div>
                       </div>
+                    ) : (isToday && (yesterdayFoods[h.value] || []).length > 0 && !copyMode && !moveMode) ? (
+                      /* Empty hour, yesterday has items → Copy from Yesterday + round add button, same level. */
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); copyHourFromYesterday(h.value); }}
+                          style={{
+                            flex: 1, padding: '8px 12px', background: 'transparent',
+                            border: '1.5px solid var(--accent)', borderRadius: 8,
+                            color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                            cursor: 'pointer', opacity: 0.5, textAlign: 'center',
+                          }}
+                        >
+                          Copy from Yesterday ({(yesterdayFoods[h.value] || []).length} item{(yesterdayFoods[h.value] || []).length !== 1 ? 's' : ''})
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} aria-label="Add food" style={{
+                          width: 28, height: 28, borderRadius: '50%', flexShrink: 0, marginLeft: 'auto', padding: 0, cursor: 'pointer',
+                          background: 'var(--card)', border: '1.5px solid var(--accent)', color: 'var(--accent)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Empty hour, nothing to copy → full-width "Add food" tile, styled like the
+                         Copy-from-Yesterday button. Tap to add food to this hour. */
+                      <button
+                        onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }}
+                        style={{
+                          display: 'block', width: '100%',
+                          padding: '8px 12px', background: 'transparent',
+                          border: '1.5px solid var(--accent)', borderRadius: 8,
+                          color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                          cursor: 'pointer', opacity: 0.5, textAlign: 'center',
+                        }}
+                      >
+                        Add food
+                      </button>
+                    )}
                   </div>
                 </div>
               </React.Fragment>
