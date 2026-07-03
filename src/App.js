@@ -12,6 +12,7 @@ import AccountInformation from './components/AccountInformation';
 import DataExport from './components/DataExport';
 import Subscription from './components/Subscription';
 import Units from './components/Units';
+import FoodLogPreferences from './components/FoodLogPreferences';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
 import AuthScreen from './components/AuthScreen';
@@ -41,6 +42,7 @@ function getHeaderTitle(activeTab) {
     'profile-subscription': 'Subscription',
     'profile-data': 'Data & Export',
     'profile-units': 'Units',
+    'profile-food-prefs': 'Food Log Preferences',
     'profile-privacy': 'Privacy Policy',
     'profile-terms': 'Terms of Service',
   };
@@ -72,6 +74,9 @@ const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab
 const [date, setDate] = useState(new Date())
 const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
 const [metricSystem, setMetricSystem] = useState(() => localStorage.getItem('metricSystem') || 'imperial');
+// Food log display prefs (client-side only, kept across sign-out like theme).
+const [foodAutoCollapse, setFoodAutoCollapse] = useState(() => localStorage.getItem('foodAutoCollapse') === 'true');
+const [foodTimeFormat, setFoodTimeFormat] = useState(() => localStorage.getItem('foodTimeFormat') || '12h');
 // Saved nutrition goals (loaded from user_goals, reloaded on sign-in/out). The Goals
 // screen's Save pushes its values straight back via onGoalsUpdate → setGoals, so the
 // Dashboard/Food Log update without a round-trip.
@@ -239,6 +244,8 @@ const changeDate = (dir) => {
 
   useEffect(() => { localStorage.setItem('theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('metricSystem', metricSystem); }, [metricSystem]);
+  useEffect(() => { localStorage.setItem('foodAutoCollapse', foodAutoCollapse); }, [foodAutoCollapse]);
+  useEffect(() => { localStorage.setItem('foodTimeFormat', foodTimeFormat); }, [foodTimeFormat]);
   useEffect(() => { localStorage.setItem('activeTab', activeTab); }, [activeTab]);
   useEffect(() => {
     if (activeWorkout) localStorage.setItem('activeWorkout', JSON.stringify(activeWorkout));
@@ -285,7 +292,7 @@ const changeDate = (dir) => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
       case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
-      case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} workoutBarVisible={!!activeWorkout && !workoutExpanded} /></div>;
+      case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} workoutBarVisible={!!activeWorkout && !workoutExpanded} autoCollapse={foodAutoCollapse} timeFormat={foodTimeFormat} /></div>;
       case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(g) => setGoals(prev => ({ ...prev, ...g }))} />;
       case 'profile-habits': return <DailyHabits onBack={() => setActiveTab('profile')} showToast={showToast} />;
       case 'profile-measurements': return <Measurements metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
@@ -313,11 +320,12 @@ const changeDate = (dir) => {
           onStartRest={startRest}
           onSkipRest={skipRest}
         />;
-      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenMeasurements={() => setActiveTab('profile-measurements')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenDataExport={() => setActiveTab('profile-data')} onOpenUnits={() => setActiveTab('profile-units')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
+      case 'profile': return <Profile onOpenGoals={() => setActiveTab('profile-goals')} onOpenHabits={() => setActiveTab('profile-habits')} onOpenMeasurements={() => setActiveTab('profile-measurements')} onOpenAccount={() => setActiveTab('profile-account')} onOpenSubscription={() => setActiveTab('profile-subscription')} onOpenDataExport={() => setActiveTab('profile-data')} onOpenUnits={() => setActiveTab('profile-units')} onOpenFoodPrefs={() => setActiveTab('profile-food-prefs')} onOpenEditDashboard={() => setActiveTab('dashboard-edit')} onOpenPrivacy={() => setActiveTab('profile-privacy')} onOpenTerms={() => setActiveTab('profile-terms')} user={user} theme={theme} setTheme={setTheme} metricSystem={metricSystem} />;
       case 'profile-account': return <AccountInformation user={user} metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
       case 'profile-subscription': return <Subscription onBack={() => setActiveTab('profile')} />;
       case 'profile-data': return <DataExport user={user} onBack={() => setActiveTab('profile')} />;
       case 'profile-units': return <Units metricSystem={metricSystem} setMetricSystem={setMetricSystem} />;
+      case 'profile-food-prefs': return <FoodLogPreferences autoCollapse={foodAutoCollapse} setAutoCollapse={setFoodAutoCollapse} timeFormat={foodTimeFormat} setTimeFormat={setFoodTimeFormat} />;
       case 'profile-privacy': return <PrivacyPolicy />;
       case 'profile-terms': return <TermsOfService />;
       default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;

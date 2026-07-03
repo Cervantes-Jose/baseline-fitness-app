@@ -1971,6 +1971,7 @@ const updateSet = (exId, setIdx, field, value) => {
         {calendarView && !editMode && history.length > 0 && (
           <div className="card-flat" style={{ padding: '16px' }}>
             <MonthOverviewCalendar
+              scroll
               markedDays={workoutDays}
               onSelectDay={(key) => {
                 const sessions = workoutDayMap[key];

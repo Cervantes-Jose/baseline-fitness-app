@@ -23,6 +23,24 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
   return { label: `${h} ${ampm}`, range: `${h}:00 ${ampm} – ${h}:59 ${ampm}`, value: i };
 });
 
+// The 24 hours grouped into four 6-hour blocks. Each renders as a collapsible tile;
+// expanded, it shows its hours exactly as the timeline always has.
+const BLOCKS = [
+  { key: 'earlyAM',   label12: '12 AM - 5 AM', start: 0,  end: 5,  color: '#EAB308' }, // yellow
+  { key: 'morning',   label12: '6 AM - 11 AM', start: 6,  end: 11, color: '#3B82F6' }, // blue
+  { key: 'afternoon', label12: '12 PM - 5 PM', start: 12, end: 17, color: '#22C55E' }, // green
+  { key: 'evening',   label12: '6 PM - 11 PM', start: 18, end: 23, color: '#8B5CF6' }, // purple
+];
+
+// Block header label, honoring the 12h/24h preference.
+const blockLabel = (block, timeFormat) => {
+  if (timeFormat === '24h') {
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(block.start)}:00 - ${pad(block.end)}:59`;
+  }
+  return block.label12;
+};
+
 const PLACEHOLDER_FOODS = [
   { name: 'Chicken Breast',  calories: 165, protein: 31, carbs: 0,  fats: 4  },
   { name: 'Brown Rice',      calories: 216, protein: 5,  carbs: 45, fats: 2  },
@@ -419,8 +437,21 @@ function FoodDetailView({ scrollRef, food, serving, unit, servings, onServing, o
 }
 
 // ─── FOOD LOG ────────────────────────────────────────────────
-function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60, onSelectModeChange = () => {}, workoutBarVisible = false }) {
+function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, carbsGoal = 200, fatsGoal = 60, onSelectModeChange = () => {}, workoutBarVisible = false, autoCollapse = false, timeFormat = '12h' }) {
   const currentHour = new Date().getHours();
+
+  // Per-block expand state. `autoCollapse` only sets the DEFAULT (all collapsed when on,
+  // all expanded when off) — blocks stay independently toggleable after. Changing the
+  // setting resets every block to the new default.
+  const [blocksExpanded, setBlocksExpanded] = useState(() => {
+    const v = !autoCollapse;
+    return { earlyAM: v, morning: v, afternoon: v, evening: v };
+  });
+  useEffect(() => {
+    const v = !autoCollapse;
+    setBlocksExpanded({ earlyAM: v, morning: v, afternoon: v, evening: v });
+  }, [autoCollapse]);
+  const toggleBlock = (key) => setBlocksExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   const [date, setDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
@@ -1965,21 +1996,64 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
           </div>
         )
       ) : (
-        <div style={{ position: 'relative', paddingBottom: 40 }}>
-          {/* Vertical connecting line through dot centers */}
-          <div style={{
-            position: 'absolute', left: 28, top: 0, bottom: 0,
-            width: 1, background: 'var(--border)', zIndex: 0,
-          }} />
+        <div style={{ paddingBottom: 40 }}>
+          {BLOCKS.map(block => {
+            const blockHours = HOURS.filter(h => h.value >= block.start && h.value <= block.end);
+            const blockEntries = blockHours.flatMap(h => foods[h.value] || []);
+            const count = blockEntries.length;
+            const bt = blockEntries.reduce((a, f) => ({
+              calories: a.calories + Number(f.calories || 0),
+              protein: a.protein + Number(f.protein || 0),
+              carbs: a.carbs + Number(f.carbs || 0),
+              fats: a.fats + Number(f.fats || 0),
+            }), { calories: 0, protein: 0, carbs: 0, fats: 0 });
+            const expanded = blocksExpanded[block.key];
+            return (
+              <div key={block.key} style={{ marginBottom: 8 }}>
+                {/* Block tile — full-width, tap to expand/collapse (independent per block).
+                    The colored circle lives inside the tile (filled when the block has any items). */}
+                <div onClick={() => toggleBlock(block.key)} style={{
+                  margin: '0 20px', background: 'var(--card)', border: '1px solid var(--border)',
+                  borderRadius: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)', padding: '14px 16px', cursor: 'pointer',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', flexShrink: 0, border: `2px solid ${block.color}`, background: count > 0 ? block.color : 'var(--card)' }} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{blockLabel(block, timeFormat)}</span>
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s ease', color: 'var(--text-muted)' }}>
+                      <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  {/* Collapsed: item count + block macro totals (same colored summary as each hour) */}
+                  {!expanded && (
+                    <div style={{ marginLeft: 24 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{count} item{count !== 1 ? 's' : ''}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                        <span style={{ color: '#3B82F6' }}>Calories: {bt.calories}</span>
+                        <span style={{ color: '#22C55E' }}>P: {bt.protein}g</span>
+                        <span style={{ color: '#3B82F6' }}>F: {bt.fats}g</span>
+                        <span style={{ color: '#EAB308' }}>C: {bt.carbs}g</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Expanded: the block's hours, exactly as the timeline always looked */}
+                {expanded && (
+                <div style={{ position: 'relative', marginTop: 8 }}>
+                  {/* Vertical connecting line through dot centers */}
+                  <div style={{
+                    position: 'absolute', left: 42, top: 0, bottom: 0,
+                    width: 1, background: 'var(--border)', zIndex: 0,
+                  }} />
 
-          {HOURS.map(h => {
+                  {blockHours.map(h => {
             const hourFoods = foods[h.value] || [];
             const isNow = isToday && h.value === currentHour;
-            const [num, ap] = h.label.split(' ');
+            const num = timeFormat === '24h' ? String(h.value).padStart(2, '0') : h.label.split(' ')[0];
+            const ap = timeFormat === '24h' ? null : h.label.split(' ')[1];
             return (
               <React.Fragment key={h.value}>
                 {/* [dot col 16px] [hour label 44px] [tile] */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '3px 20px', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: '3px 20px 3px 34px', gap: 8 }}>
                   {/* Dot column — line runs through its center */}
                   <div style={{
                     width: 16, flexShrink: 0,
@@ -1988,15 +2062,15 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                   }}>
                     <div style={{
                       width: 10, height: 10, borderRadius: '50%',
-                      border: '2px solid #3B82F6',
-                      background: hourFoods.length > 0 ? '#3B82F6' : 'var(--card)',
+                      border: `2px solid ${block.color}`,
+                      background: hourFoods.length > 0 ? block.color : 'var(--card)',
                     }} />
                   </div>
 
                   {/* Hour label — two lines */}
                   <div style={{ width: 44, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: isNow ? 'var(--accent)' : 'var(--text-primary)', lineHeight: 1 }}>{num}</span>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1, marginTop: 2 }}>{ap}</span>
+                    {ap && <span style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1, marginTop: 2 }}>{ap}</span>}
                   </div>
 
                   {/* Card — also a copy/move target while picking a destination hour */}
@@ -2009,27 +2083,20 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                     cursor: (copyMode || moveMode) ? 'pointer' : 'default',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        color: 'var(--accent)', fontWeight: 600, fontSize: 13, padding: 0,
-                      }}>+ Add Food</button>
-                    </div>
-                    {isToday && hourFoods.length === 0 && (yesterdayFoods[h.value] || []).length > 0 && !copyMode && !moveMode && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); copyHourFromYesterday(h.value); }}
-                        style={{
-                          display: 'block', width: '100%', marginTop: 8,
-                          padding: '8px 12px', background: 'transparent',
-                          border: '1.5px solid var(--accent)', borderRadius: 8,
-                          color: 'var(--accent)', fontSize: 12, fontWeight: 600,
-                          cursor: 'pointer', opacity: 0.5, textAlign: 'center',
-                        }}
-                      >
-                        Copy from Yesterday ({(yesterdayFoods[h.value] || []).length} item{(yesterdayFoods[h.value] || []).length !== 1 ? 's' : ''})
+                      {/* Circular add button — mirrors the bottom-right FAB, but hollow:
+                          white inside with a blue ring + blue plus. */}
+                      <button onClick={(e) => { e.stopPropagation(); copyMode ? copyToHour(h.value) : moveMode ? moveSelectedToHour(h.value) : openAddFood(h.value); }} aria-label="Add food" style={{
+                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0, padding: 0, cursor: 'pointer',
+                        background: 'var(--card)', border: '1.5px solid var(--accent)', color: 'var(--accent)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                        </svg>
                       </button>
-                    )}
-                    {hourFoods.length > 0 && (
-                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    </div>
+                    {/* Macro summary — shown in every expanded hour (zeros when empty), always with a divider under it. */}
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {(() => {
                           const ht = hourFoods.reduce((a, f) => ({
                             calories: a.calories + Number(f.calories || 0),
@@ -2084,16 +2151,31 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
                             </div>
                           );
                         })}
+                        {/* Copy from Yesterday — under the divider, only when the hour is empty
+                            and yesterday had items (so it never sits directly under the + button). */}
+                        {isToday && hourFoods.length === 0 && (yesterdayFoods[h.value] || []).length > 0 && !copyMode && !moveMode && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); copyHourFromYesterday(h.value); }}
+                            style={{
+                              display: 'block', width: '100%',
+                              padding: '8px 12px', background: 'transparent',
+                              border: '1.5px solid var(--accent)', borderRadius: 8,
+                              color: 'var(--accent)', fontSize: 12, fontWeight: 600,
+                              cursor: 'pointer', opacity: 0.5, textAlign: 'center',
+                            }}
+                          >
+                            Copy from Yesterday ({(yesterdayFoods[h.value] || []).length} item{(yesterdayFoods[h.value] || []).length !== 1 ? 's' : ''})
+                          </button>
+                        )}
                       </div>
-                    )}
                   </div>
                 </div>
-
-                {/* Section dividers after 5 AM and 11 AM */}
-                {(h.value === 5 || h.value === 11) && (
-                  <div style={{ margin: '4px 20px 4px 96px', borderTop: '1px dashed var(--border)' }} />
-                )}
               </React.Fragment>
+            );
+          })}
+                </div>
+                )}
+              </div>
             );
           })}
         </div>

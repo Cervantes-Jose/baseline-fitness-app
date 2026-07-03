@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import {
-  ymd, parseYmd, isScheduled, weekDates, monthGrid, DOW_LETTER, DOW_SHORT,
+  ymd, parseYmd, isScheduled, weekDates, DOW_SHORT,
   weekProgress, monthProgress, currentStreak, longestStreak, daysTrackedThisMonth,
   habitSubtitle,
 } from './habitMath';
 import useSwipeToDismiss from './useSwipeToDismiss';
-
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+import ScrollMonthStack from './ScrollMonthStack';
 
 // Detail for a single habit, presented as a bottom-up full-screen sheet (swipe down
 // to dismiss). Overview stats, This Week strip, Month calendar, and history. Scheduled
@@ -16,7 +15,6 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete = () => {}, showToast = () => {} }) {
   const [doneSet, setDoneSet] = useState(() => new Set());   // Set of ymd strings
   const [logTargets, setLogTargets] = useState({});          // ymd -> target snapshot at log time
-  const [monthRef, setMonthRef] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const todayStr = ymd(new Date());
 
@@ -94,9 +92,24 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
 
   const week = weekDates();
   const wk = weekProgress(habit, doneSet);
-  const mp = monthProgress(habit, doneSet, monthRef.getFullYear(), monthRef.getMonth());
-  const cells = monthGrid(monthRef.getFullYear(), monthRef.getMonth());
   const historyDates = [...doneSet].sort((a, b) => (a < b ? 1 : -1)).map(parseYmd); // newest first
+
+  // Months from the first completed day up to the current month (ascending) for the
+  // scrolling Month Overview. No completions yet → just the current month.
+  const habitMonths = useMemo(() => {
+    const n = new Date();
+    const end = new Date(n.getFullYear(), n.getMonth(), 1);
+    let start = new Date(end);
+    if (doneSet.size) {
+      let min = null;
+      doneSet.forEach(k => { if (min === null || k < min) min = k; });
+      if (min) { const d = parseYmd(min); start = new Date(d.getFullYear(), d.getMonth(), 1); }
+    }
+    const list = [];
+    const cur = new Date(start);
+    while (cur <= end) { list.push({ y: cur.getFullYear(), m: cur.getMonth() }); cur.setMonth(cur.getMonth() + 1); }
+    return list;
+  }, [doneSet]);
   const last5 = historyDates.slice(0, 5);
 
   // One history row — matches the measurements detail row exactly (size, accent bar, divider).
@@ -126,9 +139,6 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
     { label: 'Longest Streak', value: longestStreak(habit, doneSet), sub: 'Days' },
     { label: 'Days Tracked', value: daysTrackedThisMonth(doneSet), sub: 'This Month' },
   ];
-
-  const canGoNextMonth = monthRef.getFullYear() < new Date().getFullYear()
-    || (monthRef.getFullYear() === new Date().getFullYear() && monthRef.getMonth() < new Date().getMonth());
 
   // A check/empty circle. `scheduled=false` → greyed dot, inert.
   const dayCircle = (date, size = 24) => {
@@ -217,38 +227,21 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
             </div>
           </div>
 
-          {/* Month Overview */}
+          {/* Month Overview — one continuously-scrolling stack of months (current month
+              rests slightly-low; scroll up for older) in place of prev/next paging. Bounded
+              so this mid-sheet section stays compact and doesn't fight the sheet's
+              swipe-to-dismiss. Each month shows its own completed/scheduled count. */}
           <div className="card-flat" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <p style={sectionLabel}>Month Overview</p>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{mp.done} of {mp.scheduled} days</span>
-            </div>
-            {/* Month label (top-left) + arrows (to its right) */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{MONTH_NAMES[monthRef.getMonth()]} {monthRef.getFullYear()}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button onClick={() => setMonthRef(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1 }}>‹</button>
-                <button onClick={() => canGoNextMonth && setMonthRef(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} disabled={!canGoNextMonth}
-                  style={{ background: 'none', border: 'none', cursor: canGoNextMonth ? 'pointer' : 'default', color: 'var(--text-secondary)', fontSize: 22, padding: '2px 6px', lineHeight: 1, opacity: canGoNextMonth ? 1 : 0.3 }}>›</button>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 8 }}>
-              {[1,2,3,4,5,6,0].map(dow => (
-                <div key={dow} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textAlign: 'center' }}>{DOW_LETTER[dow]}</div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, justifyItems: 'center' }}>
-              {cells.map((cell, i) => {
-                if (!cell.inMonth) return <div key={i} style={{ width: 28, height: 28 }} />;
-                return (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <span style={{ fontSize: 10, color: ymd(cell.date) === todayStr ? 'var(--accent)' : 'var(--text-muted)', fontWeight: ymd(cell.date) === todayStr ? 700 : 400 }}>{cell.date.getDate()}</span>
-                    {dayCircle(cell.date, 24)}
-                  </div>
-                );
-              })}
-            </div>
+            <p style={{ ...sectionLabel, marginBottom: 14 }}>Month Overview</p>
+            <ScrollMonthStack
+              bounded
+              months={habitMonths}
+              renderDay={(d) => dayCircle(d, 24)}
+              monthMeta={(y, m) => {
+                const p = monthProgress(habit, doneSet, y, m);
+                return <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>{p.done} of {p.scheduled} days</span>;
+              }}
+            />
           </div>
 
           {/* History — flat list, newest first; the most recent gets an accent bar. Up to 5

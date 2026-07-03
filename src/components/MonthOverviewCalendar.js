@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ymd, parseYmd, monthGrid, DOW_LETTER } from './habitMath';
+import ScrollMonthStack from './ScrollMonthStack';
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -19,6 +20,9 @@ const MONTH_NAMES = ['January','February','March','April','May','June','July','A
 //   initialMonth       — Date to open on (defaults to the selected day's month, else today)
 //   title              — optional section label; when set, a "N days" count shows beside it
 //   accent             — circle / highlight color (defaults to the app's blue)
+//   scroll             — render every month from the first marked day up to the current
+//                        month as one vertically-scrolling stack (current month resting
+//                        slightly-low) instead of paging with prev/next arrows. Past-only.
 export default function MonthOverviewCalendar({
   markedDays,
   onSelectDay = () => {},
@@ -28,6 +32,7 @@ export default function MonthOverviewCalendar({
   initialMonth = null,
   title = null,
   accent = 'var(--accent)',
+  scroll = false,
 }) {
   const [monthRef, setMonthRef] = useState(() => {
     const base = initialMonth || (selectedDay ? parseYmd(selectedDay) : new Date());
@@ -39,6 +44,24 @@ export default function MonthOverviewCalendar({
   const cells = monthGrid(year, month);
   const todayStr = ymd(new Date());
   const now = new Date();
+
+  // Scroll mode: the list of months from the earliest marked day up to the current
+  // month (ascending). Empty markedDays → just the current month.
+  const scrollMonths = useMemo(() => {
+    if (!scroll) return [];
+    const end = new Date(now.getFullYear(), now.getMonth(), 1);
+    let start = new Date(end);
+    if (markedDays && markedDays.size) {
+      let min = null;
+      markedDays.forEach(k => { if (min === null || k < min) min = k; });
+      if (min) { const d = parseYmd(min); start = new Date(d.getFullYear(), d.getMonth(), 1); }
+    }
+    const list = [];
+    const cur = new Date(start);
+    while (cur <= end) { list.push({ y: cur.getFullYear(), m: cur.getMonth() }); cur.setMonth(cur.getMonth() + 1); }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scroll, markedDays]);
 
   // Don't page past the current month (there's no future data to show) — unless
   // allowFuture is set, e.g. the food log where you can plan meals ahead.
@@ -83,6 +106,20 @@ export default function MonthOverviewCalendar({
       </button>
     );
   };
+
+  // Scroll mode: one continuously-scrolling stack of months instead of prev/next paging.
+  if (scroll) {
+    return (
+      <div>
+        {title && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p style={sectionLabel}>{title}</p>
+          </div>
+        )}
+        <ScrollMonthStack months={scrollMonths} renderDay={dayCircle} />
+      </div>
+    );
+  }
 
   return (
     <div>

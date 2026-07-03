@@ -22,6 +22,7 @@ const ICONS = {
   shield: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3l7 3v6c0 4.2-3 7-7 9-4-2-7-4.8-7-9V6z" strokeLinejoin="round" /></svg>,
   document: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 3h7l5 5v13H6z" strokeLinejoin="round" /><path d="M13 3v5h5M9 13h6M9 16.5h6" strokeLinecap="round" /></svg>,
   chat: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h16v11H9l-4 4v-4H4z" strokeLinejoin="round" /></svg>,
+  utensils: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 3v7a2 2 0 004 0V3M8 10v11M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4v9" strokeLinecap="round" strokeLinejoin="round" /></svg>,
 };
 
 const Chevron = () => (
@@ -118,7 +119,7 @@ function ThemeSheet({ open, onClose, theme, setTheme }) {
 }
 
 // ─── PROFILE ────────────────────────────────────────────────
-export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenDataExport = () => {}, onOpenUnits = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, onOpenHabits = () => {}, onOpenMeasurements = () => {}, user, theme, setTheme, metricSystem }) {
+export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => {}, onOpenSubscription = () => {}, onOpenDataExport = () => {}, onOpenUnits = () => {}, onOpenFoodPrefs = () => {}, onOpenEditDashboard = () => {}, onOpenPrivacy = () => {}, onOpenTerms = () => {}, onOpenHabits = () => {}, onOpenMeasurements = () => {}, user, theme, setTheme, metricSystem }) {
   const [toast, setToast] = useState('');
   const [themeOpen, setThemeOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -187,6 +188,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
         <Row icon={ICONS.habit} label="Daily Habits" onClick={onOpenHabits} />
         <Row icon={ICONS.measure} label="Measurements" onClick={onOpenMeasurements} />
         <Row icon={ICONS.dumbbell} label="Workout Preferences" onClick={comingSoon} />
+        <Row icon={ICONS.utensils} label="Food Log Preferences" onClick={onOpenFoodPrefs} />
         <Row icon={ICONS.appearance} label="App Appearance" onClick={() => setThemeOpen(true)} />
         <Row icon={ICONS.grid} label="Edit Dashboard" onClick={onOpenEditDashboard} isLast />
       </Section>

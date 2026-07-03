@@ -35,8 +35,8 @@ function WorkoutSummary({ summary, metricSystem = 'imperial', onFinish = () => {
   );
 
   return createPortal(
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(0,0,0,0.45)',
+    <div className="ws-overlay" style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 800, background: 'rgba(0,0,0,0.45)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
       opacity: shown ? 1 : 0, transition: 'opacity 0.28s ease',
     }}>
@@ -44,9 +44,18 @@ function WorkoutSummary({ summary, metricSystem = 'imperial', onFinish = () => {
         0%   { transform: translateX(-62%) translateY(-10px) scale(0.92); opacity: 0.55; }
         50%  { transform: translateX(-38%) translateY(6px)   scale(1.18); opacity: 1; }
         100% { transform: translateX(-62%) translateY(-10px) scale(0.92); opacity: 0.55; }
-      }`}</style>
-      <div style={{
-        width: '100%', maxWidth: '380px', maxHeight: '86vh',
+      }
+      /* Size to the DYNAMIC (visible) viewport, not vh. On Android Chrome vh is
+         locked to the largest viewport (toolbar hidden), so with the toolbar
+         showing the card's scroll body gets allocated more height than is
+         actually on screen — the list fits without overflowing, never scrolls,
+         and its bottom hides below the fold. dvh tracks the visible area so the
+         body overflows and scrolls. The plain-vh line is a fallback for any
+         engine without dvh support (CSS drops the second line there). */
+      .ws-overlay { height: 100vh; height: 100dvh; }
+      .ws-card { max-height: 86vh; max-height: 86dvh; }`}</style>
+      <div className="ws-card" style={{
+        width: '100%', maxWidth: '380px',
         background: 'var(--card)', borderRadius: '20px', border: '1px solid var(--border)',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative',
         display: 'flex', flexDirection: 'column',
@@ -75,7 +84,7 @@ function WorkoutSummary({ summary, metricSystem = 'imperial', onFinish = () => {
         {/* Scrollable body — minHeight:0 lets this flex child shrink below its content
             height so overflow-y:auto actually scrolls (without it the expanded exercise
             list grows the body and the card just clips it). */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* Card 1: routine name + completed/total, expandable */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '14px', overflow: 'hidden' }}>
             <div onClick={() => setExpanded(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px', cursor: 'pointer' }}>

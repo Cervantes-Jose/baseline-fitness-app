@@ -44,7 +44,7 @@ export default function PrivacyPolicy() {
         <H>What Data We Collect</H>
         <P>When you create an account and use Baseline Fitness, we collect only what you enter yourself.</P>
         <Sub>Account Information</Sub>
-        <List items={['Email address', 'Full name', 'Gender, date of birth, and height (optional)']} />
+        <List items={['Email address', 'Full name', 'Date of birth', 'Gender and height (optional)']} />
         <Sub>Fitness and Health Data</Sub>
         <List items={['Food entries including calories, macros, and meal times', 'Workout routines, exercises, sets, reps, and weight logged', 'Body measurements including weight, body fat, and custom measurements', 'Nutrition and body composition goals you set']} />
         <Sub>We do not collect</Sub>

@@ -938,6 +938,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
               {historyCalendar ? (
                 <div className="card-flat" style={{ padding: '16px' }}>
                   <MonthOverviewCalendar
+                    scroll
                     markedDays={entryDays}
                     onSelectDay={(key) => {
                       const dayEntries = entriesByDay[key];
