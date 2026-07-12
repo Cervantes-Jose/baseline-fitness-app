@@ -1,7 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const USDA_API_KEY = Deno.env.get("USDA_API_KEY") ?? "";
+// Trim: a key pasted with trailing whitespace/newline must not corrupt the
+// request line (it is also the only part of the USDA URL not percent-encoded
+// below, so it gets encodeURIComponent like the query).
+const USDA_API_KEY = (Deno.env.get("USDA_API_KEY") ?? "").trim();
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -90,7 +93,10 @@ serve(async (req) => {
 
     const sanitized = query.trim().slice(0, 100);
 
-    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + USDA_API_KEY + "&query=" + encodeURIComponent(sanitized) + "&pageSize=40&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS),Branded";
+    // Parens are %-encoded (%28FNDDS%29): raw parens were the one unusual token in
+    // the request line when USDA's backend nginx intermittently returned bare 400s
+    // (reproduced 2026-07-12); encoded form parses identically at USDA's app layer.
+    const usdaUrl = "https://api.nal.usda.gov/fdc/v1/foods/search?api_key=" + encodeURIComponent(USDA_API_KEY) + "&query=" + encodeURIComponent(sanitized) + "&pageSize=40&dataType=Foundation,SR%20Legacy,Survey%20%28FNDDS%29,Branded";
 
     // USDA throttles bursts and returns transient 5xx/429s, which previously surfaced to
     // the client as a generic "Search unavailable". Retry a couple of times with a short
@@ -98,14 +104,22 @@ serve(async (req) => {
     // stops a hung USDA call from holding the function open.
     const fetchUsda = async (): Promise<Response> => {
       let last: Response | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+      // Backoff stretches to ~3s total: USDA's bad-node window outlasts a
+      // sub-second retry burst (three 400s inside ~1s observed 2026-07-12),
+      // so later attempts must land outside that window. Capped at 1800ms to
+      // keep the worst all-timeouts case bounded for a search field.
+      const delays = [0, 300, 900, 1800];
+      for (let attempt = 0; attempt < delays.length; attempt++) {
+        if (delays[attempt] > 0) await new Promise((r) => setTimeout(r, delays[attempt]));
         try {
           const r = await fetch(usdaUrl, { signal: AbortSignal.timeout(10000) });
           if (r.ok) return r;
           last = r;
-          // 4xx other than 429 won't fix themselves — stop retrying.
-          if (r.status !== 429 && r.status < 500) return r;
+          // 4xx other than 429 won't fix themselves — stop retrying. Exception:
+          // USDA's backend pool intermittently rejects valid requests with an
+          // nginx-level 400 that succeeds on immediate retry (seen 2026-07-12),
+          // so 400 stays retryable like 429/5xx.
+          if (r.status !== 429 && r.status !== 400 && r.status < 500) return r;
         } catch (_e) {
           last = null;   // network/timeout — fall through to retry
         }
