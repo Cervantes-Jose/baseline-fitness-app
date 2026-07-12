@@ -16,17 +16,12 @@ root.render(
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
 
+// The old service worker never installed in production (it precached dev-only
+// asset paths), but dev devices on localhost may still have a live cache-first
+// worker serving stale code — unregister any leftovers. Safe to delete this
+// block once it has shipped and lingered a while.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').then((registration) => {
-      registration.onupdatefound = () => {
-        const worker = registration.installing;
-        worker.onstatechange = () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-            window.dispatchEvent(new Event('swUpdate'));
-          }
-        };
-      };
-    }).catch(() => {});
-  });
+  navigator.serviceWorker.getRegistrations()
+    .then((regs) => regs.forEach((reg) => reg.unregister()))
+    .catch(() => {});
 }
