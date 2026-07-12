@@ -196,7 +196,7 @@ All window parameters default to null. Only pass the windows you need by name.
 - [x] Age verification on signup (13+)
 - [x] Privacy Policy and Terms of Service in-app
 - [x] Feedback Edge Function with rate limiting
-- [ ] Email confirmation re-enabled before open testing
+- [x] Email confirmation re-enabled (confirmed on 2026-07-12: signup returns confirmation_sent_at, no session)
 - [ ] Supabase Pro upgrade before open testing
 - [ ] 4-character minimum trigger for food search
 - [ ] Manual barcode entry text field in scanner UI
