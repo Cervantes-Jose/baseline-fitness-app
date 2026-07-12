@@ -124,7 +124,10 @@ Deno.serve(async (req) => {
   // from CLAUDE.md or deletion will fail here with an FK violation.
   const { error: deleteError } = await admin.auth.admin.deleteUser(uid);
   if (deleteError) {
-    return json({ error: "Failed deleting account", details: deleteError.message }, 500);
+    // Deletion errors can name internal objects (FK violations, auth internals) —
+    // log server-side only.
+    console.error("delete-account: deleteUser failed:", deleteError.message);
+    return json({ error: "Failed deleting account" }, 500);
   }
 
   return json({ success: true });
