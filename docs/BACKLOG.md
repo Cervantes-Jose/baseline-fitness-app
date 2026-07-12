@@ -18,14 +18,14 @@ Source: the four [Fable 5] audit sessions of 2026-07-11 (Security Audit, Codebas
 - [x] **S12 — Rate-limit purge** — `20260712100200_purge_stale_rate_limits.sql`, daily pg_cron.
 - [x] **S14 — Email confirmation ON** — confirmed 2026-07-12 (signup returns `confirmation_sent_at`, no session).
 - [x] **USDA nginx-400 flake** — food-search v20 retries 400s with 0/300/900/1800 ms backoff; 15/15 live verification.
+- [x] **`enforce_api_table_privileges` mutable search_path** — pinned `search_path = public` (stays SECURITY INVOKER by design); migration `20260712120000`, commit `cb9aafa`. Advisor WARN verified cleared + `pg_proc` proconfig confirmed 2026-07-12.
+- [x] **delete-account 500 path leaked `deleteError.message`** — now logged server-side, generic message returned; commit `c38695e`, deployed as v5.
 
 ## Security — still open
 
 - [ ] **S3 — Server-side password policy.** Leaked-password (HIBP) protection still disabled (live advisor WARN, 2026-07-12); minimum length/character classes should be set in Supabase Auth settings to match `passwordPolicy.js`. Likely needs the Pro upgrade.
 - [ ] **S9 — Signup enumeration.** "An account already exists with that email" still confirms registration status (AuthScreen). Deliberate-UX decision pending: keep, or always show "Check your email".
 - [ ] **S13 — OpenFoodFacts direct-from-browser.** Barcode lookups still `fetch` openfoodfacts.org directly (user IP + scanned products to a third party, no timeout). Decide: proxy behind a rate-limited Edge Function, or accept + add `AbortSignal.timeout` + document in privacy policy. (Its origins are already in the CSP — keep CSP in sync with the decision.)
-- [ ] **NEW — `enforce_api_table_privileges` has a mutable search_path** (live advisor WARN). Pin `search_path` on the function.
-- [ ] **NEW — delete-account 500 path leaks `deleteError.message`** in `details`. Log server-side, return generic (same policy as S6).
 
 ## Launch blockers (codebase audit — not started)
 

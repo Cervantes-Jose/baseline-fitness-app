@@ -330,7 +330,7 @@ Nice-to-have before launch:
 - [ ] Codebase audit items (perf, a11y, dead code, bundle — `docs/BACKLOG.md` items 2–11)
 - [ ] Signup enumeration copy decision
 - [ ] Decide: proxy OpenFoodFacts or accept + timeout
-- [ ] Pin search_path on `enforce_api_table_privileges` (advisor WARN)
-- [ ] Remove `details: deleteError.message` from delete-account's 500 response
+- [x] Pin search_path on `enforce_api_table_privileges` (cb9aafa; advisor WARN verified cleared 2026-07-12)
+- [x] Remove `details: deleteError.message` from delete-account's 500 response (c38695e; deployed as v5)
 - [ ] 4-character minimum trigger for food search
 - [ ] Manual barcode entry text field in scanner UI
