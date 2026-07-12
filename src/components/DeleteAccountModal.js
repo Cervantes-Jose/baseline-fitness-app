@@ -3,14 +3,16 @@ import { supabase } from '../supabaseClient';
 import CenterModal from './CenterModal';
 
 // Two-step confirmation modal for permanent account deletion. Step 1 explains
-// what will be removed; step 2 is the final "are you sure" guard. The actual
-// deletion happens server-side in the `delete-account` Edge Function, which
-// derives the user from the JWT — nothing here can target another account.
-// Rendered as a centered popup (via CenterModal).
+// what will be removed; step 2 requires the current password (the Edge
+// Function re-authenticates with it, so a leftover session alone can't delete
+// an account). The actual deletion happens server-side in the `delete-account`
+// Edge Function, which derives the user from the JWT — nothing here can target
+// another account. Rendered as a centered popup (via CenterModal).
 export default function DeleteAccountModal({ open, onClose }) {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [password, setPassword] = useState('');
 
   // Reset to step 1 whenever the modal is (re)opened.
   useEffect(() => {
@@ -18,6 +20,7 @@ export default function DeleteAccountModal({ open, onClose }) {
       setStep(1);
       setError('');
       setBusy(false);
+      setPassword('');
     }
   }, [open]);
 
@@ -31,9 +34,18 @@ export default function DeleteAccountModal({ open, onClose }) {
     setError('');
     const { error: fnError } = await supabase.functions.invoke('delete-account', {
       method: 'POST',
+      body: { password },
     });
     if (fnError) {
-      setError('Could not delete your account. Please try again.');
+      // FunctionsHttpError carries the raw Response in .context.
+      const status = fnError.context?.status;
+      if (status === 403) {
+        setError('Incorrect password. Please try again.');
+      } else if (status === 429) {
+        setError('Too many attempts. Please wait a while and try again.');
+      } else {
+        setError('Could not delete your account. Please try again.');
+      }
       setBusy(false);
       return;
     }
@@ -56,8 +68,22 @@ export default function DeleteAccountModal({ open, onClose }) {
         <p style={{ textAlign: 'center', fontSize: 14, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
           {step === 1
             ? 'This permanently deletes your account and all of your data — food logs, workouts, routines, measurements and goals. This cannot be undone.'
-            : 'There is no way to recover your data after this. Continue?'}
+            : 'There is no way to recover your data after this. Enter your password to confirm.'}
         </p>
+
+        {step === 2 && (
+          <input
+            type="password"
+            className="input"
+            placeholder="Current password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={busy}
+            autoComplete="current-password"
+            autoFocus
+            style={{ width: '100%', marginBottom: 14, boxSizing: 'border-box' }}
+          />
+        )}
 
         {error && (
           <p style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#EF4444', margin: '0 0 14px' }}>
@@ -75,8 +101,8 @@ export default function DeleteAccountModal({ open, onClose }) {
         ) : (
           <button
             onClick={handleDelete}
-            disabled={busy}
-            style={{ display: 'block', width: '100%', padding: 14, marginBottom: 10, background: '#EF4444', border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.7 : 1 }}
+            disabled={busy || !password}
+            style={{ display: 'block', width: '100%', padding: 14, marginBottom: 10, background: '#EF4444', border: 'none', borderRadius: 12, color: '#fff', fontSize: 15, fontWeight: 700, cursor: busy || !password ? 'default' : 'pointer', opacity: busy || !password ? 0.7 : 1 }}
           >
             {busy ? 'Deleting…' : 'Delete Forever'}
           </button>
