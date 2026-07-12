@@ -186,6 +186,13 @@ consume_rate_limit(p_user_id uuid, p_endpoint text, p_per_minute integer, p_per_
 ```
 All window parameters default to null. Only pass the windows you need by name.
 
+## Security Headers (vercel.json)
+
+Enforcing CSP + security headers are set in `vercel.json` on all routes.
+
+- `vercel.json` must be **strict JSON** — comments (`//`) are not supported and make the Vercel deploy fail with "Invalid vercel.json file provided"
+- If Supabase Realtime is ever enabled, its websocket (`wss://xbvncbvoyatxbdhkkifq.supabase.co`) will NOT match the `https://` entry in `connect-src` — the `wss://` origin must be added to the CSP then
+
 ## Pre-deployment Checklist
 
 - [x] Remove all console.log/console.error statements
