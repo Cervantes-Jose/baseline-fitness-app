@@ -50,7 +50,7 @@ Every new table must include all four steps. Never skip any of them:
 -- 1. CREATE the table (always include user_id column)
 create table public.your_table (
   id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users(id) not null,
+  user_id uuid references auth.users(id) on delete cascade not null,
   -- your columns here
   created_at timestamptz default now()
 );

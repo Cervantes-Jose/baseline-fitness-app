@@ -11,28 +11,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// Tables that hold per-user rows, deleted child -> parent. Within the public
-// schema the parent/child FKs already CASCADE (e.g. deleting a routine removes
-// its exercises), but the FKs to auth.users are NO ACTION, so we must clear
-// every table by user_id here before removing the auth user. user_goals has no
-// FK at all, so it would orphan if we skipped it. Keep this list in sync when
-// new per-user tables are added.
-const USER_TABLES = [
-  "session_exercises",
-  "exercises",
-  "workout_sessions",
-  "measurement_entries",
-  "measurements",
-  "routines",
-  "food_entries",
-  "custom_exercises",
-  "custom_foods",
-  "favorite_foods",
-  "meals",
-  "user_goals",
-  "profiles",
-];
-
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -73,15 +51,13 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Delete the data first. If any of these fail we stop and leave the auth user
-  // intact so the request can be retried without a half-deleted account.
-  for (const table of USER_TABLES) {
-    const { error } = await admin.from(table).delete().eq("user_id", uid);
-    if (error) {
-      return json({ error: `Failed clearing ${table}`, details: error.message }, 500);
-    }
-  }
-
+  // Deleting the auth user removes all of their data: as of migration
+  // 20260712100100_user_id_fk_cascade.sql every public table's user_id FK to
+  // auth.users is ON DELETE CASCADE (this function previously cleared a
+  // hardcoded table list that had gone stale — habits, habit_logs and
+  // exercise_prs were missing, which blocked deletion outright). New per-user
+  // tables must keep the `references auth.users(id) on delete cascade` pattern
+  // from CLAUDE.md or deletion will fail here with an FK violation.
   const { error: deleteError } = await admin.auth.admin.deleteUser(uid);
   if (deleteError) {
     return json({ error: "Failed deleting account", details: deleteError.message }, 500);
