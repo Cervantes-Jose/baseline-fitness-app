@@ -24,6 +24,9 @@
 *.key
 *.keystore
 
+# supabase CLI local state (project ref, pooler URL)
+supabase/.temp/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

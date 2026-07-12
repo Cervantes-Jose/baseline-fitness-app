@@ -57,7 +57,13 @@ function getHeaderTitle(activeTab) {
 const PER_USER_KEYS = [
   'accountInfo', 'profileName', 'dashboardLayout', 'routineOrder',
   'activeWorkout', 'activeWorkoutLog', 'workoutSeconds', 'activeTab',
+  'dashboardHabitsHidden',
 ];
+// Dynamically-named per-user keys (suffix varies per exercise/uid), matched by
+// prefix on sign-out. offlineWorkoutQueue_* is deliberately NOT here — it must
+// survive sign-out so unsynced workouts replay on the next sign-in (see
+// offlineQueue.js design notes).
+const PER_USER_KEY_PREFIXES = ['prPeriod_', 'defaultMeasurementIds_'];
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -156,6 +162,9 @@ const changeDate = (dir) => {
      if (event === 'SIGNED_OUT') {
        setUser(null);
        PER_USER_KEYS.forEach(k => localStorage.removeItem(k));
+       Object.keys(localStorage)
+         .filter(k => PER_USER_KEY_PREFIXES.some(p => k.startsWith(p)))
+         .forEach(k => localStorage.removeItem(k));
        setActiveWorkout(null);
        setWorkoutSeconds(0);
        setShowWorkoutRecovery(false);
