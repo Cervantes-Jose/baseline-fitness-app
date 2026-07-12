@@ -204,6 +204,7 @@ Enforcing CSP + security headers are set in `vercel.json` on all routes.
 - [x] Privacy Policy and Terms of Service in-app
 - [x] Feedback Edge Function with rate limiting
 - [x] Email confirmation re-enabled (confirmed on 2026-07-12: signup returns confirmation_sent_at, no session)
+- [x] CSP enforcing (vercel.json) (verified live on production 2026-07-12: cold load, login, food search, and barcode scanner on a real device all clean)
 - [ ] Supabase Pro upgrade before open testing
 - [ ] 4-character minimum trigger for food search
 - [ ] Manual barcode entry text field in scanner UI
