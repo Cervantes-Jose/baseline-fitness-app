@@ -1,0 +1,11 @@
+-- Pin search_path on enforce_api_table_privileges (security advisor WARN:
+-- "Function Search Path Mutable").
+--
+-- Unlike consume_rate_limit this function stays SECURITY INVOKER — it must run
+-- as the role executing the DDL, since only the grantor (or owner) can revoke
+-- the grants its own default ACL just applied (see migration 20260712110000).
+-- Only the search_path is pinned here; body and semantics are unchanged.
+-- pg_event_trigger_ddl_commands() and format() live in pg_catalog, which is
+-- always searched implicitly, so `public` alone is sufficient and matches the
+-- consume_rate_limit convention.
+alter function public.enforce_api_table_privileges() set search_path = public;
