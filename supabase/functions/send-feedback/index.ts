@@ -62,9 +62,9 @@ Deno.serve(async (req) => {
     return json({ error: "Invalid or expired token" }, 401);
   }
 
-  // ── Parse + validate the body. We trust the JWT for the user's email (the
-  // body's userEmail is only a fallback for display).
-  let body: { message?: unknown; userEmail?: unknown };
+  // ── Parse + validate the body. The user's email comes only from the JWT —
+  // never from the body, so it can't be spoofed.
+  let body: { message?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     return json({ error: `Message must be ${MAX_MESSAGE} characters or fewer` }, 400);
   }
 
-  const fromEmail = user.email ?? (typeof body.userEmail === "string" ? body.userEmail : "unknown");
+  const fromEmail = user.email ?? "unknown";
 
   // ── Rate limit: atomic, server-side. Counters live in a service-only table the
   // user cannot read or write. Fail CLOSED if the limiter errors, so a broken
@@ -106,7 +106,8 @@ Deno.serve(async (req) => {
     return json({ error: "Email service not configured" }, 503);
   }
 
-  // ── Send via Resend. reply_to is the user so a reply goes straight back to them.
+  // ── Send via Resend. reply_to is the JWT-verified email so a reply goes
+  // straight back to the user; omitted when the account has no email.
   const escapeHtml = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -119,7 +120,7 @@ Deno.serve(async (req) => {
     body: JSON.stringify({
       from: FEEDBACK_FROM,
       to: [FEEDBACK_TO],
-      reply_to: fromEmail,
+      ...(user.email ? { reply_to: user.email } : {}),
       subject: "Baseline Fitness Feedback",
       html:
         `<p><strong>From:</strong> ${escapeHtml(fromEmail)}</p>` +
@@ -130,8 +131,9 @@ Deno.serve(async (req) => {
   });
 
   if (!resendResp.ok) {
-    const details = await resendResp.text();
-    return json({ error: "Failed to send feedback", details }, 502);
+    // Resend error bodies can include account/config details — log server-side only.
+    console.error("send-feedback: Resend error", resendResp.status, await resendResp.text());
+    return json({ error: "Failed to send feedback" }, 502);
   }
 
   return json({ success: true });

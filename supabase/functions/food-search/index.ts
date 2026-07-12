@@ -236,8 +236,10 @@ serve(async (req) => {
     );
 
   } catch (error) {
+    // error.message can carry upstream response bodies — log server-side only.
+    console.error("food-search: unhandled error", error);
     return new Response(
-      JSON.stringify({ error: "Search failed", details: error.message }),
+      JSON.stringify({ error: "Search failed" }),
       { status: 500, headers: jsonHeaders }
     );
   }

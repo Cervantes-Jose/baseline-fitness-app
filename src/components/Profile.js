@@ -215,7 +215,7 @@ export default function Profile({ onOpenGoals = () => {}, onOpenAccount = () => 
 
       <ThemeSheet open={themeOpen} onClose={() => setThemeOpen(false)} theme={theme} setTheme={setTheme} />
 
-      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} user={user} />
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
 
       {/* Coming-soon toast */}
       {toast && (

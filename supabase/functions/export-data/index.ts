@@ -36,7 +36,10 @@ function corsHeadersFor(origin: string | null): Record<string, string> {
 
 // ── CSV helpers ─────────────────────────────────────────────
 function csvCell(v: unknown): string {
-  const s = v === null || v === undefined ? "" : String(v);
+  let s = v === null || v === undefined ? "" : String(v);
+  // Neutralize spreadsheet formula injection (OWASP): a leading = + - @ tab or CR
+  // would execute as a formula when the CSV is opened in Excel/Sheets.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 function toCsv(rows: Record<string, unknown>[], headers: string[]): string {
@@ -269,8 +272,9 @@ Deno.serve(async (req) => {
   });
 
   if (!resendResp.ok) {
-    const details = await resendResp.text();
-    return json({ error: "Failed to send your export", details }, 502);
+    // Resend error bodies can include account/config details — log server-side only.
+    console.error("export-data: Resend error", resendResp.status, await resendResp.text());
+    return json({ error: "Failed to send your export" }, 502);
   }
 
   return json({ success: true });

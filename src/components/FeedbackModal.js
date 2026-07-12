@@ -6,8 +6,8 @@ const MAX_CHARS = 500;
 
 // Bottom-sheet modal for sending feedback. The message goes to the
 // `send-feedback` Edge Function, which derives the sender from the JWT and
-// emails it via Resend. The userEmail we pass is only a display fallback.
-export default function FeedbackModal({ open, onClose, user }) {
+// emails it via Resend.
+export default function FeedbackModal({ open, onClose }) {
   const [mounted, setMounted] = useState(open);
   const [shown, setShown] = useState(false);
   const [message, setMessage] = useState('');
@@ -42,7 +42,7 @@ export default function FeedbackModal({ open, onClose, user }) {
     setError('');
     const { error: fnError } = await supabase.functions.invoke('send-feedback', {
       method: 'POST',
-      body: { message: trimmed, userEmail: user?.email },
+      body: { message: trimmed },
     });
     if (fnError) {
       setError("Couldn't send your feedback. Please try again.");
