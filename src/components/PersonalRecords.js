@@ -53,7 +53,7 @@ function buildExerciseHistory(sessions, sessionEx) {
   return result;
 }
 
-function PersonalRecords({ metricSystem = 'imperial' }) {
+function PersonalRecords({ metricSystem = 'imperial', showToast = () => {} }) {
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState({});      // name -> exercise history
   const [prs, setPrs] = useState([]);              // exercise_prs rows
@@ -203,6 +203,7 @@ function PersonalRecords({ metricSystem = 'imperial' }) {
           metricSystem={metricSystem}
           onAddPr={addPr}
           onClose={() => setActiveName(null)}
+          showToast={showToast}
         />
       )}
     </div>

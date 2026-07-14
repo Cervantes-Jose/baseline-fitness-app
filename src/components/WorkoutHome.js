@@ -245,8 +245,8 @@ function WorkoutHome({
       {tab === 'Routines' && (
         <Workouts key="wh-routines" resetKey={resetKey} autoCreateSignal={signalFor('routine')} onAutoCreate={clearAddReq} {...workoutProps} />
       )}
-      {tab === 'Exercises' && <ExerciseDatabase autoCreateSignal={signalFor('exercise')} onAutoCreate={clearAddReq} />}
-      {tab === 'PRs' && <PersonalRecords metricSystem={metricSystem} />}
+      {tab === 'Exercises' && <ExerciseDatabase autoCreateSignal={signalFor('exercise')} onAutoCreate={clearAddReq} showToast={showToast} />}
+      {tab === 'PRs' && <PersonalRecords metricSystem={metricSystem} showToast={showToast} />}
       {tab === 'History' && (
         <Workouts key="wh-history" initialView="history" {...workoutProps} />
       )}

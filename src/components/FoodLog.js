@@ -871,7 +871,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { error } = mealDraft.id
       ? await supabase.from('meals').update(payload).eq('id', mealDraft.id).eq('user_id', uid)
       : await supabase.from('meals').insert([{ ...payload, user_id: uid }]);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     await loadMeals();
     closeMealBuilder();
     showToast(mealDraft.id ? 'Meal updated' : 'Meal saved', null, null);
@@ -904,7 +904,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     if (!uid) return;
     const payload = { name: food.name, is_custom: !!food.isCustom, food, user_id: uid };
     const { data, error } = await supabase.from('favorite_foods').insert([payload]).select().single();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     setFavorites(prev => [{ id: data.id, name: data.name, isCustom: data.is_custom, food: data.food }, ...prev]);
   };
 
@@ -913,7 +913,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const uid = session?.user?.id;
     if (!uid) return;
     setFavorites(prev => prev.filter(f => f.name !== name));
-    await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
+    const { error } = await supabase.from('favorite_foods').delete().eq('name', name).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); loadFavorites(); }
   };
 
   const toggleFavorite = (food) => {
@@ -981,7 +982,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const { data: row, error } = e.id
       ? await supabase.from('custom_foods').update(payload).eq('id', e.id).eq('user_id', uid).select().single()
       : await supabase.from('custom_foods').insert([{ ...payload, user_id: uid }]).select().single();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
 
     const food = { ...row, isCustom: true, micros, savedServing: serving, savedUnit: unit };
     setCustomFoods(prev => e.id ? prev.map(f => (f.id === e.id ? food : f)) : [food, ...prev]);
@@ -991,7 +992,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       addFavorite(food);
     } else if (isFavorite(name)) {
       setFavorites(prev => prev.map(f => (f.name === name ? { ...f, food } : f)));
-      supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid);
+      // Secondary write: refresh the favorite's snapshot. Don't block the save on it,
+      // but re-sync + toast if it fails so the favorite doesn't silently go stale.
+      const { error: favErr } = await supabase.from('favorite_foods').update({ food }).eq('name', name).eq('user_id', uid);
+      if (favErr) { showToast('Couldn\'t save — check your connection.'); loadFavorites(); }
     }
 
     // Opened from the main Custom Foods tab: just save to the library and return to
@@ -1027,7 +1031,8 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     setCustomFoods(prev => prev.filter(f => f.id !== e.id));
     setCheckedFoods(prev => { const n = { ...prev }; delete n[e.name]; return n; });
     if (isFavorite(e.name)) removeFavorite(e.name);
-    await supabase.from('custom_foods').delete().eq('id', e.id).eq('user_id', uid);
+    const { error } = await supabase.from('custom_foods').delete().eq('id', e.id).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); loadCustomFoods(); }
     setCustomEdit(null);
     setCustomEditing(false);
     setDetailFood(null);
@@ -1110,7 +1115,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
         const { data: { session } } = await supabase.auth.getSession();
         const uid = session?.user?.id;
         if (!uid) return;
-        await supabase.from('food_entries').delete().eq('id', id).eq('user_id', uid);
+        // Deferred commit of the undo-toast delete: if it fails, reload so the row
+        // visibly reappears (the optimistic removal already hid it).
+        const { error } = await supabase.from('food_entries').delete().eq('id', id).eq('user_id', uid);
+        if (error) { showToast('Couldn\'t delete — check your connection.'); loadFoods(); }
       }
     );
   };
@@ -1170,7 +1178,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const count = inserts.length;
     exitSelectMode();
     const { error } = await supabase.from('food_entries').insert(inserts);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     loadFoods();
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
@@ -1187,7 +1195,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       servings: e.servings ?? null, food: e.food ?? null, user_id: uid,
     }));
     const { error } = await supabase.from('food_entries').insert(inserts);
-    if (error) return;
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     loadFoods();
     const count = inserts.length;
     showToast(`Copied ${count} food${count !== 1 ? 's' : ''} from yesterday`, null, null);
@@ -1203,7 +1211,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('food_entries').update({ hour, date: dateStr }).eq('user_id', uid).in('id', ids);
-    if (error) { loadFoods(); return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); loadFoods(); return; }
     loadFoods();
     showToast(`Moved ${count} food${count !== 1 ? 's' : ''} to ${HOURS[hour].label}`, null, null);
   };
@@ -1270,7 +1278,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const fields = buildLoggedFields(food, serving, unit, servings, macros);
     const update = { calories: macros.calories, protein: macros.protein, carbs: macros.carbs, fats: macros.fats, ...fields };
     const { error } = await supabase.from('food_entries').update(update).eq('id', e.id).eq('user_id', uid);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     rememberPortion(food.name, fields.serving, fields.unit, fields.servings);
     setEditingEntry(null);
     closeAddFood();
@@ -1530,7 +1538,10 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       const uid = session?.user?.id;
       if (!uid) return;
       setCustomFoods(prev => prev.map(f => (f.id === food.id ? { ...f, savedServing: serving, savedUnit: unit } : f)));
-      supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid);
+      // Persist the preferred serving. Await + re-sync so a failed write doesn't leave
+      // the optimistic saved-serving diverging from the row.
+      const { error } = await supabase.from('custom_foods').update({ saved_serving: serving, saved_unit: unit }).eq('id', food.id).eq('user_id', uid);
+      if (error) { showToast('Couldn\'t save — check your connection.'); loadCustomFoods(); }
     } else {
       setRecentFoodList(prev => {
         if (prev.some(f => f.name === food.name)) {
@@ -1562,7 +1573,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       ...buildLoggedFields(food, serving, unit, servings ?? 1, adjustedMacros),
     }));
     const { data, error } = await supabase.from('food_entries').insert(inserts).select();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     const newFoods = { ...foods };
     data.forEach(entry => {
       if (!newFoods[entry.hour]) newFoods[entry.hour] = [];

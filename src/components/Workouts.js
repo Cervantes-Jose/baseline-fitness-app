@@ -716,7 +716,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId).eq('user_id', uid);
+    const { error } = await supabase.from('exercises').update({ rest_timers: arr }).eq('id', exId).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t save — check your connection.'); loadRoutines(); }
   };
 
   // Write a new rest-timer array into both state and ref, then persist.
@@ -758,7 +759,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('exercises').update({ planned_sets: sets }).eq('id', exId).eq('user_id', uid);
+    const { error } = await supabase.from('exercises').update({ planned_sets: sets }).eq('id', exId).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t save — check your connection.'); loadRoutines(); }
   };
 
   // Flush any debounced planned-sets writes immediately (also called on unmount
@@ -927,8 +929,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('session_exercises').delete().eq('user_id', uid).in('session_id', ids);
-    await supabase.from('workout_sessions').delete().eq('user_id', uid).in('id', ids);
+    const { error: exErr } = await supabase.from('session_exercises').delete().eq('user_id', uid).in('session_id', ids);
+    if (exErr) { showToast('Couldn\'t delete — check your connection.'); loadHistory(); return; }
+    const { error: sessErr } = await supabase.from('workout_sessions').delete().eq('user_id', uid).in('id', ids);
+    if (sessErr) { showToast('Couldn\'t delete — check your connection.'); loadHistory(); return; }
     setHistory(prev => prev.filter(s => !selectedSessions.has(s.id)));
     setSelectedSessions(new Set());
     setEditMode(false);
@@ -957,8 +961,12 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         const { data: { session } } = await supabase.auth.getSession();
         const uid = session?.user?.id;
         if (!uid) return;
-        await supabase.from('exercises').delete().eq('user_id', uid).in('routine_id', ids);
-        await supabase.from('routines').delete().eq('user_id', uid).in('id', ids);
+        // Deferred commit of the undo-toast delete: on failure reload so the removed
+        // routines visibly reappear (the optimistic removal already hid them).
+        const { error: exErr } = await supabase.from('exercises').delete().eq('user_id', uid).in('routine_id', ids);
+        if (exErr) { showToast('Couldn\'t delete — check your connection.'); loadRoutines(); return; }
+        const { error: rErr } = await supabase.from('routines').delete().eq('user_id', uid).in('id', ids);
+        if (rErr) { showToast('Couldn\'t delete — check your connection.'); loadRoutines(); }
       }
     );
   };
@@ -986,7 +994,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('routines').update({ name }).eq('id', renameModal.id).eq('user_id', uid);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     setRoutines(prev => prev.map(r => r.id === renameModal.id ? { ...r, name } : r));
     setRenameModal(null);
     exitRoutineEdit();
@@ -1002,7 +1010,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: updated } : r));
     setSelectedExercises(new Set());
     setExerciseEditMode(false);
-    await supabase.from('exercises').delete().eq('user_id', uid).in('id', ids);
+    const { error } = await supabase.from('exercises').delete().eq('user_id', uid).in('id', ids);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); loadRoutines(); }
   };
 
   const deleteSingleSession = (id) => {
@@ -1016,8 +1025,12 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         const { data: { session } } = await supabase.auth.getSession();
         const uid = session?.user?.id;
         if (!uid) return;
-        await supabase.from('session_exercises').delete().eq('user_id', uid).eq('session_id', id);
-        await supabase.from('workout_sessions').delete().eq('user_id', uid).eq('id', id);
+        // Deferred commit of the undo-toast delete: on failure reload so the removed
+        // workout visibly reappears (the optimistic removal already hid it).
+        const { error: exErr } = await supabase.from('session_exercises').delete().eq('user_id', uid).eq('session_id', id);
+        if (exErr) { showToast('Couldn\'t delete — check your connection.'); loadHistory(); return; }
+        const { error: sessErr } = await supabase.from('workout_sessions').delete().eq('user_id', uid).eq('id', id);
+        if (sessErr) { showToast('Couldn\'t delete — check your connection.'); loadHistory(); }
       }
     );
   };
@@ -1029,7 +1042,7 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data, error } = await supabase.from('routines')
       .insert([{ name: newRoutineName.trim(), user_id: uid }]).select().single();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     setRoutines([...routines, { ...data, exercises: [] }]);
     setNewRoutineName('');
     setShowCreateModal(false);
@@ -1041,11 +1054,11 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     if (!uid) return;
     const { data: newRoutine, error: routineError } = await supabase.from('routines')
       .insert([{ name: `${routine.name} (copy)`, user_id: uid }]).select().single();
-    if (routineError) { return; }
+    if (routineError) { showToast('Couldn\'t save — check your connection.'); return; }
     if (routine.exercises.length > 0) {
       const { data: newExercises, error: exError } = await supabase.from('exercises')
         .insert(routine.exercises.map((ex, idx) => ({ routine_id: newRoutine.id, name: ex.name, position: idx, rest_timers: ex.rest_timers || [], user_id: uid }))).select();
-      if (exError) { return; }
+      if (exError) { showToast('Couldn\'t save — check your connection.'); return; }
       setRoutines([...routines, { ...newRoutine, exercises: newExercises.map(e => ({ ...e, lastSession: null })) }]);
     } else {
       setRoutines([...routines, { ...newRoutine, exercises: [] }]);
@@ -1088,7 +1101,8 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       const updates = reordered.map((ex, index) =>
         supabase.from('exercises').update({ position: index }).eq('id', ex.id).eq('user_id', uid)
       );
-      await Promise.all(updates);
+      const results = await Promise.all(updates);
+      if (results.some(r => r.error)) { showToast('Couldn\'t save — check your connection.'); loadRoutines(); }
     }
   };
 
@@ -1377,7 +1391,7 @@ const updateSet = (exId, setIdx, field, value) => {
     if (!uid) return;
     const inserts = [...selectedPickerExercises].map((name, idx) => ({ routine_id: activeRoutine.id, name, position: basePosition + idx, user_id: uid, category: NAME_TO_CATEGORY[name] || null }));
     const { data, error } = await supabase.from('exercises').insert(inserts).select();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     const newExs = data.map(ex => ({ ...ex, lastSession: null }));
     setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: [...r.exercises, ...newExs] } : r));
     setActiveRoutine(prev => ({ ...prev, exercises: [...prev.exercises, ...newExs] }));
@@ -1427,7 +1441,8 @@ const updateSet = (exId, setIdx, field, value) => {
         setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.filter(e => e.id !== ex.id) } : r));
         setSessionLog(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
         setCheckedSets(prev => { const n = { ...prev }; delete n[ex.id]; return n; });
-        await supabase.from('exercises').delete().eq('id', ex.id).eq('user_id', uid);
+        const { error } = await supabase.from('exercises').delete().eq('id', ex.id).eq('user_id', uid);
+        if (error) { showToast('Couldn\'t delete — check your connection.'); loadRoutines(); }
       }}
       onRenameExercise={async (newName) => {
         const { data: { session } } = await supabase.auth.getSession();
@@ -1435,7 +1450,8 @@ const updateSet = (exId, setIdx, field, value) => {
         if (!uid) return;
         setActiveRoutine(prev => ({ ...prev, exercises: prev.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) }));
         setRoutines(prev => prev.map(r => r.id === activeRoutine.id ? { ...r, exercises: r.exercises.map(e => e.id === ex.id ? { ...e, name: newName } : e) } : r));
-        await supabase.from('exercises').update({ name: newName }).eq('id', ex.id).eq('user_id', uid);
+        const { error } = await supabase.from('exercises').update({ name: newName }).eq('id', ex.id).eq('user_id', uid);
+        if (error) { showToast('Couldn\'t save — check your connection.'); loadRoutines(); }
       }}
     />
   );

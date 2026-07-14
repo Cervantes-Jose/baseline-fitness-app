@@ -121,7 +121,7 @@ function WorkoutRow({ entry, accent, hasPr }) {
   );
 }
 
-function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', onAddPr = () => {}, onClose = () => {} }) {
+function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', onAddPr = () => {}, onClose = () => {}, showToast = () => {} }) {
   const [shown, setShown] = useState(false);
   const [period, setPeriod] = useState(() => localStorage.getItem(`prPeriod_${exercise.name}`) || 'month');
   const [metric, setMetric] = useState('volume');         // 'volume' | 'avg' | '1rm'
@@ -241,7 +241,7 @@ function PersonalRecordDetail({ exercise, prs = [], metricSystem = 'imperial', o
       user_id: uid, exercise_name: exercise.name, weight: w, unit: logUnit, recorded_at: new Date().toISOString(),
     }).select().single();
     setSaving(false);
-    if (error) return;
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     onAddPr(data);
     setLogWeight('');
     setLogOpen(false);

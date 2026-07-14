@@ -23,7 +23,7 @@ const progressOf = (start, current, goal) => {
   return Math.max(0, Math.min(1, (current - start) / (goal - start)));
 };
 
-export default function BodyGoals({ metricSystem = 'imperial' }) {
+export default function BodyGoals({ metricSystem = 'imperial', showToast = () => {} }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -96,6 +96,7 @@ useEffect(() => { load(); }, []);
     const uid = session?.user?.id;
     if (!uid) { setSaving(false); return; }
     // Persist only the goals that actually changed.
+    let saveFailed = false;
     for (const r of rows) {
       const d = draftGoals[r.id];
       const orig = r.goal == null ? null : Number(r.goal);
@@ -103,12 +104,16 @@ useEffect(() => { load(); }, []);
       // goal rather than deleting it; otherwise the entered number.
       const dv = d === null ? null : (d === '' || d === undefined ? orig : Number(d));
       if (dv !== orig) {
-        await supabase.from('measurements').update({ goal: dv }).eq('id', r.id).eq('user_id', uid);
+        const { error } = await supabase.from('measurements').update({ goal: dv }).eq('id', r.id).eq('user_id', uid);
+        if (error) { saveFailed = true; break; }
       }
     }
-    setEditMode(false);
     setSaving(false);
+    // Re-sync from the DB either way so the UI matches what actually persisted; keep the
+    // editor open on failure so the user can retry rather than losing their edits.
     await load();
+    if (saveFailed) { showToast('Couldn\'t save — check your connection.'); return; }
+    setEditMode(false);
   };
 
   const showSkeleton = useDelayedFlag(loading);

@@ -292,12 +292,12 @@ const changeDate = (dir) => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
-      case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} />;
+      case 'dashboard': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} showToast={showToast} />;
+      case 'dashboard-edit': return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} editMode onExitEdit={() => setActiveTab('profile')} showToast={showToast} />;
       case 'food-log': return <div className="content"><FoodLog showToast={showToast} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} onSelectModeChange={setFoodSelectMode} workoutBarVisible={!!activeWorkout && !workoutExpanded} autoCollapse={foodAutoCollapse} timeFormat={foodTimeFormat} /></div>;
-      case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(g) => setGoals(prev => ({ ...prev, ...g }))} />;
+      case 'profile-goals': return <Goals metricSystem={metricSystem} onGoalsUpdate={(g) => setGoals(prev => ({ ...prev, ...g }))} showToast={showToast} />;
       case 'profile-habits': return <DailyHabits onBack={() => setActiveTab('profile')} showToast={showToast} />;
-      case 'profile-measurements': return <Measurements metricSystem={metricSystem} onBack={() => setActiveTab('profile')} />;
+      case 'profile-measurements': return <Measurements metricSystem={metricSystem} onBack={() => setActiveTab('profile')} showToast={showToast} />;
       case 'workout-start':
       case 'workout-exercises':
       case 'workout-prs':
@@ -330,7 +330,7 @@ const changeDate = (dir) => {
       case 'profile-food-prefs': return <FoodLogPreferences autoCollapse={foodAutoCollapse} setAutoCollapse={setFoodAutoCollapse} timeFormat={foodTimeFormat} setTimeFormat={setFoodTimeFormat} />;
       case 'profile-privacy': return <PrivacyPolicy />;
       case 'profile-terms': return <TermsOfService />;
-      default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} />;
+      default: return <Dashboard user={user} calorieGoal={calorieGoal} proteinGoal={proteinGoal} carbsGoal={carbsGoal} fatsGoal={fatsGoal} showToast={showToast} />;
     }
   };
 

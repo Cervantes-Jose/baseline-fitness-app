@@ -141,7 +141,7 @@ const fmtListDate = (s) => {
   return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {}, onBack = null }) {
+function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoCreate = () => {}, onBack = null, showToast = () => {} }) {
   const [view, setView] = useState('list');
   const [measurements, setMeasurements] = useState([]);
   const [activeMeasurement, setActiveMeasurement] = useState(null);
@@ -283,7 +283,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       .insert([{ name: '', user_id: uid }])
       .select()
       .single();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     const m = { ...data, entries: [] };
     setMeasurements(prev => [...prev, m]);
     openMeasurement(m);
@@ -314,7 +314,8 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     if (!uid) return;
     const name = (activeMeasurement.name || '').trim();
     updateActiveName(name);
-    await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id).eq('user_id', uid);
+    const { error } = await supabase.from('measurements').update({ name }).eq('id', activeMeasurement.id).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t save — check your connection.'); loadMeasurements(); }
   };
 
   // Daily/Weekly trend cadence, custom measurements only (defaults derive theirs
@@ -326,7 +327,8 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('measurements').update({ frequency: freq }).eq('id', activeMeasurement.id).eq('user_id', uid);
+    const { error } = await supabase.from('measurements').update({ frequency: freq }).eq('id', activeMeasurement.id).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t save — check your connection.'); loadMeasurements(); }
   };
 
   const openMeasurement = (m) => {
@@ -344,7 +346,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const uid = session?.user?.id;
     if (!uid) return;
     const { data, error } = await supabase.from('measurements').insert([{ name: `${m.name} (copy)`, user_id: uid }]).select().single();
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     setMeasurements(prev => [...prev, { ...data, entries: [] }]);
     setMenuOpen(null);
   };
@@ -355,8 +357,10 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('measurement_entries').delete().eq('user_id', uid).eq('measurement_id', m.id);
-    await supabase.from('measurements').delete().eq('user_id', uid).eq('id', m.id);
+    const { error: entErr } = await supabase.from('measurement_entries').delete().eq('user_id', uid).eq('measurement_id', m.id);
+    if (entErr) { showToast('Couldn\'t delete — check your connection.'); loadMeasurements(); return; }
+    const { error: mErr } = await supabase.from('measurements').delete().eq('user_id', uid).eq('id', m.id);
+    if (mErr) { showToast('Couldn\'t delete — check your connection.'); loadMeasurements(); }
   };
 
   const renameMeasurement = async () => {
@@ -365,7 +369,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('measurements').update({ name: renameValue.trim() }).eq('id', renamingMeasurement.id).eq('user_id', uid);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     setMeasurements(prev => prev.map(m => m.id === renamingMeasurement.id ? { ...m, name: renameValue.trim() } : m));
     setRenamingMeasurement(null);
     setRenameValue('');
@@ -380,7 +384,8 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       m.id === activeMeasurement.id ? { ...m, entries: m.entries.filter(e => e.id !== entryId) } : m
     ));
     setEntryMenuOpen(null);
-    await supabase.from('measurement_entries').delete().eq('id', entryId).eq('user_id', uid);
+    const { error } = await supabase.from('measurement_entries').delete().eq('id', entryId).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); loadMeasurements(); }
   };
 
   const saveEditEntry = async (entry) => {
@@ -390,7 +395,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('measurement_entries').update({ value: cleaned }).eq('id', entry.id).eq('user_id', uid);
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
     const updater = entries => entries.map(e => e.id === entry.id ? { ...e, value: cleaned } : e);
     setActiveMeasurement(prev => ({ ...prev, entries: updater(prev.entries) }));
     setMeasurements(prev => prev.map(m =>
@@ -420,7 +425,7 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
       .select()
       .single();
 
-    if (error) { return; }
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
 
     const updated = measurements.map(m =>
       m.id === activeMeasurement.id ? { ...m, entries: [...m.entries, data] } : m

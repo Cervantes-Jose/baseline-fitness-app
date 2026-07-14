@@ -151,7 +151,12 @@ export default function AuthScreen({ onAuth = () => {} }) {
     // no session yet — show a "verify your email" message and send them to the
     // sign-in view instead (the metadata DOB is synced into profiles on first load).
     if (data?.user?.id && data?.session) {
-      await supabase.from('profiles').upsert({ user_id: data.user.id, dob }, { onConflict: 'user_id' });
+      const { error: dobError } = await supabase.from('profiles').upsert({ user_id: data.user.id, dob }, { onConflict: 'user_id' });
+      if (dobError) {
+        // Non-lossy: DOB is also saved in auth metadata (above) and AccountInformation
+        // backfills it into the profiles row on first load. Don't block a successful
+        // signup or alarm the user on this backup write — the metadata path covers it.
+      }
       setLoading(false);
       onAuth(data.user);
       return;

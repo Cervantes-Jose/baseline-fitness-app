@@ -112,9 +112,10 @@ export default function DailyHabits({ onBack, showToast = () => {} }) {
     setHabits(reordered);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await Promise.all(reordered.map((h, i) =>
+    const results = await Promise.all(reordered.map((h, i) =>
       h.position === i ? null : supabase.from('habits').update({ position: i }).eq('id', h.id).eq('user_id', user.id)
     ));
+    if (results.some(r => r && r.error)) { showToast('Couldn\'t save — check your connection.'); loadHabits(); }
   };
 
   // ── Add / Edit full page ──

@@ -9,7 +9,7 @@ import { ymd, isScheduled, habitSubtitle } from './habitMath';
 //
 // Today's check respects scheduling: a habit not scheduled today shows a muted
 // "rest day" circle and isn't checkable, keeping logs consistent with streak stats.
-export default function HabitsWidget() {
+export default function HabitsWidget({ showToast = () => {} }) {
   const [habits, setHabits] = useState([]);
   const [doneToday, setDoneToday] = useState(() => new Set()); // habit_ids done today
   const [viewAll, setViewAll] = useState(false);
@@ -45,12 +45,13 @@ export default function HabitsWidget() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { load(); return; }   // couldn't persist — re-sync to server truth
     if (wasDone) {
-      await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', todayStr);
+      const { error } = await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', todayStr);
+      if (error) { showToast('Couldn\'t save — check your connection.'); load(); } // re-sync to server truth
     } else {
       // Snapshot the habit's current target so history keeps showing the value as
       // it was, even if the target is edited later — same as HabitDetail's toggle.
       const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: todayStr, target: habit.target || null });
-      if (error) load(); // e.g. unique-violation race — re-sync
+      if (error) { showToast('Couldn\'t save — check your connection.'); load(); } // e.g. unique-violation race — re-sync
     }
   };
 

@@ -296,7 +296,7 @@ function EditTile({ id, removable, onRemove, insetRemove, children }) {
   );
 }
 
-function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMode = false, onExitEdit = () => {} }) {
+function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMode = false, onExitEdit = () => {}, showToast = () => {} }) {
   const [calories, setCalories] = useState(0);
   const [protein, setProtein] = useState(0);
   const [carbs, setCarbs] = useState(0);
@@ -317,18 +317,19 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [trendCatalog, setTrendCatalog] = useState([]);   // cross-domain trend series (Nutrition + PRs)
   const macroScrollRef = useRef(null);
 
-  const persistLayout = (nextOrder) => {
+  const persistLayout = async (nextOrder) => {
     // Write to localStorage immediately for instant feedback on next load.
     try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [] })); } catch {}
     // Also write to Supabase so it survives browser storage eviction (iOS clears
     // localStorage after ~7 days of inactivity).
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const uid = session?.user?.id;
-      if (!uid) return;
-      supabase.from('profiles')
-        .upsert({ user_id: uid, dashboard_layout: { order: nextOrder } }, { onConflict: 'user_id' })
-        .then(() => {});
-    });
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const { error } = await supabase.from('profiles')
+      .upsert({ user_id: uid, dashboard_layout: { order: nextOrder } }, { onConflict: 'user_id' });
+    // localStorage already holds the order (so the layout survives locally); don't revert
+    // the UI, just surface the failed cloud backup instead of discarding it silently.
+    if (error) { showToast('Couldn\'t save — check your connection.'); }
   };
   const saveOrder = (next) => { setOrder(next); persistLayout(next); };
 
@@ -741,7 +742,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
           </div>
         ) : (
           <div style={{ position: 'relative', marginTop: 4 }}>
-            <HabitsWidget />
+            <HabitsWidget showToast={showToast} />
             <button onClick={() => setHabits(true)} aria-label="Remove widget"
               style={{
                 position: 'absolute', top: -8, right: 8, width: 24, height: 24, borderRadius: '50%', padding: 0,
@@ -825,7 +826,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       {/* Daily Habits — directly under the glance bar; hidden if the user removed it */}
       {hasHabits && !habitsHidden && (
         <div style={{ marginTop: 4 }}>
-          <HabitsWidget />
+          <HabitsWidget showToast={showToast} />
         </div>
       )}
 

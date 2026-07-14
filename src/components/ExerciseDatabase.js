@@ -148,7 +148,7 @@ function CategorySection({ cat, exercises, isExpanded, onToggle, children }) {
   );
 }
 
-function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
+function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {}, showToast = () => {} }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(new Set());
   const [customExercises, setCustomExercises] = useState([]);
@@ -267,7 +267,8 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('exercises').delete().eq('id', id).eq('user_id', uid);
+    const { error } = await supabase.from('exercises').delete().eq('id', id).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); }
   };
 
   const deleteCustom = async (id) => {
@@ -291,12 +292,16 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
     const uid = session?.user?.id;
     if (!uid) return;
     const { error } = await supabase.from('custom_exercises').update({ name: newName }).eq('id', renameTarget.id).eq('user_id', uid);
-    if (error) { return; }
-    await supabase.from('exercises').update({ name: newName }).eq('name', oldName).eq('user_id', uid);
-    await supabase.from('session_exercises').update({ exercise_name: newName }).eq('exercise_name', oldName).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t save — check your connection.'); return; }
+    // Cascade the rename to routines (exercises) and history (session_exercises). The
+    // library entry above already persisted, so keep the optimistic rename either way,
+    // but surface a failure instead of silently leaving the cascade half-applied.
+    const { error: exErr } = await supabase.from('exercises').update({ name: newName }).eq('name', oldName).eq('user_id', uid);
+    const { error: seErr } = await supabase.from('session_exercises').update({ exercise_name: newName }).eq('exercise_name', oldName).eq('user_id', uid);
     setCustomExercises(prev => prev.map(e => e.id === renameTarget.id ? { ...e, name: newName } : e));
     setRenameTarget(null);
     setRenameValue('');
+    if (exErr || seErr) { showToast('Couldn\'t save — check your connection.'); return; }
     showSuccess('Exercise renamed');
   };
 
@@ -323,7 +328,8 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {} }) {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    await supabase.from('exercises').delete().eq('name', customEx.name).eq('user_id', uid);
+    const { error } = await supabase.from('exercises').delete().eq('name', customEx.name).eq('user_id', uid);
+    if (error) { showToast('Couldn\'t delete — check your connection.'); return; }
     await deleteCustom(customEx.id);
     setDeleteTarget(null);
     showSuccess('Exercise deleted');

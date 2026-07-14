@@ -4,7 +4,7 @@ import BodyGoals from './BodyGoals';
 
 // Goals shell: shared header + Nutrition / Body tab switcher. Each tab owns its own
 // data and Edit/Save flow.
-function Goals({ onGoalsUpdate = () => {}, metricSystem = 'imperial' }) {
+function Goals({ onGoalsUpdate = () => {}, metricSystem = 'imperial', showToast = () => {} }) {
   const [tab, setTab] = useState('nutrition');
 
   // Individual rounded pills matching the Workout tabs (inactive = light grey, active
@@ -41,7 +41,7 @@ function Goals({ onGoalsUpdate = () => {}, metricSystem = 'imperial' }) {
       {tab === 'nutrition' ? (
         <NutritionGoals onGoalsUpdate={onGoalsUpdate} />
       ) : (
-        <BodyGoals metricSystem={metricSystem} />
+        <BodyGoals metricSystem={metricSystem} showToast={showToast} />
       )}
     </div>
   );
