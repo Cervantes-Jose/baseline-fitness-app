@@ -189,22 +189,24 @@ function MeasurementSection({ title, measurementName, color, unit = '', goal = n
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      const { data: mData } = await supabase
+      // No showToast down here (this renders inside a widget, not a screen) — the guards
+      // just keep the last-loaded series on screen instead of flattening the chart to empty.
+      const { data: mData, error: mError } = await supabase
         .from('measurements')
         .select('id')
         .eq('user_id', uid)
         .ilike('name', measurementName)
         .limit(1);
-      if (!mData || mData.length === 0) return;
+      if (mError || !mData || mData.length === 0) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('measurement_entries')
         .select('value, date, created_at, unit')
         .eq('user_id', uid)
         .eq('measurement_id', mData[0].id)
         .order('created_at', { ascending: true });
 
-      if (data) {
+      if (!error && data) {
         // Prefer the logged `date` (what the in-app math keys off of); fall back to
         // created_at for any legacy rows missing it.
         setEntries(data.map(e => ({ value: parseFloat(e.value), date: e.date || e.created_at, unit: e.unit || '' })));
@@ -317,6 +319,16 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
   const [trendCatalog, setTrendCatalog] = useState([]);   // cross-domain trend series (Nutrition + PRs)
   const macroScrollRef = useRef(null);
 
+  // Several independent loads fire on mount (food/streak, measurements+habits, widget
+  // sections). Offline, every one of them fails — so toast at most once per mount rather
+  // than stacking an identical toast per query.
+  const loadToastedRef = useRef(false);
+  const toastLoadFailure = () => {
+    if (loadToastedRef.current) return;
+    loadToastedRef.current = true;
+    showToast('Couldn\'t load — pull to refresh.');
+  };
+
   const persistLayout = async (nextOrder) => {
     // Write to localStorage immediately for instant feedback on next load.
     try { localStorage.setItem('dashboardLayout', JSON.stringify({ order: nextOrder, breaks: [] })); } catch {}
@@ -355,8 +367,10 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      const { data } = await supabase.from('profiles').select('dashboard_layout').eq('user_id', uid).single();
-      if (!data?.dashboard_layout?.order) return;
+      // Silent by design: this is a background restore of a layout the user already has
+      // locally. On failure keep the current layout — never toast about it.
+      const { data, error } = await supabase.from('profiles').select('dashboard_layout').eq('user_id', uid).single();
+      if (error || !data?.dashboard_layout?.order) return;
       // Only apply the server copy if localStorage is missing or empty — if localStorage
       // has a value it was written more recently (same session) and should win.
       const local = (() => { try { return localStorage.getItem('dashboardLayout'); } catch { return null; } })();
@@ -375,15 +389,20 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      supabase.from('measurements').select('id, name, goal, frequency').eq('user_id', uid).order('created_at', { ascending: true })
-        .then(({ data }) => { if (data) setMeasurements(data); });
+      const { data: measData, error: measError } = await supabase
+        .from('measurements').select('id, name, goal, frequency').eq('user_id', uid).order('created_at', { ascending: true });
+      if (!measError && measData) setMeasurements(measData);
       // Habits drive two things: whether to show the Daily Habits widget, and the
       // highest current streak across all habits (shown in the glance bar). Fetch all
       // habits + logs once, group logged dates per habit, and take the best streak.
-      const [{ data: hs }, { data: logs }] = await Promise.all([
+      const [{ data: hs, error: hsError }, { data: logs, error: logsError }] = await Promise.all([
         supabase.from('habits').select('*').eq('user_id', uid),
         supabase.from('habit_logs').select('habit_id, date').eq('user_id', uid),
       ]);
+      if (measError || hsError || logsError) toastLoadFailure();
+      // A failed habits read must not hide the widget or zero the streak — leave both as
+      // they are and let the next load correct them.
+      if (hsError || logsError) return;
       setHasHabits(!!(hs && hs.length));
       if (hs && hs.length) {
         const byHabit = {};
@@ -395,11 +414,15 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
         setHabitStreak(0);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Cross-domain trend series (Nutrition daily totals + Personal Records 1RM history),
   // reused from the Compare catalog so every surface plots the same data.
-  useEffect(() => { loadCompareCatalog().then(setTrendCatalog).catch(() => {}); }, []);
+  useEffect(() => {
+    loadCompareCatalog().then(setTrendCatalog).catch(() => toastLoadFailure());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Shrink the sticky greeting once the page scrolls down, expand it back near the
   // top. Uses HYSTERESIS (shrink at >64, expand at <8) so the layout shift from the
@@ -432,13 +455,15 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
     const uid = session?.user?.id;
     if (!uid) return;
     // Today's food
-    const { data: food } = await supabase
+    const { data: food, error: foodError } = await supabase
       .from('food_entries')
       .select('calories, protein, carbs, fats')
       .eq('user_id', uid)
       .eq('date', today);
 
-    if (food) {
+    if (foodError) toastLoadFailure();
+    // Keep the last-known totals on failure — zeros would read as "you've eaten nothing".
+    if (!foodError && food) {
       setCalories(Math.round(food.reduce((s, f) => s + Number(f.calories || 0), 0)));
       setProtein(Math.round(food.reduce((s, f) => s + Number(f.protein || 0), 0)));
       setCarbs(Math.round(food.reduce((s, f) => s + Number(f.carbs || 0), 0)));
@@ -448,10 +473,14 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
     // Streak: consecutive days with any activity — a logged food OR a workout
     // session counts that day as active. Both tables store `date` as a
     // toLocaleDateString() string, so the date strings are directly comparable.
-    const [{ data: sessions }, { data: foodDays }] = await Promise.all([
+    const [{ data: sessions, error: sessionsError }, { data: foodDays, error: foodDaysError }] = await Promise.all([
       supabase.from('workout_sessions').select('date').eq('user_id', uid),
       supabase.from('food_entries').select('date').eq('user_id', uid),
     ]);
+
+    // Either read failing would under-count the streak (a missing day breaks the walk),
+    // so skip the update entirely rather than show a wrong — and demoralising — number.
+    if (sessionsError || foodDaysError) toastLoadFailure();
 
     // Merge both sources into a set of unique active days (as midnight timestamps),
     // then walk back from today counting consecutive days.
@@ -472,7 +501,7 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       if (diff === 0 || diff === 1) { count++; cursorTime = t; }
       else break;
     }
-    setStreak(count);
+    if (!sessionsError && !foodDaysError) setStreak(count);
 
     // Workouts this week (Monday–Sunday)
     const now = new Date();
@@ -490,11 +519,12 @@ function Dashboard({ user, calorieGoal, proteinGoal, carbsGoal, fatsGoal, editMo
       weekDateStrs.add(d.toLocaleDateString());
     }
 
-    const { data: weekData } = await supabase
+    const { data: weekData, error: weekError } = await supabase
       .from('workout_sessions')
       .select('date')
       .eq('user_id', uid);
 
+    if (weekError) { toastLoadFailure(); return; }
     if (weekData) {
       setWeekWorkouts(weekData.filter(s => weekDateStrs.has(s.date)).length);
     }

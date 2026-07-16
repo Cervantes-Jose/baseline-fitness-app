@@ -190,21 +190,26 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {}, showT
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at').then(({ data }) => {
-        if (data) setCustomExercises(data);
-      });
-      supabase.from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true }).then(({ data }) => {
-        if (!data) return;
+      const [{ data: customData, error: customError }, { data: routineData, error: routineError }] = await Promise.all([
+        supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at'),
+        supabase.from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true }),
+      ]);
+      // The built-in database still renders on failure; only the user's own custom
+      // exercises and the "add to routine" menu are missing, so keep both as they are.
+      if (!customError && customData) setCustomExercises(customData);
+      if (!routineError && routineData) {
         // Match the My Routines order so the menu's first 4 are the same first 4.
-        let ordered = data;
+        let ordered = routineData;
         try {
           const savedOrder = JSON.parse(localStorage.getItem('routineOrder') || 'null');
-          if (savedOrder) ordered = [...data].sort((a, b) =>
+          if (savedOrder) ordered = [...routineData].sort((a, b) =>
             (savedOrder.indexOf(a.id) + 1 || Infinity) - (savedOrder.indexOf(b.id) + 1 || Infinity));
         } catch {}
         setRoutines(ordered);
-      });
+      }
+      if (customError || routineError) showToast('Couldn\'t load — pull to refresh.');
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getExercises = (category) => {

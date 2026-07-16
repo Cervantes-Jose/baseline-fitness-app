@@ -809,10 +809,13 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadRoutines();
     loadHistory();
+  // Mount-only: loadRoutines now closes over the showToast prop, which makes it a
+  // reactive dep the rule wants listed — but re-running this on every render is exactly
+  // what the empty array is here to prevent.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadRoutines = async () => {
@@ -828,7 +831,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
       .from('exercises').select('*').eq('user_id', uid).order('position', { ascending: true });
     if (exerciseError) { setLoading(false); return; }
 
-    const { data: sessionExData } = await supabase
+    // Per-routine stats are supplementary to the routine list itself — on failure keep the
+    // existing maps (a wiped "last performed"/avg would read as "never done this").
+    const { data: sessionExData, error: sessionExError } = await supabase
       .from('session_exercises')
       .select('exercise_name, sets, workout_sessions(routine_id, created_at)')
       .eq('user_id', uid);
@@ -859,10 +864,10 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
         }
       });
     }
-    setLastPerformed(lastPerformedMap);
+    if (!sessionExError) setLastPerformed(lastPerformedMap);
 
     // Average workout length per routine, from one row per session (not the per-exercise join).
-    const { data: sessionData } = await supabase
+    const { data: sessionData, error: sessionError } = await supabase
       .from('workout_sessions').select('routine_id, duration').eq('user_id', uid);
     const durAgg = {};   // routine_id -> { total, count }
     (sessionData || []).forEach(s => {
@@ -874,7 +879,9 @@ function Workouts({ activeWorkout, setActiveWorkout, workoutSeconds, initialView
     });
     const avgMap = {};
     Object.entries(durAgg).forEach(([rid, { total, count }]) => { if (count > 0) avgMap[rid] = total / count; });
-    setAvgDuration(avgMap);
+    if (!sessionError) setAvgDuration(avgMap);
+    // One toast for both stats queries — the routine list itself still rendered.
+    if (sessionExError || sessionError) showToast('Couldn\'t load — pull to refresh.');
 
     const routinesWithExercises = routineData.map(r => ({
       ...r,
@@ -1366,8 +1373,10 @@ const updateSet = (exId, setIdx, field, value) => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { data } = await supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at');
-    if (data) setPickerCustomExercises(data);
+    const { data, error } = await supabase.from('custom_exercises').select('*').eq('user_id', uid).order('created_at');
+    // The built-in exercise database still lists; only the user's custom entries are missing.
+    if (error || !data) { showToast('Couldn\'t load — pull to refresh.'); return; }
+    setPickerCustomExercises(data);
   };
 
   const closeExercisePicker = () => {

@@ -49,14 +49,18 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
   // Swipe down anywhere on the body (once scrolled to the top) to dismiss.
   const { dragY, dragging, scrollRef, sheetRef, onPointerDown } = useSwipeToDismiss({ onDismiss: requestClose });
 
-  const loadLogs = useCallback(async () => {
+  // `silent` is for the re-sync after a failed toggle: that path already toasted about the
+  // write, so a second toast about the reload on the same tap is just noise.
+  const loadLogs = useCallback(async (silent = false) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from('habit_logs').select('date, target').eq('habit_id', habit.id).eq('user_id', user.id);
-    if (data) {
-      setDoneSet(new Set(data.map(r => r.date)));
-      setLogTargets(Object.fromEntries(data.map(r => [r.date, r.target])));
-    }
+    const { data, error } = await supabase.from('habit_logs').select('date, target').eq('habit_id', habit.id).eq('user_id', user.id);
+    // Empty logs would render every day unchecked and the streak as 0 — keep what's on
+    // screen and say the load failed instead.
+    if (error || !data) { if (!silent) showToast('Couldn\'t load — pull to refresh.'); return; }
+    setDoneSet(new Set(data.map(r => r.date)));
+    setLogTargets(Object.fromEntries(data.map(r => [r.date, r.target])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [habit.id]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
@@ -80,13 +84,13 @@ export default function HabitDetail({ habit, onBack, onEdit = () => {}, onDelete
       setLogTargets(prev => ({ ...prev, [key]: snapshot }));
     }
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { loadLogs(); return; }   // couldn't persist — re-sync to server truth
+    if (!user) { loadLogs(true); return; }   // couldn't persist — re-sync to server truth
     if (wasDone) {
       const { error } = await supabase.from('habit_logs').delete().eq('habit_id', habit.id).eq('user_id', user.id).eq('date', key);
-      if (error) { showToast('Could not update'); loadLogs(); }
+      if (error) { showToast('Could not update'); loadLogs(true); }
     } else {
       const { error } = await supabase.from('habit_logs').insert({ habit_id: habit.id, user_id: user.id, date: key, target: snapshot });
-      if (error) { showToast('Could not update'); loadLogs(); }
+      if (error) { showToast('Could not update'); loadLogs(true); }
     }
   };
 

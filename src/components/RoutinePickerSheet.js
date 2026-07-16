@@ -70,6 +70,8 @@ function RoutinePickerSheet({ exerciseName, onPick, onClose }) {
         <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 16px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {data == null ? (
             <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Loading...</p>
+          ) : data.error ? (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>Couldn&rsquo;t load — close and try again.</p>
           ) : routines.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>No routines yet — create one first.</p>
           ) : (

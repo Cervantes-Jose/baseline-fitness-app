@@ -48,10 +48,12 @@ export default function NutritionGoals({ onGoalsUpdate = () => {} }) {
     const uid = session?.user?.id;
     if (!uid) return;
     const today = new Date().toLocaleDateString();
-    const { data: food } = await supabase
+    // No showToast prop on this screen — the guard just keeps the last-known consumed
+    // totals rather than showing 0g against every goal, which would read as "nothing eaten".
+    const { data: food, error } = await supabase
       .from('food_entries').select('protein, carbs, fats')
       .eq('user_id', uid).eq('date', today);
-    if (food) {
+    if (!error && food) {
       setConsumed({
         protein: Math.round(food.reduce((s, f) => s + Number(f.protein || 0), 0)),
         carbs:   Math.round(food.reduce((s, f) => s + Number(f.carbs   || 0), 0)),

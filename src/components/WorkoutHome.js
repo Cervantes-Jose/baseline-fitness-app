@@ -64,18 +64,21 @@ function WorkoutHome({
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { data: sessions } = await supabase
+    const { data: sessions, error: sessionsError } = await supabase
       .from('workout_sessions')
       .select('id, duration, created_at')
       .eq('user_id', uid)
       .gte('created_at', prevMonday.toISOString());
 
-    if (!sessions) return;
+    // Keep last week's numbers on screen rather than resetting the stats to zero.
+    if (sessionsError || !sessions) { showToast('Couldn\'t load — pull to refresh.'); return; }
 
     const allIds = sessions.map(s => s.id);
-    const { data: sessionEx } = allIds.length
+    const { data: sessionEx, error: sessionExError } = allIds.length
       ? await supabase.from('session_exercises').select('sets, session_id').eq('user_id', uid).in('session_id', allIds)
-      : { data: [] };
+      : { data: [], error: null };
+    // Volume comes from sessionEx — without it the stats would show workouts but 0 volume.
+    if (sessionExError) { showToast('Couldn\'t load — pull to refresh.'); return; }
 
     const volumeFor = (ids) => (sessionEx || [])
       .filter(e => ids.has(e.session_id))

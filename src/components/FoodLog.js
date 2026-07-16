@@ -566,7 +566,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   }, [selectMode, onSelectModeChange]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFoods(); loadYesterdayFoods(); }, [date]);
+  useEffect(() => { runLoaders([loadFoods, loadYesterdayFoods]); }, [date]);
 
   // Shrink the sticky date header once the page scrolls down, expand it back near
   // the top. Uses HYSTERESIS (shrink at >56, expand at <8) rather than one
@@ -596,13 +596,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       const { data: { session } } = await supabase.auth.getSession();
       const uid = session?.user?.id;
       if (!uid) return;
-      const { data } = await supabase.from('food_entries').select('date').eq('user_id', uid);
-      if (data) setLoggedDates(new Set(data.map(r => ymd(new Date(r.date)))));
+      const { data, error } = await supabase.from('food_entries').select('date').eq('user_id', uid);
+      // Keep the previously-filled circles on failure — an empty set would read as
+      // "you logged nothing", which is worse than showing a stale-but-true calendar.
+      if (error || !data) { showToast('Couldn\'t load — try again.'); return; }
+      setLoggedDates(new Set(data.map(r => ymd(new Date(r.date)))));
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCalendar]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadFavorites(); loadCustomFoods(); loadMeals(); loadLastPortions(); }, []);
+  useEffect(() => { runLoaders([loadFavorites, loadCustomFoods, loadMeals, loadLastPortions]); }, []);
 
   // Long-press multi-select only applies to the main log timeline. Switching filter tabs
   // (Favorites/Custom Foods/Meals/Nutrition) moves off that view, so cancel any in-progress
@@ -616,7 +620,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   useEffect(() => { setListSearch(''); }, [activeFilter]);
 
   useEffect(() => {
-    if (showAddFoodScreen) { loadRecentFoods(); loadCustomFoods(); loadFavorites(); loadLastPortions(); }
+    if (showAddFoodScreen) runLoaders([loadRecentFoods, loadCustomFoods, loadFavorites, loadLastPortions]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddFoodScreen]);
 
@@ -640,18 +644,26 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, showAddFoodScreen]);
 
+  // Loaders return false when the read failed, so the effect that fires them can raise a
+  // single toast for the batch instead of one per query (four loaders run on mount).
+  // Each loader keeps its existing state on failure rather than clobbering it with empty.
+  const runLoaders = async (loaders) => {
+    const results = await Promise.all(loaders.map(fn => fn()));
+    if (results.some(ok => ok === false)) showToast('Couldn\'t load — pull to refresh.');
+  };
+
   const loadFoods = async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
+    if (!uid) return true;
     const { data, error } = await supabase
       .from('food_entries')
       .select('*')
       .eq('user_id', uid)
       .eq('date', dateStr)
       .order('created_at', { ascending: true });
-    if (error) { setLoading(false); return; }
+    if (error) { setLoading(false); return false; }
     const grouped = {};
     data.forEach(entry => {
       if (!grouped[entry.hour]) grouped[entry.hour] = [];
@@ -659,28 +671,30 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     });
     setFoods(grouped);
     setLoading(false);
+    return true;
   };
 
   const loadYesterdayFoods = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
+    if (!uid) return true;
     const yest = new Date(date);
     yest.setDate(yest.getDate() - 1);
     const yesterdayStr = yest.toLocaleDateString();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('food_entries')
       .select('*')
       .eq('user_id', uid)
       .eq('date', yesterdayStr)
       .order('created_at', { ascending: true });
-    if (!data) return;
+    if (error || !data) return false;
     const grouped = {};
     data.forEach(entry => {
       if (!grouped[entry.hour]) grouped[entry.hour] = [];
       grouped[entry.hour].push(entry);
     });
     setYesterdayFoods(grouped);
+    return true;
   };
 
   const loadRecentFoods = async () => {
@@ -688,14 +702,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
-    const { data } = await supabase
+    if (!uid) return true;
+    const { data, error } = await supabase
       .from('food_entries')
       .select('name, calories, protein, carbs, fats, food')
       .eq('user_id', uid)
       .gte('created_at', sevenDaysAgo)
       .order('created_at', { ascending: false })
       .limit(200);
+    // On failure keep whatever recents are already listed rather than falling back to
+    // a placeholder-only list, which would look like a wiped history.
+    if (error) return false;
     const seen = new Set();
     const recent = [];
     if (data) {
@@ -719,6 +736,7 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
       if (!seen.has(p.name)) { seen.add(p.name); recent.push(p); }
     }
     setRecentFoodList(recent);
+    return true;
   };
 
   // Build the "last portion per food" map from logged entries (newest first, first hit
@@ -726,20 +744,21 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const loadLastPortions = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
-    const { data } = await supabase
+    if (!uid) return true;
+    const { data, error } = await supabase
       .from('food_entries')
       .select('name, serving, unit, servings, created_at')
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
       .limit(500);
-    if (!data) return;
+    if (error || !data) return false;
     const map = {};
     for (const e of data) {
       if (e.name == null || map[e.name] || e.serving == null) continue;
       map[e.name] = { serving: Number(e.serving), unit: e.unit || 'g', servings: Number(e.servings) || 1 };
     }
     setLastPortions(map);
+    return true;
   };
 
   // Record the portion just logged/edited so the next open defaults to it (in-memory; the
@@ -752,49 +771,55 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   const loadCustomFoods = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
-    const { data } = await supabase
+    if (!uid) return true;
+    const { data, error } = await supabase
       .from('custom_foods')
       .select('*')
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
-    if (data) setCustomFoods(data.map(f => ({
+    if (error || !data) return false;
+    setCustomFoods(data.map(f => ({
       ...f,
       isCustom: true,
       savedServing: f.saved_serving ?? undefined,
       savedUnit: f.saved_unit ?? undefined,
       micros: f.micros || undefined,
     })));
+    return true;
   };
 
   // ─── Favorites ─────────────────────────────────────────────
   const loadFavorites = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
-    const { data } = await supabase
+    if (!uid) return true;
+    const { data, error } = await supabase
       .from('favorite_foods')
       .select('*')
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
-    if (data) setFavorites(data.map(r => ({ id: r.id, name: r.name, isCustom: r.is_custom, food: r.food })));
+    if (error || !data) return false;
+    setFavorites(data.map(r => ({ id: r.id, name: r.name, isCustom: r.is_custom, food: r.food })));
+    return true;
   };
 
   // ─── Meals ─────────────────────────────────────────────────
   const loadMeals = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return;
-    const { data } = await supabase
+    if (!uid) return true;
+    const { data, error } = await supabase
       .from('meals')
       .select('*')
       .eq('user_id', uid)
       .order('created_at', { ascending: false });
-    if (data) setMeals(data.map(m => ({
+    if (error || !data) return false;
+    setMeals(data.map(m => ({
       ...m,
       components: Array.isArray(m.components) ? m.components : (typeof m.components === 'string' ? JSON.parse(m.components) : []),
       micros: Array.isArray(m.micros) ? m.micros : (typeof m.micros === 'string' ? JSON.parse(m.micros) : []),
     })));
+    return true;
   };
 
   const openMealBuilder = (meal = null) => {

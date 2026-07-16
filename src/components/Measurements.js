@@ -201,8 +201,14 @@ function Measurements({ metricSystem = 'imperial', autoCreateSignal = 0, onAutoC
     setCompareLoading(true);
     loadCompareCatalog({ excludeId: `meas:${activeMeasurement.id}` })
       .then(cat => { if (!cancelled) setCompareCatalog(cat); })
+      // Catalog stays null on failure so the sheet retries next open, rather than
+      // showing an empty picker that looks like "nothing to compare against".
+      .catch(() => { if (!cancelled) showToast('Couldn\'t load — try again.'); })
       .finally(() => { if (!cancelled) setCompareLoading(false); });
     return () => { cancelled = true; };
+  // showToast is only used in the catch; listing it would re-run the catalog load
+  // whenever the parent re-creates the callback.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compareSheetOpen, compareCatalog, activeMeasurement]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

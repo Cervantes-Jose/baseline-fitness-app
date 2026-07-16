@@ -58,19 +58,25 @@ export default function DailyHabits({ onBack, showToast = () => {} }) {
     useSensor(TouchSensor, { activationConstraint: { delay: 600, tolerance: 8 } })
   );
 
-  const loadHabits = useCallback(async () => {
+  // `silent` is for the re-sync after a failed write: that path has already toasted about
+  // the write, and a second toast about the reload on the same tap is just noise.
+  const loadHabits = useCallback(async (silent = false) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
-    const { data } = await supabase.from('habits').select('*').eq('user_id', user.id).order('position', { ascending: true });
-    if (data) setHabits(data);
+    const { data, error } = await supabase.from('habits').select('*').eq('user_id', user.id).order('position', { ascending: true });
+    if (!error && data) setHabits(data);
     // Pull every log once and group by habit so each list row can show its current streak.
-    const { data: logs } = await supabase.from('habit_logs').select('habit_id, date').eq('user_id', user.id);
-    if (logs) {
+    const { data: logs, error: logsError } = await supabase.from('habit_logs').select('habit_id, date').eq('user_id', user.id);
+    if (!logsError && logs) {
       const map = {};
       for (const l of logs) (map[l.habit_id] || (map[l.habit_id] = new Set())).add(l.date);
       setLogsByHabit(map);
     }
+    // Failing the habits read leaves the previous list up; failing only the logs read
+    // leaves the streaks stale. Either way say so rather than showing a wrong-but-quiet list.
+    if ((error || logsError) && !silent) showToast('Couldn\'t load — pull to refresh.');
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { loadHabits(); }, [loadHabits]);
@@ -101,7 +107,7 @@ export default function DailyHabits({ onBack, showToast = () => {} }) {
     setHabits(prev => prev.filter(h => h.id !== id));
     setDetailHabit(null);
     const { error } = await supabase.from('habits').delete().eq('id', id).eq('user_id', user.id);
-    if (error) { showToast('Could not delete'); loadHabits(); }
+    if (error) { showToast('Could not delete'); loadHabits(true); }
   };
 
   const handleDragEnd = async ({ active, over }) => {
@@ -115,7 +121,7 @@ export default function DailyHabits({ onBack, showToast = () => {} }) {
     const results = await Promise.all(reordered.map((h, i) =>
       h.position === i ? null : supabase.from('habits').update({ position: i }).eq('id', h.id).eq('user_id', user.id)
     ));
-    if (results.some(r => r && r.error)) { showToast('Couldn\'t save — check your connection.'); loadHabits(); }
+    if (results.some(r => r && r.error)) { showToast('Couldn\'t save — check your connection.'); loadHabits(true); }
   };
 
   // ── Add / Edit full page ──

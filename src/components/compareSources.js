@@ -38,6 +38,12 @@ export async function loadCompareCatalog({ excludeId = null } = {}) {
     supabase.from('exercise_prs').select('exercise_name, weight, unit, recorded_at').eq('user_id', uid).order('recorded_at', { ascending: true }),
   ]);
 
+  // A failed read here would drop that whole group from the catalog — the series would
+  // just be absent from the Compare picker with no hint that anything went wrong. Throw
+  // instead so callers can keep the catalog they already have and surface the failure.
+  const failed = [measRes, entryRes, foodRes, prRes].some(r => r.error);
+  if (failed) throw new Error('compare catalog load failed');
+
   const groups = [];
 
   // ── Measurements ──────────────────────────────────────────────

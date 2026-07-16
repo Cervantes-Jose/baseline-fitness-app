@@ -17,15 +17,18 @@ export default function HabitsWidget({ showToast = () => {} }) {
   const today = new Date();
   const todayStr = ymd(today);
 
+  // Silent on failure by design: this is one card on a dashboard that fires several loads
+  // at once, and the parent screen already toasts. The guards keep a failed read from
+  // emptying the grid (which hides the widget) or unchecking today's habits.
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const [{ data: hs }, { data: logs }] = await Promise.all([
+    const [{ data: hs, error: hsError }, { data: logs, error: logsError }] = await Promise.all([
       supabase.from('habits').select('*').eq('user_id', user.id).order('position', { ascending: true }),
       supabase.from('habit_logs').select('habit_id').eq('user_id', user.id).eq('date', todayStr),
     ]);
-    if (hs) setHabits(hs);
-    if (logs) setDoneToday(new Set(logs.map(l => l.habit_id)));
+    if (!hsError && hs) setHabits(hs);
+    if (!logsError && logs) setDoneToday(new Set(logs.map(l => l.habit_id)));
   }, [todayStr]);
 
   useEffect(() => { load(); }, [load]);

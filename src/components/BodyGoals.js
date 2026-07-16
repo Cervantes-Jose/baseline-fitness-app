@@ -40,10 +40,17 @@ useEffect(() => { load(); }, []);
     const uid = session?.user?.id;
     if (!uid) { setLoading(false); return; }
     setDefaultIds(new Set(JSON.parse(localStorage.getItem(`defaultMeasurementIds_${uid}`) || '[]')));
-    const [{ data: meas }, { data: ents }] = await Promise.all([
+    const [{ data: meas, error: measError }, { data: ents, error: entsError }] = await Promise.all([
       supabase.from('measurements').select('id, name, goal').eq('user_id', uid).order('created_at', { ascending: true }),
       supabase.from('measurement_entries').select('measurement_id, value, unit, created_at').eq('user_id', uid).order('created_at', { ascending: true }),
     ]);
+    // Keep the rows already on screen — an empty list here reads as "you have no goals",
+    // which is exactly the wrong thing to tell someone whose goals just failed to load.
+    if (measError || entsError) {
+      showToast('Couldn\'t load — pull to refresh.');
+      setLoading(false);
+      return;
+    }
     const byId = {};
     (ents || []).forEach(e => { (byId[e.measurement_id] = byId[e.measurement_id] || []).push(e); });
     const list = (meas || []).map(m => {

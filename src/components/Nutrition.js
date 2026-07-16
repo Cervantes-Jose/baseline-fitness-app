@@ -131,6 +131,9 @@ function Nutrition({ selectedDate }) {
     const excludeId = selectedNutrient.macroKey ? `nut:${selectedNutrient.macroKey}` : null;
     loadCompareCatalog({ excludeId })
       .then(cat => { if (!cancelled) setCompareCatalog(cat); })
+      // No showToast on this screen; leaving the catalog null means the sheet retries on
+      // the next open instead of presenting an empty "nothing to compare" picker.
+      .catch(() => {})
       .finally(() => { if (!cancelled) setCompareLoading(false); });
     return () => { cancelled = true; };
   }, [compareSheetOpen, compareCatalog, selectedNutrient]);

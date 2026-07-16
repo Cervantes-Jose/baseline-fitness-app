@@ -71,17 +71,23 @@ export function daysAgoText(dateStr) {
 // Loads the user's routines with the same per-routine stats the My Routines page
 // shows: exercises, lastPerformed timestamp, avgDuration (seconds). Respects the
 // saved routineOrder so the picker matches the order on the Routines tab.
+// `error: true` on the result distinguishes "this user has no routines" from "the read
+// failed" — both otherwise return an empty list, and the caller must not render the
+// former's empty state for the latter.
 export async function loadRoutinesWithStats(uid) {
-  const empty = { routines: [], lastPerformed: {}, avgDuration: {} };
+  const empty = { routines: [], lastPerformed: {}, avgDuration: {}, error: false };
   if (!uid) return empty;
 
   const { data: routineData, error } = await supabase
     .from('routines').select('*').eq('user_id', uid).order('created_at', { ascending: true });
-  if (error || !routineData) return empty;
+  if (error || !routineData) return { ...empty, error: true };
 
-  const { data: exerciseData } = await supabase
+  const { data: exerciseData, error: exerciseError } = await supabase
     .from('exercises').select('*').eq('user_id', uid).order('position', { ascending: true });
+  if (exerciseError) return { ...empty, error: true };
 
+  // The stats below are supplementary — a routine tile still renders without them, so a
+  // failure here degrades to "Never performed" / no avg rather than failing the whole load.
   const { data: sessionExData } = await supabase
     .from('session_exercises')
     .select('exercise_name, workout_sessions(routine_id, created_at)')
@@ -120,5 +126,5 @@ export async function loadRoutinesWithStats(uid) {
     }
   } catch {}
 
-  return { routines, lastPerformed, avgDuration };
+  return { routines, lastPerformed, avgDuration, error: false };
 }

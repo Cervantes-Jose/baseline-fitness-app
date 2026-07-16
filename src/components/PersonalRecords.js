@@ -66,18 +66,26 @@ function PersonalRecords({ metricSystem = 'imperial', showToast = () => {} }) {
     const uid = session?.user?.id;
     if (!uid) { setLoading(false); return; }
 
-    const { data: sessions } = await supabase
+    const { data: sessions, error: sessionsError } = await supabase
       .from('workout_sessions')
       .select('id, created_at, date, routine_name, duration')
       .eq('user_id', uid);
 
     const ids = (sessions || []).map(s => s.id);
-    const { data: sessionEx } = ids.length
+    const { data: sessionEx, error: sessionExError } = ids.length
       ? await supabase.from('session_exercises').select('exercise_name, sets, session_id').eq('user_id', uid).in('session_id', ids)
-      : { data: [] };
+      : { data: [], error: null };
 
-    const { data: prRows } = await supabase
+    const { data: prRows, error: prError } = await supabase
       .from('exercise_prs').select('*').eq('user_id', uid).order('recorded_at', { ascending: true });
+
+    // Wiping PRs to an empty list is the worst possible failure mode on this screen —
+    // it looks like the records themselves are gone. Keep what's loaded and say so.
+    if (sessionsError || sessionExError || prError) {
+      showToast('Couldn\'t load — pull to refresh.');
+      setLoading(false);
+      return;
+    }
 
     setHistory(buildExerciseHistory(sessions, sessionEx));
     setPrs(prRows || []);
