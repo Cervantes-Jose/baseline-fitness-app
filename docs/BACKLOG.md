@@ -57,7 +57,7 @@ Source: the "[Fable 5 Privacy and Terms of service]" session. Ready-to-paste fix
 
 ## High value (codebase audit — not started)
 
-- [ ] **2 — Read error handling.** ~35 reads ignore `error`, rendering failures as empty data. Keep existing state on failure.
+- [x] **2 — Read error handling.** ~35 reads ignored `error`, rendering failures as empty data. Every table read now checks `error` and keeps existing state on failure, toasting where a `showToast` prop exists (773ff4c; the delete-guard bug it uncovered in `ExerciseDatabase.requestDelete` is 95e3f7c). Deliberate exception: the two supplementary stats reads in `routineMeta.js` (`session_exercises`, `workout_sessions`) still degrade silently — a routine tile renders fine without "last performed"/avg, and the module has no toast. Not verified in-browser under a forced failure.
 - [ ] **3 — Workout timer perf.** `workoutSeconds` (1s) and `restRemaining` (250ms) as App-level state → whole-tree re-render 1–4×/sec + per-second localStorage write. Tick in leaf components from timestamps; preserve recovery/pause/resume.
 - [ ] **4 — Query efficiency.** Dashboard fetches `workout_sessions` twice per load; measurement-widget N+1; unbounded fetches in `loadRoutines` (all `session_exercises` ever), PersonalRecords, compareSources; reorder saves one UPDATE per row (batch upsert); Add-Food sheet refetches 4 lists on every open (cache until mutation).
 - [ ] **5 — Memoization.** Zero useMemo/useCallback/React.memo. Targeted: FoodLog totals/filters per keystroke, Measurements detail groupings, Dashboard widgetMap, App.js callbacks, memo MacroCircle/LoggingExerciseCard/RestRow/chart components. After item 3.
