@@ -311,8 +311,12 @@ function ExerciseDatabase({ autoCreateSignal = 0, onAutoCreate = () => {}, showT
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
     if (!uid) return;
-    const { data } = await supabase.from('exercises').select('routine_id').eq('name', customEx.name).eq('user_id', uid);
-    const routineIds = [...new Set((data || []).map(r => r.routine_id))];
+    // This read decides whether the delete needs a cascade warning. Treating a failure as
+    // "no routines use it" would silently delete an in-use exercise with no warning, so
+    // bail out instead of guessing.
+    const { data, error } = await supabase.from('exercises').select('routine_id').eq('name', customEx.name).eq('user_id', uid);
+    if (error || !data) { showToast('Couldn\'t load — try again.'); return; }
+    const routineIds = [...new Set(data.map(r => r.routine_id))];
     const routineNames = routineIds.map(id => routines.find(r => r.id === id)?.name).filter(Boolean);
     if (routineNames.length > 0) {
       setDeleteTarget({ customEx, routineNames });
