@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
-function UndoToast({ message, onUndo }) {
+// `onUndo` is optional: most callers are plain notifications ("Couldn't save — check your
+// connection.") with nothing to undo. Those render as message-only — an Undo button with
+// no handler behind it threw when tapped.
+function UndoToast({ message, onUndo = null }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -28,10 +31,12 @@ function UndoToast({ message, onUndo }) {
       whiteSpace: 'nowrap',
     }}>
       <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>{message}</span>
-      <button onClick={onUndo} style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--accent)', fontWeight: '700', fontSize: '14px', padding: '0',
-      }}>Undo</button>
+      {onUndo && (
+        <button onClick={onUndo} style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--accent)', fontWeight: '700', fontSize: '14px', padding: '0',
+        }}>Undo</button>
+      )}
     </div>
   );
 }

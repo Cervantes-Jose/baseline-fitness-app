@@ -421,12 +421,12 @@ const changeDate = (dir) => {
 
       {/* Undo Toast */}
       {toast && (
-        <UndoToast key={toast.id} message={toast.message} onUndo={() => {
+        <UndoToast key={toast.id} message={toast.message} onUndo={toast.onUndo ? () => {
           clearTimeout(toastTimerRef.current);
           pendingDeleteRef.current = null;
           toast.onUndo();
           setToast(null);
-        }} />
+        } : null} />
       )}
 
       {/* Bottom Tab Bar — hidden while the food select bar replaces it */}
