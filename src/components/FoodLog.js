@@ -647,9 +647,17 @@ function FoodLog({ showToast = () => {}, calorieGoal = 2000, proteinGoal = 180, 
   // Loaders return false when the read failed, so the effect that fires them can raise a
   // single toast for the batch instead of one per query (four loaders run on mount).
   // Each loader keeps its existing state on failure rather than clobbering it with empty.
+  // Two separate batches fire on mount (the [date] effect and the [] effect), so a
+  // per-batch toast still yields two. Each showToast bumps the toast key, which remounts
+  // UndoToast and restarts its fade-in — two rapid toasts read as a flicker. Toast at
+  // most once per mount instead.
+  const loadToastedRef = useRef(false);
   const runLoaders = async (loaders) => {
     const results = await Promise.all(loaders.map(fn => fn()));
-    if (results.some(ok => ok === false)) showToast('Couldn\'t load — pull to refresh.');
+    if (!results.some(ok => ok === false)) return;
+    if (loadToastedRef.current) return;
+    loadToastedRef.current = true;
+    showToast('Couldn\'t load — pull to refresh.');
   };
 
   const loadFoods = async () => {
